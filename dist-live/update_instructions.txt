@@ -1,0 +1,29 @@
+FC Fantasy Live update instructions
+
+Keep these files in the same folder:
+- FC Fantasy Live.app
+- Football Game.py
+- version.json
+
+Automatic updates:
+- The launcher can download a newer Football Game.py from the developer server.
+- The hosted update manifest must be a JSON file with:
+  version
+  script_url
+- Example:
+  {"version":"1.0.1","script_url":"https://your-domain/Football%20Game.py"}
+
+Manual updates:
+1. Close the app if it is running.
+2. Replace the old Football Game.py with the new Football Game.py you receive.
+3. If needed, replace version.json too.
+4. Open FC Fantasy Live.app again.
+
+Cloud accounts:
+- Press C in the app to open Cloud Settings.
+- Enter the cloud server URL.
+- Save it, then sign in.
+
+Important:
+- Do not rename Football Game.py unless the developer tells you to.
+- The app reads that file directly, so replacing it updates the game.

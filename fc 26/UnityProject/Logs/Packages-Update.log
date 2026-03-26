@@ -1,0 +1,10 @@
+
+=== Sat Mar 14 14:57:02 2026
+
+Packages were changed.
+Update Mode: updateDependencies
+
+The following packages were added:
+  com.unity.modules.adaptiveperformance@1.0.0
+  com.unity.modules.vectorgraphics@1.0.0
+  com.unity.multiplayer.center@1.0.1

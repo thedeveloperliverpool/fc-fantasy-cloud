@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fc-fantasy-cloud
+    env: python
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python3 backend/server.py
+    plan: free
+    envVars:
+      - key: FC_CLOUD_HOST
+        value: 0.0.0.0

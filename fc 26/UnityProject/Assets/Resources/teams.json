@@ -1,0 +1,3604 @@
+{
+  "teams": [
+    {
+      "name": "Arsenal",
+      "rating_base": 88,
+      "overall": 91,
+      "stadium": "Emirates Stadium",
+      "kits": [
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "David Raya",
+          "number": 1,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "William Saliba",
+          "number": 2,
+          "rating": 95,
+          "pos": ""
+        },
+        {
+          "name": "Ben White",
+          "number": 4,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Piero Hincapie",
+          "number": 5,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Riccardo Calafiori",
+          "number": 33,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Martin Odegaard",
+          "number": 8,
+          "rating": 94,
+          "pos": ""
+        },
+        {
+          "name": "Christian Norgaard",
+          "number": 16,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Declan Rice",
+          "number": 41,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Bukayo Saka",
+          "number": 7,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Gabriel Jesus",
+          "number": 9,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Gabriel Martinelli",
+          "number": 11,
+          "rating": 88,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "David Raya",
+          "number": 1,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "William Saliba",
+          "number": 2,
+          "rating": 95,
+          "pos": ""
+        },
+        {
+          "name": "Ben White",
+          "number": 4,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Piero Hincapie",
+          "number": 5,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Riccardo Calafiori",
+          "number": 33,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Martin Odegaard",
+          "number": 8,
+          "rating": 94,
+          "pos": ""
+        },
+        {
+          "name": "Christian Norgaard",
+          "number": 16,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Declan Rice",
+          "number": 41,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Bukayo Saka",
+          "number": 7,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Gabriel Jesus",
+          "number": 9,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Gabriel Martinelli",
+          "number": 11,
+          "rating": 88,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Aston Villa",
+      "rating_base": 80,
+      "overall": 83,
+      "stadium": "Villa Park",
+      "kits": [
+        {
+          "primary": [
+            120,
+            0,
+            90
+          ],
+          "secondary": [
+            160,
+            200,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            120,
+            0,
+            90
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            120,
+            0,
+            90
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Emiliano Martinez",
+          "number": 23,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Matty Cash",
+          "number": 2,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Ezri Konsa",
+          "number": 4,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Tyrone Mings",
+          "number": 5,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Lucas Digne",
+          "number": 12,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "John McGinn",
+          "number": 7,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Youri Tielemans",
+          "number": 8,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Boubacar Kamara",
+          "number": 44,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Ollie Watkins",
+          "number": 11,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Jadon Sancho",
+          "number": 19,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Leon Bailey",
+          "number": 31,
+          "rating": 85,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Emiliano Martinez",
+          "number": 23,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Matty Cash",
+          "number": 2,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Ezri Konsa",
+          "number": 4,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Tyrone Mings",
+          "number": 5,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Lucas Digne",
+          "number": 12,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "John McGinn",
+          "number": 7,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Youri Tielemans",
+          "number": 8,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Boubacar Kamara",
+          "number": 44,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Ollie Watkins",
+          "number": 11,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Jadon Sancho",
+          "number": 19,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Leon Bailey",
+          "number": 31,
+          "rating": 85,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "AFC Bournemouth",
+      "rating_base": 71,
+      "overall": 72,
+      "stadium": "Vitality Stadium",
+      "kits": [
+        {
+          "primary": [
+            160,
+            0,
+            0
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            160,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            160,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Djorde Petrovic",
+          "number": 1,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Adrien Truffert",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Cook",
+          "number": 4,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Marcos Senesi",
+          "number": 5,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Julio Soler",
+          "number": 6,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "David Brooks",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Alex Scott",
+          "number": 8,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Evanilson",
+          "number": 9,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "Ryan Christie",
+          "number": 10,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Ben Doak",
+          "number": 11,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Tyler Adams",
+          "number": 12,
+          "rating": 66,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Djorde Petrovic",
+          "number": 1,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Adrien Truffert",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Cook",
+          "number": 4,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Marcos Senesi",
+          "number": 5,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Julio Soler",
+          "number": 6,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "David Brooks",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Alex Scott",
+          "number": 8,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Evanilson",
+          "number": 9,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "Ryan Christie",
+          "number": 10,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Ben Doak",
+          "number": 11,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Tyler Adams",
+          "number": 12,
+          "rating": 66,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Brentford",
+      "rating_base": 78,
+      "overall": 80,
+      "stadium": "Gtech Community Stadium",
+      "kits": [
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Caoimhin Kelleher",
+          "number": 1,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Aaron Hickey",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Ethan Pinnock",
+          "number": 5,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Collins",
+          "number": 22,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Rico Henry",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Mathias Jensen",
+          "number": 8,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Vitaly Janelt",
+          "number": 27,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Mikkel Damsgaard",
+          "number": 24,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Kevin Schade",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Yoane Wissa",
+          "number": 11,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Igor Thiago",
+          "number": 9,
+          "rating": 81,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Caoimhin Kelleher",
+          "number": 1,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Aaron Hickey",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Ethan Pinnock",
+          "number": 5,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Collins",
+          "number": 22,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Rico Henry",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Mathias Jensen",
+          "number": 8,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Vitaly Janelt",
+          "number": 27,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Mikkel Damsgaard",
+          "number": 24,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Kevin Schade",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Yoane Wissa",
+          "number": 11,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Igor Thiago",
+          "number": 9,
+          "rating": 81,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Brighton",
+      "rating_base": 79,
+      "overall": 81,
+      "stadium": "Amex Stadium",
+      "kits": [
+        {
+          "primary": [
+            20,
+            80,
+            200
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            80,
+            200
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            20,
+            80,
+            200
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Bart Verbruggen",
+          "number": 1,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Tariq Lamptey",
+          "number": 2,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Dunk",
+          "number": 5,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Jan Paul van Hecke",
+          "number": 6,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Pervis Estupinan",
+          "number": 30,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "James Milner",
+          "number": 20,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Carlos Baleba",
+          "number": 17,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Matt O'Riley",
+          "number": 33,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Stefanos Tzimas",
+          "number": 9,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Georginio Rutter",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Kaoru Mitoma",
+          "number": 22,
+          "rating": 86,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Bart Verbruggen",
+          "number": 1,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Tariq Lamptey",
+          "number": 2,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Dunk",
+          "number": 5,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Jan Paul van Hecke",
+          "number": 6,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Pervis Estupinan",
+          "number": 30,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "James Milner",
+          "number": 20,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Carlos Baleba",
+          "number": 17,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Matt O'Riley",
+          "number": 33,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Stefanos Tzimas",
+          "number": 9,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Georginio Rutter",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Kaoru Mitoma",
+          "number": 22,
+          "rating": 86,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Burnley",
+      "rating_base": 66,
+      "overall": 67,
+      "stadium": "Turf Moor",
+      "kits": [
+        {
+          "primary": [
+            120,
+            0,
+            90
+          ],
+          "secondary": [
+            160,
+            200,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            120,
+            0,
+            90
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            120,
+            0,
+            90
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Martin Dubravka",
+          "number": 1,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Kyle Walker",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Quilindschy Hartman",
+          "number": 3,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Joe Worrall",
+          "number": 4,
+          "rating": 62,
+          "pos": ""
+        },
+        {
+          "name": "Maxime Esteve",
+          "number": 5,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Lesley Ugochukwu",
+          "number": 8,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Florentino Luis",
+          "number": 16,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Josh Cullen",
+          "number": 24,
+          "rating": 60,
+          "pos": ""
+        },
+        {
+          "name": "Lyle Foster",
+          "number": 9,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Marcus Edwards",
+          "number": 10,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Jaidon Anthony",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Martin Dubravka",
+          "number": 1,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Kyle Walker",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Quilindschy Hartman",
+          "number": 3,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Joe Worrall",
+          "number": 4,
+          "rating": 62,
+          "pos": ""
+        },
+        {
+          "name": "Maxime Esteve",
+          "number": 5,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Lesley Ugochukwu",
+          "number": 8,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Florentino Luis",
+          "number": 16,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Josh Cullen",
+          "number": 24,
+          "rating": 60,
+          "pos": ""
+        },
+        {
+          "name": "Lyle Foster",
+          "number": 9,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Marcus Edwards",
+          "number": 10,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Jaidon Anthony",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Chelsea",
+      "rating_base": 85,
+      "overall": 87,
+      "stadium": "Stamford Bridge",
+      "kits": [
+        {
+          "primary": [
+            20,
+            70,
+            200
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            70,
+            200
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            20,
+            70,
+            200
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Robert Sanchez",
+          "number": 1,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Tosin Adarabioyo",
+          "number": 4,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Levi Colwill",
+          "number": 6,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Marc Cucurella",
+          "number": 3,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Moises Caicedo",
+          "number": 25,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Enzo Fernandez",
+          "number": 8,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Cole Palmer",
+          "number": 10,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Pedro Neto",
+          "number": 7,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Liam Delap",
+          "number": 9,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Joao Pedro",
+          "number": 20,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Reece James",
+          "number": 24,
+          "rating": 86,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Robert Sanchez",
+          "number": 1,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Tosin Adarabioyo",
+          "number": 4,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Levi Colwill",
+          "number": 6,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Marc Cucurella",
+          "number": 3,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Moises Caicedo",
+          "number": 25,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Enzo Fernandez",
+          "number": 8,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Cole Palmer",
+          "number": 10,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Pedro Neto",
+          "number": 7,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Liam Delap",
+          "number": 9,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Joao Pedro",
+          "number": 20,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Reece James",
+          "number": 24,
+          "rating": 86,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Crystal Palace",
+      "rating_base": 70,
+      "overall": 70,
+      "stadium": "Selhurst Park",
+      "kits": [
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            20,
+            70,
+            200
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Dean Henderson",
+          "number": 1,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Daniel Munoz",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Tyrick Mitchell",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Maxence Lacroix",
+          "number": 5,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Ismaila Sarr",
+          "number": 7,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Jefferson Lerma",
+          "number": 8,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Yeremy Pino",
+          "number": 10,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Brennan Johnson",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Jean-Philippe Mateta",
+          "number": 14,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Adam Wharton",
+          "number": 20,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "Chris Richards",
+          "number": 26,
+          "rating": 71,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Dean Henderson",
+          "number": 1,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Daniel Munoz",
+          "number": 2,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Tyrick Mitchell",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Maxence Lacroix",
+          "number": 5,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Ismaila Sarr",
+          "number": 7,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Jefferson Lerma",
+          "number": 8,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Yeremy Pino",
+          "number": 10,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Brennan Johnson",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Jean-Philippe Mateta",
+          "number": 14,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Adam Wharton",
+          "number": 20,
+          "rating": 69,
+          "pos": ""
+        },
+        {
+          "name": "Chris Richards",
+          "number": 26,
+          "rating": 71,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Everton",
+      "rating_base": 74,
+      "overall": 76,
+      "stadium": "Goodison Park",
+      "kits": [
+        {
+          "primary": [
+            20,
+            60,
+            160
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            60,
+            160
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            20,
+            60,
+            160
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Jordan Pickford",
+          "number": 1,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Patterson",
+          "number": 2,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Michael Keane",
+          "number": 5,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "James Tarkowski",
+          "number": 6,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Vitalii Mykolenko",
+          "number": 16,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "James Garner",
+          "number": 37,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Kiernan Dewsbury-Hall",
+          "number": 22,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Carlos Alcaraz",
+          "number": 24,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Iliman Ndiaye",
+          "number": 10,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Beto",
+          "number": 9,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Thierno Barry",
+          "number": 11,
+          "rating": 70,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Jordan Pickford",
+          "number": 1,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Patterson",
+          "number": 2,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Michael Keane",
+          "number": 5,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "James Tarkowski",
+          "number": 6,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Vitalii Mykolenko",
+          "number": 16,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "James Garner",
+          "number": 37,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Kiernan Dewsbury-Hall",
+          "number": 22,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Carlos Alcaraz",
+          "number": 24,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Iliman Ndiaye",
+          "number": 10,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Beto",
+          "number": 9,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Thierno Barry",
+          "number": 11,
+          "rating": 70,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Fulham",
+      "rating_base": 76,
+      "overall": 78,
+      "stadium": "Craven Cottage",
+      "kits": [
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Bernd Leno",
+          "number": 1,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Kenny Tete",
+          "number": 2,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Calvin Bassey",
+          "number": 3,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Joachim Andersen",
+          "number": 5,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Harrison Reed",
+          "number": 6,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Raul Jimenez",
+          "number": 7,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Harry Wilson",
+          "number": 8,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Rodrigo Muniz",
+          "number": 9,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Sander Berge",
+          "number": 16,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Emile Smith Rowe",
+          "number": 32,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Antonee Robinson",
+          "number": 33,
+          "rating": 75,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Bernd Leno",
+          "number": 1,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Kenny Tete",
+          "number": 2,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Calvin Bassey",
+          "number": 3,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Joachim Andersen",
+          "number": 5,
+          "rating": 78,
+          "pos": ""
+        },
+        {
+          "name": "Harrison Reed",
+          "number": 6,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Raul Jimenez",
+          "number": 7,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Harry Wilson",
+          "number": 8,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Rodrigo Muniz",
+          "number": 9,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Sander Berge",
+          "number": 16,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Emile Smith Rowe",
+          "number": 32,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Antonee Robinson",
+          "number": 33,
+          "rating": 75,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Liverpool",
+      "rating_base": 90,
+      "overall": 93,
+      "stadium": "Anfield",
+      "kits": [
+        {
+          "primary": [
+            180,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            180,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            180,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Alisson Becker",
+          "number": 1,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Virgil van Dijk",
+          "number": 4,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Ibrahima Konate",
+          "number": 5,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Milos Kerkez",
+          "number": 6,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Andy Robertson",
+          "number": 26,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Florian Wirtz",
+          "number": 7,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Dominik Szoboszlai",
+          "number": 8,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Alexis Mac Allister",
+          "number": 10,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Mohamed Salah",
+          "number": 11,
+          "rating": 91,
+          "pos": ""
+        },
+        {
+          "name": "Alexander Isak",
+          "number": 9,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Hugo Ekitike",
+          "number": 22,
+          "rating": 80,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Alisson Becker",
+          "number": 1,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Virgil van Dijk",
+          "number": 4,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Ibrahima Konate",
+          "number": 5,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Milos Kerkez",
+          "number": 6,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Andy Robertson",
+          "number": 26,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Florian Wirtz",
+          "number": 7,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Dominik Szoboszlai",
+          "number": 8,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Alexis Mac Allister",
+          "number": 10,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Mohamed Salah",
+          "number": 11,
+          "rating": 91,
+          "pos": ""
+        },
+        {
+          "name": "Alexander Isak",
+          "number": 9,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Hugo Ekitike",
+          "number": 22,
+          "rating": 80,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Leeds United",
+      "rating_base": 72,
+      "overall": 73,
+      "stadium": "Elland Road",
+      "kits": [
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Illan Meslier",
+          "number": 1,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Jayden Bogle",
+          "number": 2,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Junior Firpo",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Ethan Ampadu",
+          "number": 4,
+          "rating": 65,
+          "pos": ""
+        },
+        {
+          "name": "Pascal Struijk",
+          "number": 5,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Joe Rodon",
+          "number": 6,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Dan James",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Joe Rothwell",
+          "number": 8,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Patrick Bamford",
+          "number": 9,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Joel Piroe",
+          "number": 10,
+          "rating": 65,
+          "pos": ""
+        },
+        {
+          "name": "Brenden Aaronson",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Illan Meslier",
+          "number": 1,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Jayden Bogle",
+          "number": 2,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Junior Firpo",
+          "number": 3,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Ethan Ampadu",
+          "number": 4,
+          "rating": 65,
+          "pos": ""
+        },
+        {
+          "name": "Pascal Struijk",
+          "number": 5,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Joe Rodon",
+          "number": 6,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Dan James",
+          "number": 7,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Joe Rothwell",
+          "number": 8,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Patrick Bamford",
+          "number": 9,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Joel Piroe",
+          "number": 10,
+          "rating": 65,
+          "pos": ""
+        },
+        {
+          "name": "Brenden Aaronson",
+          "number": 11,
+          "rating": 67,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Man City",
+      "rating_base": 91,
+      "overall": 94,
+      "stadium": "Etihad Stadium",
+      "kits": [
+        {
+          "primary": [
+            120,
+            190,
+            240
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            120,
+            190,
+            240
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            120,
+            190,
+            240
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "James Trafford",
+          "number": 1,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Ruben Dias",
+          "number": 3,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "John Stones",
+          "number": 5,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Ake",
+          "number": 6,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Rayan Ait-Nouri",
+          "number": 21,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Rodri",
+          "number": 16,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Tijjani Reijnders",
+          "number": 4,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Rayan Cherki",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Jeremy Doku",
+          "number": 11,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Phil Foden",
+          "number": 47,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Erling Haaland",
+          "number": 9,
+          "rating": 90,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "James Trafford",
+          "number": 1,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Ruben Dias",
+          "number": 3,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "John Stones",
+          "number": 5,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Nathan Ake",
+          "number": 6,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Rayan Ait-Nouri",
+          "number": 21,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Rodri",
+          "number": 16,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Tijjani Reijnders",
+          "number": 4,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Rayan Cherki",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Jeremy Doku",
+          "number": 11,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Phil Foden",
+          "number": 47,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Erling Haaland",
+          "number": 9,
+          "rating": 90,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Man United",
+      "rating_base": 86,
+      "overall": 88,
+      "stadium": "Old Trafford",
+      "kits": [
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Altay Bayindir",
+          "number": 1,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Diogo Dalot",
+          "number": 2,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Noussair Mazraoui",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Matthijs de Ligt",
+          "number": 4,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Harry Maguire",
+          "number": 5,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Lisandro Martinez",
+          "number": 6,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Mason Mount",
+          "number": 7,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Bruno Fernandes",
+          "number": 8,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Matheus Cunha",
+          "number": 10,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Joshua Zirkzee",
+          "number": 11,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Tyrell Malacia",
+          "number": 12,
+          "rating": 79,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Altay Bayindir",
+          "number": 1,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Diogo Dalot",
+          "number": 2,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Noussair Mazraoui",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Matthijs de Ligt",
+          "number": 4,
+          "rating": 88,
+          "pos": ""
+        },
+        {
+          "name": "Harry Maguire",
+          "number": 5,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Lisandro Martinez",
+          "number": 6,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Mason Mount",
+          "number": 7,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Bruno Fernandes",
+          "number": 8,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Matheus Cunha",
+          "number": 10,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Joshua Zirkzee",
+          "number": 11,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Tyrell Malacia",
+          "number": 12,
+          "rating": 79,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Newcastle",
+      "rating_base": 82,
+      "overall": 84,
+      "stadium": "St. James' Park",
+      "kits": [
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Nick Pope",
+          "number": 1,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Kieran Trippier",
+          "number": 2,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Hall",
+          "number": 3,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Sven Botman",
+          "number": 4,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Fabian Schar",
+          "number": 5,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Joelinton",
+          "number": 7,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Sandro Tonali",
+          "number": 8,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Anthony Gordon",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Harvey Barnes",
+          "number": 11,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Will Osula",
+          "number": 18,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Anthony Elanga",
+          "number": 20,
+          "rating": 79,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Nick Pope",
+          "number": 1,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Kieran Trippier",
+          "number": 2,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Lewis Hall",
+          "number": 3,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Sven Botman",
+          "number": 4,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Fabian Schar",
+          "number": 5,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "Joelinton",
+          "number": 7,
+          "rating": 86,
+          "pos": ""
+        },
+        {
+          "name": "Sandro Tonali",
+          "number": 8,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Anthony Gordon",
+          "number": 10,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Harvey Barnes",
+          "number": 11,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Will Osula",
+          "number": 18,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Anthony Elanga",
+          "number": 20,
+          "rating": 79,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Nottingham Forest",
+      "rating_base": 69,
+      "overall": 70,
+      "stadium": "City Ground",
+      "kits": [
+        {
+          "primary": [
+            180,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            180,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            180,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "John Victor",
+          "number": 13,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Neco Williams",
+          "number": 3,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Morato",
+          "number": 4,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Murillo",
+          "number": 5,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Ola Aina",
+          "number": 34,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Ibrahim Sangare",
+          "number": 6,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Elliot Anderson",
+          "number": 8,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Morgan Gibbs-White",
+          "number": 10,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Callum Hudson-Odoi",
+          "number": 7,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Taiwo Awoniyi",
+          "number": 9,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Dan Ndoye",
+          "number": 14,
+          "rating": 74,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "John Victor",
+          "number": 13,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Neco Williams",
+          "number": 3,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Morato",
+          "number": 4,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Murillo",
+          "number": 5,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Ola Aina",
+          "number": 34,
+          "rating": 73,
+          "pos": ""
+        },
+        {
+          "name": "Ibrahim Sangare",
+          "number": 6,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Elliot Anderson",
+          "number": 8,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Morgan Gibbs-White",
+          "number": 10,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Callum Hudson-Odoi",
+          "number": 7,
+          "rating": 75,
+          "pos": ""
+        },
+        {
+          "name": "Taiwo Awoniyi",
+          "number": 9,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Dan Ndoye",
+          "number": 14,
+          "rating": 74,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Sunderland",
+      "rating_base": 65,
+      "overall": 66,
+      "stadium": "Stadium of Light",
+      "kits": [
+        {
+          "primary": [
+            200,
+            0,
+            0
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            200,
+            0,
+            0
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Anthony Patterson",
+          "number": 1,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Dennis Cirkin",
+          "number": 3,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Daniel Ballard",
+          "number": 5,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Lutsharel Geertruida",
+          "number": 6,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Luke O'Nien",
+          "number": 13,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Dan Neil",
+          "number": 4,
+          "rating": 61,
+          "pos": ""
+        },
+        {
+          "name": "Habib Diarra",
+          "number": 19,
+          "rating": 62,
+          "pos": ""
+        },
+        {
+          "name": "Granit Xhaka",
+          "number": 34,
+          "rating": 61,
+          "pos": ""
+        },
+        {
+          "name": "Chemsdine Talbi",
+          "number": 7,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Brian Brobbey",
+          "number": 9,
+          "rating": 59,
+          "pos": ""
+        },
+        {
+          "name": "Romaine Mundle",
+          "number": 14,
+          "rating": 71,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Anthony Patterson",
+          "number": 1,
+          "rating": 63,
+          "pos": ""
+        },
+        {
+          "name": "Dennis Cirkin",
+          "number": 3,
+          "rating": 70,
+          "pos": ""
+        },
+        {
+          "name": "Daniel Ballard",
+          "number": 5,
+          "rating": 64,
+          "pos": ""
+        },
+        {
+          "name": "Lutsharel Geertruida",
+          "number": 6,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Luke O'Nien",
+          "number": 13,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Dan Neil",
+          "number": 4,
+          "rating": 61,
+          "pos": ""
+        },
+        {
+          "name": "Habib Diarra",
+          "number": 19,
+          "rating": 62,
+          "pos": ""
+        },
+        {
+          "name": "Granit Xhaka",
+          "number": 34,
+          "rating": 61,
+          "pos": ""
+        },
+        {
+          "name": "Chemsdine Talbi",
+          "number": 7,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Brian Brobbey",
+          "number": 9,
+          "rating": 59,
+          "pos": ""
+        },
+        {
+          "name": "Romaine Mundle",
+          "number": 14,
+          "rating": 71,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Tottenham",
+      "rating_base": 84,
+      "overall": 86,
+      "stadium": "Tottenham Hotspur Stadium",
+      "kits": [
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            20,
+            40,
+            120
+          ]
+        },
+        {
+          "primary": [
+            20,
+            40,
+            120
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            240,
+            240,
+            240
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Guglielmo Vicario",
+          "number": 1,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Pedro Porro",
+          "number": 23,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Cristian Romero",
+          "number": 17,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Micky van de Ven",
+          "number": 37,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Destiny Udogie",
+          "number": 13,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Yves Bissouma",
+          "number": 8,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "James Maddison",
+          "number": 10,
+          "rating": 91,
+          "pos": ""
+        },
+        {
+          "name": "Pape Matar Sarr",
+          "number": 29,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Dominic Solanke",
+          "number": 19,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Brennan Johnson",
+          "number": 22,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Dejan Kulusevski",
+          "number": 21,
+          "rating": 89,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Guglielmo Vicario",
+          "number": 1,
+          "rating": 87,
+          "pos": ""
+        },
+        {
+          "name": "Pedro Porro",
+          "number": 23,
+          "rating": 83,
+          "pos": ""
+        },
+        {
+          "name": "Cristian Romero",
+          "number": 17,
+          "rating": 85,
+          "pos": ""
+        },
+        {
+          "name": "Micky van de Ven",
+          "number": 37,
+          "rating": 80,
+          "pos": ""
+        },
+        {
+          "name": "Destiny Udogie",
+          "number": 13,
+          "rating": 89,
+          "pos": ""
+        },
+        {
+          "name": "Yves Bissouma",
+          "number": 8,
+          "rating": 82,
+          "pos": ""
+        },
+        {
+          "name": "James Maddison",
+          "number": 10,
+          "rating": 91,
+          "pos": ""
+        },
+        {
+          "name": "Pape Matar Sarr",
+          "number": 29,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Dominic Solanke",
+          "number": 19,
+          "rating": 90,
+          "pos": ""
+        },
+        {
+          "name": "Brennan Johnson",
+          "number": 22,
+          "rating": 81,
+          "pos": ""
+        },
+        {
+          "name": "Dejan Kulusevski",
+          "number": 21,
+          "rating": 89,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "West Ham",
+      "rating_base": 77,
+      "overall": 79,
+      "stadium": "London Stadium",
+      "kits": [
+        {
+          "primary": [
+            120,
+            0,
+            90
+          ],
+          "secondary": [
+            120,
+            200,
+            240
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            120,
+            0,
+            90
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            120,
+            200,
+            240
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Alphonse Areola",
+          "number": 23,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Kyle Walker-Peters",
+          "number": 2,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Maximilian Kilman",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Nayef Aguerd",
+          "number": 5,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Emerson",
+          "number": 33,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Edson Alvarez",
+          "number": 4,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "James Ward-Prowse",
+          "number": 8,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Tomas Soucek",
+          "number": 28,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Jarrod Bowen",
+          "number": 20,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Callum Wilson",
+          "number": 9,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Niclas Fullkrug",
+          "number": 11,
+          "rating": 84,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Alphonse Areola",
+          "number": 23,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Kyle Walker-Peters",
+          "number": 2,
+          "rating": 74,
+          "pos": ""
+        },
+        {
+          "name": "Maximilian Kilman",
+          "number": 3,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Nayef Aguerd",
+          "number": 5,
+          "rating": 72,
+          "pos": ""
+        },
+        {
+          "name": "Emerson",
+          "number": 33,
+          "rating": 84,
+          "pos": ""
+        },
+        {
+          "name": "Edson Alvarez",
+          "number": 4,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "James Ward-Prowse",
+          "number": 8,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Tomas Soucek",
+          "number": 28,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Jarrod Bowen",
+          "number": 20,
+          "rating": 77,
+          "pos": ""
+        },
+        {
+          "name": "Callum Wilson",
+          "number": 9,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Niclas Fullkrug",
+          "number": 11,
+          "rating": 84,
+          "pos": ""
+        }
+      ]
+    },
+    {
+      "name": "Wolves",
+      "rating_base": 73,
+      "overall": 75,
+      "stadium": "Molineux",
+      "kits": [
+        {
+          "primary": [
+            230,
+            170,
+            40
+          ],
+          "secondary": [
+            20,
+            20,
+            20
+          ]
+        },
+        {
+          "primary": [
+            20,
+            20,
+            20
+          ],
+          "secondary": [
+            230,
+            170,
+            40
+          ]
+        },
+        {
+          "primary": [
+            240,
+            240,
+            240
+          ],
+          "secondary": [
+            230,
+            170,
+            40
+          ]
+        }
+      ],
+      "roster": [
+        {
+          "name": "Jose Sa",
+          "number": 1,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Matt Doherty",
+          "number": 2,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Hugo Bueno",
+          "number": 3,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Santiago Bueno",
+          "number": 4,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Toti Gomes",
+          "number": 24,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Andre",
+          "number": 7,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Joao Gomes",
+          "number": 8,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Jean-Ricner Bellegarde",
+          "number": 27,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Adam Armstrong",
+          "number": 9,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Hwang Hee-chan",
+          "number": 11,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Tolu Arokodare",
+          "number": 14,
+          "rating": 68,
+          "pos": ""
+        }
+      ],
+      "starting_xi": [
+        {
+          "name": "Jose Sa",
+          "number": 1,
+          "rating": 68,
+          "pos": ""
+        },
+        {
+          "name": "Matt Doherty",
+          "number": 2,
+          "rating": 79,
+          "pos": ""
+        },
+        {
+          "name": "Hugo Bueno",
+          "number": 3,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Santiago Bueno",
+          "number": 4,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Toti Gomes",
+          "number": 24,
+          "rating": 71,
+          "pos": ""
+        },
+        {
+          "name": "Andre",
+          "number": 7,
+          "rating": 66,
+          "pos": ""
+        },
+        {
+          "name": "Joao Gomes",
+          "number": 8,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Jean-Ricner Bellegarde",
+          "number": 27,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Adam Armstrong",
+          "number": 9,
+          "rating": 67,
+          "pos": ""
+        },
+        {
+          "name": "Hwang Hee-chan",
+          "number": 11,
+          "rating": 76,
+          "pos": ""
+        },
+        {
+          "name": "Tolu Arokodare",
+          "number": 14,
+          "rating": 68,
+          "pos": ""
+        }
+      ]
+    }
+  ]
+}

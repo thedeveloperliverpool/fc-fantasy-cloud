@@ -1,0 +1,107 @@
+<svg width="980" height="620" viewBox="0 0 980 620" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="980" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#080C16"/>
+      <stop offset="1" stop-color="#111A2D"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFF2B1"/>
+      <stop offset="0.45" stop-color="#F4CE54"/>
+      <stop offset="1" stop-color="#C58B12"/>
+    </linearGradient>
+    <linearGradient id="messiShine" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#A1D7FF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ronaldoShine" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#F4CE54" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="980" height="620" fill="url(#bg)"/>
+  <text x="490" y="54" text-anchor="middle" fill="#F4CE54" font-size="28" font-weight="700" font-family="Georgia, serif">GOAT Card Preview</text>
+
+  <g transform="translate(120 96)">
+    <rect x="-14" y="-14" width="328" height="438" rx="28" fill="#F4CE54" fill-opacity="0.08" filter="url(#softGlow)"/>
+    <rect width="300" height="410" rx="24" fill="#090B12"/>
+    <rect x="6" y="6" width="288" height="398" rx="20" stroke="url(#gold)" stroke-width="3"/>
+    <rect x="14" y="14" width="272" height="382" rx="18" stroke="#FFF3C5" stroke-opacity="0.55"/>
+
+    <path d="M0 118C62 86 121 82 192 102C227 111 262 129 300 156V0H0V118Z" fill="#8ED4FF" fill-opacity="0.88"/>
+    <path d="M0 158C74 122 142 118 210 140C247 152 276 171 300 192V58C260 28 219 11 180 6C117 -2 57 16 0 48V158Z" fill="#F7FAFF" fill-opacity="0.92"/>
+    <path d="M0 212C88 172 167 170 237 194C260 202 281 214 300 232V118C262 89 224 72 180 64C118 54 58 72 0 106V212Z" fill="#80CFFF" fill-opacity="0.9"/>
+    <path d="M0 262C82 218 163 214 225 235C254 245 279 259 300 279V196C278 175 246 158 212 147C146 126 72 131 0 166V262Z" fill="#FF87BE" fill-opacity="0.8"/>
+    <path d="M300 308C223 252 154 242 79 266C47 276 21 290 0 307V410H300V308Z" fill="#1F3B84" fill-opacity="0.92"/>
+    <path d="M300 354C239 314 180 300 118 312C78 320 38 338 0 364V410H300V354Z" fill="#9B1E2E" fill-opacity="0.82"/>
+
+    <ellipse cx="150" cy="74" rx="114" ry="42" fill="url(#messiShine)"/>
+    <g opacity="0.65" fill="#FFE7A1">
+      <circle cx="58" cy="140" r="2.6"/><circle cx="94" cy="166" r="2.2"/><circle cx="244" cy="138" r="2.4"/>
+      <circle cx="214" cy="186" r="1.9"/><circle cx="66" cy="244" r="2.2"/><circle cx="236" cy="228" r="2.4"/>
+    </g>
+
+    <rect x="14" y="14" width="272" height="42" rx="12" fill="#090B12" fill-opacity="0.84" stroke="#F4CE54" stroke-opacity="0.55"/>
+    <rect x="14" y="14" width="44" height="20" rx="7" fill="#111722" stroke="#F4CE54" stroke-width="1.6"/>
+    <rect x="16" y="17" width="12" height="14" fill="#8ED4FF"/><rect x="28" y="17" width="12" height="14" fill="#FFFFFF"/><rect x="40" y="17" width="12" height="14" fill="#8ED4FF"/>
+    <text x="150" y="41" text-anchor="middle" fill="#F4CE54" font-size="21" font-style="italic" font-weight="700" font-family="Georgia, serif">GOAT</text>
+    <path d="M252 39L260 26L268 36L276 24L284 39" stroke="#F4CE54" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="16" y="62" width="72" height="58" rx="13" fill="#0D121D" stroke="#F4CE54" stroke-width="2"/>
+    <text x="52" y="98" text-anchor="middle" fill="#FFFFFF" font-size="30" font-weight="800" font-family="Arial, sans-serif">500</text>
+
+    <rect x="16" y="290" width="58" height="27" rx="10" fill="#0D121D" stroke="#F4CE54"/>
+    <text x="45" y="309" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700" font-family="Arial, sans-serif">RW</text>
+
+    <text x="18" y="262" fill="#EAF2FF" font-size="17" font-weight="600" font-family="Arial, sans-serif">GOAT</text>
+    <text x="18" y="281" fill="#F4CE54" font-size="15" font-family="Arial, sans-serif">GOAT EDITION</text>
+    <text x="18" y="335" fill="#F3F7FF" font-size="15" font-family="Arial, sans-serif">Playmaker / Finesse</text>
+    <text x="18" y="374" fill="#FFFFFF" font-size="28" font-weight="700" font-family="Arial, sans-serif">Lionel Messi</text>
+  </g>
+
+  <g transform="translate(560 96)">
+    <rect x="-14" y="-14" width="328" height="438" rx="28" fill="#F4CE54" fill-opacity="0.08" filter="url(#softGlow)"/>
+    <rect width="300" height="410" rx="24" fill="#090B12"/>
+    <rect x="6" y="6" width="288" height="398" rx="20" stroke="url(#gold)" stroke-width="3"/>
+    <rect x="14" y="14" width="272" height="382" rx="18" stroke="#FFF3C5" stroke-opacity="0.55"/>
+
+    <path d="M0 126C58 92 114 80 171 86C221 92 265 116 300 150V0H0V126Z" fill="#C81E35" fill-opacity="0.88"/>
+    <path d="M0 170C78 130 149 120 214 132C245 138 273 151 300 174V76C260 42 213 22 166 18C104 13 48 34 0 76V170Z" fill="#188A4A" fill-opacity="0.88"/>
+    <path d="M0 220C81 179 152 170 214 178C248 183 276 195 300 212V142C262 114 218 97 173 90C108 80 48 100 0 134V220Z" fill="#F4CE54" fill-opacity="0.78"/>
+    <path d="M0 276C66 232 133 218 197 226C236 231 270 243 300 264V208C272 184 239 169 199 160C136 145 66 155 0 196V276Z" fill="#3C66C4" fill-opacity="0.76"/>
+    <path d="M300 320C217 260 144 250 74 274C44 284 20 298 0 314V410H300V320Z" fill="#F2F3F5" fill-opacity="0.9"/>
+    <path d="M300 366C238 320 176 304 113 316C69 324 32 341 0 366V410H300V366Z" fill="#1B1B1B" fill-opacity="0.88"/>
+
+    <ellipse cx="150" cy="74" rx="114" ry="42" fill="url(#ronaldoShine)"/>
+    <g opacity="0.65" fill="#FFE7A1">
+      <circle cx="64" cy="144" r="2.6"/><circle cx="108" cy="174" r="2.3"/><circle cx="242" cy="142" r="2.4"/>
+      <circle cx="224" cy="206" r="2.0"/><circle cx="74" cy="252" r="2.3"/><circle cx="236" cy="238" r="2.4"/>
+    </g>
+
+    <rect x="14" y="14" width="272" height="42" rx="12" fill="#090B12" fill-opacity="0.84" stroke="#F4CE54" stroke-opacity="0.55"/>
+    <rect x="14" y="14" width="44" height="20" rx="7" fill="#111722" stroke="#F4CE54" stroke-width="1.6"/>
+    <rect x="16" y="17" width="18" height="14" fill="#188A4A"/><rect x="34" y="17" width="18" height="14" fill="#C81E35"/>
+    <text x="150" y="41" text-anchor="middle" fill="#F4CE54" font-size="21" font-style="italic" font-weight="700" font-family="Georgia, serif">GOAT</text>
+    <path d="M252 39L260 26L268 36L276 24L284 39" stroke="#F4CE54" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="16" y="62" width="72" height="58" rx="13" fill="#0D121D" stroke="#F4CE54" stroke-width="2"/>
+    <text x="52" y="98" text-anchor="middle" fill="#FFFFFF" font-size="30" font-weight="800" font-family="Arial, sans-serif">500</text>
+
+    <rect x="16" y="290" width="58" height="27" rx="10" fill="#0D121D" stroke="#F4CE54"/>
+    <text x="45" y="309" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700" font-family="Arial, sans-serif">ST</text>
+
+    <text x="18" y="262" fill="#EAF2FF" font-size="17" font-weight="600" font-family="Arial, sans-serif">GOAT</text>
+    <text x="18" y="281" fill="#F4CE54" font-size="15" font-family="Arial, sans-serif">GOAT EDITION</text>
+    <text x="18" y="335" fill="#F3F7FF" font-size="15" font-family="Arial, sans-serif">Aerial / Clutch</text>
+    <text x="18" y="374" fill="#FFFFFF" font-size="27" font-weight="700" font-family="Arial, sans-serif">Cristiano Ronaldo</text>
+  </g>
+</svg>

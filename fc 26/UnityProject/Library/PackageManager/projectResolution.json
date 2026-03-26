@@ -1,0 +1,103 @@
+{
+  "context": {
+    "projectPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Packages",
+    "unityVersion": "6000.3.11f1"
+  },
+  "inputs": [
+    "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Packages/manifest.json",
+    "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Packages/packages-lock.json",
+    "/Applications/Unity/Hub/Editor/6000.3.11f1/Unity.app/Contents/Resources/PackageManager/BuiltInPackages/BuiltInPackagesCombined.sha1"
+  ],
+  "outputs": {
+    "com.unity.modules.ai@1.0.0": {
+      "name": "com.unity.modules.ai",
+      "displayName": "AI",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.ai",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.animation@1.0.0": {
+      "name": "com.unity.modules.animation",
+      "displayName": "Animation",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.animation",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.audio@1.0.0": {
+      "name": "com.unity.modules.audio",
+      "displayName": "Audio",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.audio",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.physics@1.0.0": {
+      "name": "com.unity.modules.physics",
+      "displayName": "Physics",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.physics",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.physics2d@1.0.0": {
+      "name": "com.unity.modules.physics2d",
+      "displayName": "Physics 2D",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.physics2d",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.ui@1.0.0": {
+      "name": "com.unity.modules.ui",
+      "displayName": "UI",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.ui",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.uielements@1.0.0": {
+      "name": "com.unity.modules.uielements",
+      "displayName": "UIElements",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.uielements",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.ugui@2.0.0": {
+      "name": "com.unity.ugui",
+      "displayName": "uGUI",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.ugui@f17df9b1ab21",
+      "fingerprint": "f17df9b1ab21a9a2156e109eacf8dd2f65d03c8c",
+      "editorCompatibility": "2019.2.0a1",
+      "version": "2.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.imgui@1.0.0": {
+      "name": "com.unity.modules.imgui",
+      "displayName": "IMGUI",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.imgui",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.jsonserialize@1.0.0": {
+      "name": "com.unity.modules.jsonserialize",
+      "displayName": "JSONSerialize",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.jsonserialize",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    },
+    "com.unity.modules.hierarchycore@1.0.0": {
+      "name": "com.unity.modules.hierarchycore",
+      "displayName": "Hierarchy Core",
+      "resolvedPath": "/Users/josiahchang/Documents/New project 5/fc 26/UnityProject/Library/PackageCache/com.unity.modules.hierarchycore",
+      "version": "1.0.0",
+      "source": "builtin",
+      "testable": false
+    }
+  }
+}

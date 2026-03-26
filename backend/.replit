@@ -1,0 +1,7 @@
+entrypoint = "replit_main.py"
+
+[deployment]
+run = ["python3", "replit_main.py"]
+
+[nix]
+channel = "stable-24_05"

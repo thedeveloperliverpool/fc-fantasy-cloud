@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Nuclear Reactor Simulator</title>
+  <style>
+    :root {
+      --bg: #0b1d26;
+      --panel: #112c38;
+      --panel-2: #0f2430;
+      --accent: #56cfe1;
+      --hot: #ff7b54;
+      --safe: #6ee7b7;
+      --warn: #f9c74f;
+      --text: #eaf6fb;
+      --muted: #9cc3cf;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, #143949, transparent 45%),
+        radial-gradient(circle at 80% 20%, #203247, transparent 35%),
+        linear-gradient(180deg, #07121a, var(--bg));
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .wrap {
+      max-width: 1160px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 16px;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid #2b4b58;
+      border-radius: 14px;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 12px 14px;
+      border-bottom: 1px solid #2b4b58;
+      background: rgba(255,255,255,0.02);
+    }
+
+    #scene {
+      width: 100%;
+      height: 620px;
+      display: block;
+      background: radial-gradient(circle at 50% 25%, #274a5f 0%, #0f1f29 68%);
+    }
+
+    .controls {
+      padding: 12px 14px 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .control {
+      display: grid;
+      gap: 6px;
+    }
+
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #001219;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      background: var(--safe);
+    }
+
+    button.warn { background: var(--warn); }
+    button.danger { background: #ff5d5d; color: #fff; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+      padding: 12px 14px 16px;
+    }
+
+    .card {
+      background: rgba(0,0,0,0.18);
+      border: 1px solid #2d4d59;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .card .k {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .card .v {
+      margin-top: 2px;
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+
+    .note {
+      padding: 0 14px 14px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 980px) {
+      .wrap { grid-template-columns: 1fr; }
+      #scene { height: 470px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="panel">
+      <h2>Reactor Visual</h2>
+      <canvas id="scene" width="900" height="620"></canvas>
+    </section>
+
+    <section class="panel">
+      <h2>Control Room</h2>
+      <div class="controls">
+        <div class="control">
+          <label>Control Rod Insertion <span id="rodLabel">60%</span></label>
+          <input id="rod" type="range" min="0" max="100" value="60" />
+        </div>
+
+        <div class="control">
+          <label>Coolant Pump Flow <span id="coolantLabel">65%</span></label>
+          <input id="coolant" type="range" min="20" max="120" value="65" />
+        </div>
+
+        <div class="control">
+          <label>Turbine Load Demand <span id="demandLabel">45%</span></label>
+          <input id="demand" type="range" min="10" max="110" value="45" />
+        </div>
+
+        <div class="buttons">
+          <button id="auto">Auto Stabilize</button>
+          <button id="reset" class="warn">Reset Plant</button>
+          <button id="scram" class="danger">SCRAM</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="card"><div class="k">Reactor Power</div><div class="v" id="power">0 MWth</div></div>
+        <div class="card"><div class="k">Electric Output</div><div class="v" id="electric">0 MWe</div></div>
+        <div class="card"><div class="k">Core Temp</div><div class="v" id="coreTemp">0 C</div></div>
+        <div class="card"><div class="k">Coolant Temp</div><div class="v" id="coolTemp">0 C</div></div>
+        <div class="card"><div class="k">Reactivity (k-eff)</div><div class="v" id="keff">1.000</div></div>
+        <div class="card"><div class="k">Plant State</div><div class="v" id="state">Starting</div></div>
+      </div>
+
+      <p class="note">
+        Educational model only. It demonstrates feedback and control behavior, not real reactor engineering.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+
+    const ui = {
+      rod: document.getElementById('rod'),
+      coolant: document.getElementById('coolant'),
+      demand: document.getElementById('demand'),
+      rodLabel: document.getElementById('rodLabel'),
+      coolantLabel: document.getElementById('coolantLabel'),
+      demandLabel: document.getElementById('demandLabel'),
+      power: document.getElementById('power'),
+      electric: document.getElementById('electric'),
+      coreTemp: document.getElementById('coreTemp'),
+      coolTemp: document.getElementById('coolTemp'),
+      keff: document.getElementById('keff'),
+      state: document.getElementById('state'),
+      auto: document.getElementById('auto'),
+      reset: document.getElementById('reset'),
+      scram: document.getElementById('scram')
+    };
+
+    const plant = {
+      t: 0,
+      neutron: 0.55,
+      rodInsertion: 0.60,
+      coolantFlow: 0.65,
+      demand: 0.45,
+      fuelTemp: 390,
+      coolantTemp: 280,
+      thermalPower: 950,
+      electricPower: 330,
+      auto: false,
+      scram: false,
+      trip: false,
+      pulse: 0
+    };
+
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function resetPlant() {
+      plant.t = 0;
+      plant.neutron = 0.55;
+      plant.rodInsertion = 0.60;
+      plant.coolantFlow = 0.65;
+      plant.demand = 0.45;
+      plant.fuelTemp = 390;
+      plant.coolantTemp = 280;
+      plant.thermalPower = 950;
+      plant.electricPower = 330;
+      plant.scram = false;
+      plant.trip = false;
+      syncInputs();
+    }
+
+    function syncInputs() {
+      ui.rod.value = Math.round(plant.rodInsertion * 100);
+      ui.coolant.value = Math.round(plant.coolantFlow * 100);
+      ui.demand.value = Math.round(plant.demand * 100);
+    }
+
+    function updateLabels() {
+      ui.rodLabel.textContent = `${Math.round(plant.rodInsertion * 100)}%`;
+      ui.coolantLabel.textContent = `${Math.round(plant.coolantFlow * 100)}%`;
+      ui.demandLabel.textContent = `${Math.round(plant.demand * 100)}%`;
+    }
+
+    function updatePhysics(dt) {
+      plant.t += dt;
+      plant.pulse += dt;
+
+      if (plant.scram || plant.trip) {
+        plant.rodInsertion = Math.min(1.0, plant.rodInsertion + 0.85 * dt);
+      }
+
+      if (plant.auto && !plant.scram && !plant.trip) {
+        const targetPower = 700 + plant.demand * 1900;
+        const error = targetPower - plant.thermalPower;
+        plant.rodInsertion = clamp(plant.rodInsertion - error * 0.00003, 0.08, 0.95);
+        const tempTarget = 285 + plant.demand * 20;
+        const coolErr = plant.coolantTemp - tempTarget;
+        plant.coolantFlow = clamp(plant.coolantFlow + coolErr * 0.0004, 0.25, 1.10);
+      }
+
+      const baselineReactivity = 1.04;
+      const rodEffect = 0.34 * plant.rodInsertion;
+      const tempFeedback = 0.00045 * (plant.fuelTemp - 390);
+      const flowAssist = 0.015 * (plant.coolantFlow - 0.65);
+
+      let kEff = baselineReactivity - rodEffect - tempFeedback + flowAssist;
+      if (plant.scram) kEff -= 0.10;
+      if (plant.trip) kEff -= 0.08;
+      kEff = clamp(kEff, 0.82, 1.12);
+
+      plant.neutron *= (1 + (kEff - 1) * 2.5 * dt);
+      plant.neutron = clamp(plant.neutron, 0.015, 2.4);
+
+      plant.thermalPower = clamp(plant.neutron * 2300, 25, 5300);
+
+      const coreHeating = plant.thermalPower * 0.012;
+      const fuelToCoolant = (plant.fuelTemp - plant.coolantTemp) * 0.16;
+      plant.fuelTemp += (coreHeating - fuelToCoolant) * dt;
+
+      const cooling = (plant.coolantTemp - 245) * (0.06 + plant.coolantFlow * 0.15);
+      plant.coolantTemp += (fuelToCoolant - cooling) * dt;
+
+      plant.electricPower = clamp(plant.thermalPower * 0.34 * (0.78 + plant.coolantFlow * 0.22), 0, 1800);
+
+      if (plant.fuelTemp > 900 || plant.coolantTemp > 390) {
+        plant.trip = true;
+      }
+
+      const demandTarget = 200 + plant.demand * 1400;
+      if (!plant.trip && !plant.scram && Math.abs(plant.electricPower - demandTarget) > 700) {
+        plant.trip = true;
+      }
+
+      ui.keff.textContent = kEff.toFixed(3);
+    }
+
+    function drawGauge(x, y, r, value, min, max, label, unit, color) {
+      const p = (value - min) / (max - min);
+      const a0 = Math.PI * 0.85;
+      const a1 = Math.PI * 2.15;
+      const a = a0 + (a1 - a0) * clamp(p, 0, 1);
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.beginPath();
+      ctx.lineWidth = 11;
+      ctx.strokeStyle = '#274351';
+      ctx.arc(0, 0, r, a0, a1);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.arc(0, 0, r, a0, a);
+      ctx.stroke();
+
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(r - 2, 0);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#dff7ff';
+      ctx.font = 'bold 16px Trebuchet MS';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x, y - 4);
+      ctx.font = 'bold 20px Trebuchet MS';
+      ctx.fillText(`${Math.round(value)} ${unit}`, x, y + 22);
+    }
+
+    function drawCore() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const vesselX = 80;
+      const vesselY = 70;
+      const vesselW = 410;
+      const vesselH = 480;
+
+      ctx.fillStyle = '#1e3b4b';
+      ctx.strokeStyle = '#6a8e9d';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.roundRect(vesselX, vesselY, vesselW, vesselH, 24);
+      ctx.fill();
+      ctx.stroke();
+
+      const rodCount = 8;
+      const insertDepth = vesselH * plant.rodInsertion;
+      for (let i = 0; i < rodCount; i++) {
+        const x = vesselX + 38 + i * 46;
+        ctx.fillStyle = '#7f9098';
+        ctx.fillRect(x, vesselY + 8, 22, insertDepth - 10);
+      }
+
+      const coreY = vesselY + 140;
+      const coreH = 280;
+      const powerGlow = clamp((plant.thermalPower - 150) / 3000, 0, 1);
+      const glowR = Math.floor(255 * powerGlow + 30);
+      const glowG = Math.floor(150 * (1 - powerGlow) + 30);
+
+      const grad = ctx.createRadialGradient(
+        vesselX + vesselW / 2,
+        coreY + coreH / 2,
+        24,
+        vesselX + vesselW / 2,
+        coreY + coreH / 2,
+        190
+      );
+      grad.addColorStop(0, `rgba(${glowR},${glowG},60,0.95)`);
+      grad.addColorStop(1, 'rgba(30,40,45,0.35)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(vesselX + 14, coreY, vesselW - 28, coreH);
+
+      const particleCount = Math.floor(20 + plant.neutron * 36);
+      for (let i = 0; i < particleCount; i++) {
+        const px = vesselX + 22 + ((i * 71 + plant.t * 170) % (vesselW - 44));
+        const py = coreY + 8 + ((i * 43 + plant.t * 130) % (coreH - 16));
+        const pr = 1 + ((i * 17) % 3);
+        ctx.fillStyle = '#ffeab6';
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const steamY = vesselY + vesselH + 30;
+      const steamPulse = 8 + plant.electricPower * 0.013;
+      for (let i = 0; i < 5; i++) {
+        const sx = 110 + i * 58;
+        const sy = steamY + Math.sin(plant.pulse * 2 + i) * 6;
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(135, 230, 255, 0.6)';
+        ctx.lineWidth = 3;
+        ctx.moveTo(sx, sy);
+        ctx.bezierCurveTo(sx + 20, sy - steamPulse, sx + 30, sy - steamPulse * 0.3, sx + 50, sy - steamPulse);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#d8eff8';
+      ctx.font = 'bold 15px Trebuchet MS';
+      ctx.fillText('REACTOR PRESSURE VESSEL', vesselX + 100, vesselY - 14);
+
+      drawGauge(650, 175, 80, plant.thermalPower, 0, 5200, 'Thermal', 'MWth', '#ff9f6e');
+      drawGauge(650, 370, 80, plant.electricPower, 0, 1800, 'Electric', 'MWe', '#73d9ff');
+
+      ctx.fillStyle = '#dff7ff';
+      ctx.font = 'bold 20px Trebuchet MS';
+      ctx.fillText(plant.scram ? 'SCRAM ACTIVE' : (plant.trip ? 'AUTO TRIP ACTIVE' : 'NORMAL OPERATION'), 645, 535);
+      ctx.font = '13px Trebuchet MS';
+      ctx.fillStyle = '#9cc3cf';
+      ctx.fillText('Control rods absorb neutrons. Cooling removes heat. Feedback stabilizes power.', 645, 560);
+    }
+
+    function updateReadouts() {
+      ui.power.textContent = `${Math.round(plant.thermalPower)} MWth`;
+      ui.electric.textContent = `${Math.round(plant.electricPower)} MWe`;
+      ui.coreTemp.textContent = `${Math.round(plant.fuelTemp)} C`;
+      ui.coolTemp.textContent = `${Math.round(plant.coolantTemp)} C`;
+
+      if (plant.scram) {
+        ui.state.textContent = 'Emergency Shutdown';
+      } else if (plant.trip) {
+        ui.state.textContent = 'Protective Trip';
+      } else if (plant.thermalPower > 3000) {
+        ui.state.textContent = 'High Power';
+      } else if (plant.thermalPower < 300) {
+        ui.state.textContent = 'Low Power';
+      } else {
+        ui.state.textContent = 'Stable';
+      }
+
+      updateLabels();
+    }
+
+    ui.rod.addEventListener('input', (e) => {
+      plant.rodInsertion = clamp(Number(e.target.value) / 100, 0, 1);
+      if (!plant.trip) plant.scram = false;
+    });
+
+    ui.coolant.addEventListener('input', (e) => {
+      plant.coolantFlow = clamp(Number(e.target.value) / 100, 0.2, 1.2);
+    });
+
+    ui.demand.addEventListener('input', (e) => {
+      plant.demand = clamp(Number(e.target.value) / 100, 0.1, 1.1);
+    });
+
+    ui.auto.addEventListener('click', () => {
+      plant.auto = !plant.auto;
+      ui.auto.textContent = plant.auto ? 'Auto Stabilize: ON' : 'Auto Stabilize';
+      ui.auto.style.background = plant.auto ? '#9be564' : 'var(--safe)';
+    });
+
+    ui.scram.addEventListener('click', () => {
+      plant.scram = true;
+      plant.trip = true;
+    });
+
+    ui.reset.addEventListener('click', () => {
+      resetPlant();
+    });
+
+    function frame() {
+      updatePhysics(1 / 60);
+      drawCore();
+      updateReadouts();
+      requestAnimationFrame(frame);
+    }
+
+    resetPlant();
+    frame();
+  </script>
+</body>
+</html>
