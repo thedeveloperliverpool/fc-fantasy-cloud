@@ -159,14 +159,14 @@ class CloudStore:
                 """
             ).fetchall()
         ]
-        with conn.execute(
+        cursor = conn.execute(
             """
             SELECT user_id, round, wins, losses, matches_played, reward_coins, updated_at
             FROM online_tournaments
             ORDER BY user_id
             """
-        ) as cursor:
-            online_tournaments = [dict(row) for row in cursor.fetchall()]
+        )
+        online_tournaments = [dict(row) for row in cursor.fetchall()]
         payload = {
             "users": users,
             "online_divisions": online_divisions,
