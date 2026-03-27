@@ -1814,7 +1814,17 @@ class Game:
         if not self.active_account:
             return None
         if self.cloud_user_cache and self.cloud_user_cache.get("username") == self.active_account:
-            return self.cloud_user_cache
+            merged = dict(self.cloud_user_cache)
+            local = self.local_account_record()
+            if local:
+                if merged.get("career_snapshot") is None and local.get("career_snapshot") is not None:
+                    merged["career_snapshot"] = local.get("career_snapshot")
+                if merged.get("fantasy_snapshot") is None and local.get("fantasy_snapshot") is not None:
+                    merged["fantasy_snapshot"] = local.get("fantasy_snapshot")
+                if not merged.get("fantasy_summary"):
+                    merged["fantasy_summary"] = self.serialize_local_account(local, include_snapshots=True).get("fantasy_summary", {})
+                merged["storage_mode"] = "CLOUD"
+            return merged
         local = self.local_account_record()
         if local:
             return self.serialize_local_account(local, include_snapshots=True)
@@ -1828,6 +1838,34 @@ class Game:
                 self.sync_record_to_local(self.cloud_user_cache)
             except RuntimeError:
                 self.cloud_user_cache = None
+
+    def migrate_local_snapshots_to_cloud(self):
+        if not self.cloud_token or self.account_storage_mode != "CLOUD":
+            return
+        local = self.local_account_record()
+        cloud = self.cloud_user_cache or {}
+        if not local:
+            return
+        migrated_modes = []
+        for mode, key in (("CAREER", "career_snapshot"), ("FANTASY", "fantasy_snapshot")):
+            local_snapshot = local.get(key)
+            cloud_snapshot = cloud.get(key)
+            if local_snapshot is None or cloud_snapshot is not None:
+                continue
+            try:
+                data = self.cloud_request(
+                    "PUT",
+                    "/api/save",
+                    {"mode": mode, "snapshot": local_snapshot},
+                    needs_auth=True,
+                )
+                self.cloud_user_cache = data.get("user", self.cloud_user_cache)
+                self.sync_record_to_local(self.cloud_user_cache)
+                migrated_modes.append(mode.title())
+            except RuntimeError:
+                continue
+        if migrated_modes:
+            self.account_message = f"Migrated {' & '.join(migrated_modes)} save to cloud"
 
     def fetch_registered_users(self):
         local_users = []
@@ -2247,10 +2285,14 @@ class Game:
         elif storage_mode == "LOCAL":
             self.cloud_user_cache = None
             self.cloud_token = None
+        prior_message = self.account_message
+        if storage_mode == "CLOUD":
+            self.migrate_local_snapshots_to_cloud()
         record = self.active_account_record() or record or {}
         self.mode_select_index = 0
         suffix = " (local fallback)" if storage_mode == "LOCAL" else ""
-        self.account_message = f"Welcome {record.get('display_name', username)}{suffix}"
+        if not self.account_message or self.account_message == prior_message:
+            self.account_message = f"Welcome {record.get('display_name', username)}{suffix}"
         self.state = "MODE_SELECT"
         self.profile_autosave_timer = 8.0
 
