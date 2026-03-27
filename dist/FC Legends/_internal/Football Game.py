@@ -3287,6 +3287,7 @@ class Game:
         self.user_starting = starters
         self.user_bench = bench
         self.user_reserves = reserves
+        self.user_squad = starters + bench + reserves
 
     def persist_user_squad_layout(self):
         if not self.user_team:
@@ -3424,7 +3425,7 @@ class Game:
         card["card_key"] = f"{card['name']}|{card.get('promo', 'Base')}|{card['rating']}|{card.get('position', 'ST')}"
         self.sync_fantasy_card_rating(card)
         self.add_commentary(f"Evolution applied: {card['name']} +{path['delta']}")
-        self.user_squad = starters + bench + reserves
+        self.build_user_squad()
         self.update_fantasy_chemistry()
 
     def build_fantasy_pool(self):
@@ -4151,6 +4152,39 @@ class Game:
             self.fantasy_favorites.remove(key)
         else:
             self.fantasy_favorites.append(key)
+
+    def discard_fantasy_card(self, card):
+        if not card:
+            return
+        target_key = card.get("card_key")
+        if not target_key:
+            return
+        removed = None
+        new_roster = []
+        for existing in self.fantasy_roster:
+            if removed is None and existing.get("card_key") == target_key:
+                removed = existing
+                continue
+            new_roster.append(existing)
+        if removed is None:
+            self.add_commentary("Card not found in collection")
+            return
+        self.fantasy_roster = new_roster
+        if target_key in self.fantasy_favorites:
+            self.fantasy_favorites.remove(target_key)
+        if self.game_mode == "FANTASY" and self.user_team:
+            self.apply_roster_to_team(self.fantasy_roster)
+        cards = self.filtered_collection_cards()
+        if cards:
+            self.fantasy_collection_index = min(self.fantasy_collection_index, len(cards) - 1)
+        else:
+            self.fantasy_collection_index = 0
+        if removed.get("evo_level", 0) > 0:
+            self.add_commentary(f"Discarded evolved {removed['name']}; base version can return in packs")
+        elif removed.get("rarity") in ("Icon", "GOAT") or removed.get("promo") == "Signature":
+            self.add_commentary(f"Discarded unique {removed['name']}; it can appear in packs again")
+        else:
+            self.add_commentary(f"Discarded {removed['name']}")
 
     def filtered_collection_cards(self):
         cards = self.fantasy_roster[:]
@@ -6644,7 +6678,7 @@ class Game:
     def draw_fantasy_collection_page(self):
         self.screen.fill((14, 18, 28))
         self.screen.blit(self.big.render("Fantasy Collection", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("ARROWS move | G filter | TAB sort | F favorite | ESC back", True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.small.render("ARROWS move | G filter | TAB sort | F favorite | DEL discard | ESC back", True, (190, 200, 215)), (36, 56))
         cards = self.filtered_collection_cards()
         if not cards:
             self.screen.blit(self.font.render("No cards match the current filter", True, WHITE), (40, 120))
@@ -6699,6 +6733,7 @@ class Game:
             f"Rarity: {selected.get('rarity', 'Base')}",
             f"Promo: {selected.get('promo', 'Base')}",
             f"Position: {selected.get('position', 'ST')}",
+            f"Evo Level: {selected.get('evo_level', 0)}",
             f"Favorite: {fav_text}",
             f"Skills: {traits}",
         ]
@@ -9936,6 +9971,10 @@ class Game:
                         cards = self.filtered_collection_cards()
                         if cards:
                             self.toggle_favorite_card(cards[self.fantasy_collection_index])
+                    elif event.key == pygame.K_DELETE and self.fantasy_roster:
+                        cards = self.filtered_collection_cards()
+                        if cards:
+                            self.discard_fantasy_card(cards[self.fantasy_collection_index])
                     elif event.key == pygame.K_r:
                         self.open_fantasy_market()
                     elif event.key == pygame.K_ESCAPE:
