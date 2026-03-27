@@ -1950,6 +1950,31 @@ class Game:
         ]
         STADIUMS[self.user_team] = FANTASY_STADIUM_OPTIONS[custom["stadium"]]
 
+    def restore_fantasy_club_state(self):
+        if self.game_mode != "FANTASY":
+            return
+        team_name = (self.user_team or self.fantasy_team_name or "").strip()
+        if not team_name:
+            return
+        self.user_team = team_name
+        if not isinstance(self.active_teams, list) or not self.active_teams:
+            self.active_teams = TEAMS[:]
+        if team_name not in self.active_teams:
+            replaced = self.fantasy_replaced_team if self.fantasy_replaced_team in self.active_teams else None
+            if replaced is None and self.active_teams:
+                replaced = self.active_teams[-1]
+            if replaced and replaced in self.active_teams:
+                idx = self.active_teams.index(replaced)
+                self.active_teams[idx] = team_name
+                self.fantasy_replaced_team = replaced
+            elif team_name not in self.active_teams:
+                self.active_teams.append(team_name)
+        if team_name not in STADIUMS:
+            STADIUMS[team_name] = FANTASY_STADIUM_OPTIONS[self.ensure_fantasy_club_defaults()["stadium"]]
+        self.apply_fantasy_club_identity()
+        if self.user_player_index is None:
+            self.user_player_index = 9 if len(self.fantasy_roster) > 9 else 0
+
     def fantasy_share_payload(self):
         custom = self.ensure_fantasy_club_defaults()
         lineup = []
@@ -2645,6 +2670,7 @@ class Game:
         self.fantasy_draft_saved_player_index = data.get("fantasy_draft_saved_player_index", 0)
         self.event_evo_tokens = data.get("event_evo_tokens", 0)
         if self.game_mode == "FANTASY":
+            self.restore_fantasy_club_state()
             self.build_fantasy_pool()
             if not self.fantasy_competitions:
                 self.init_fantasy_competitions()
@@ -2705,6 +2731,8 @@ class Game:
         if snapshot:
             self.apply_full_snapshot(snapshot)
             self.game_mode = mode
+            if mode == "FANTASY":
+                self.restore_fantasy_club_state()
             self.state = "LEAGUE"
         elif mode == "CAREER":
             self.game_mode = "CAREER"
@@ -7993,6 +8021,11 @@ class Game:
 
     def start_week(self):
         if self.game_mode == "FANTASY":
+            self.restore_fantasy_club_state()
+            if not self.user_team:
+                self.account_message = "Fantasy club save is incomplete. Reopen fantasy mode."
+                self.state = "LEAGUE"
+                return
             for objective in self.fantasy_objectives.get("daily", []):
                 objective["progress"] = 0
                 objective["claimed"] = False
