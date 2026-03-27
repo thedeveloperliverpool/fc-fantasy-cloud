@@ -2140,7 +2140,9 @@ class Game:
         return packs or ["gold"]
 
     def developer_card_catalog(self):
-        pool = self.fantasy_pool or self.build_fantasy_pool()
+        if not self.fantasy_pool:
+            self.fantasy_pool = self.build_fantasy_pool()
+        pool = self.fantasy_pool
         unique = {}
         for card in pool:
             if not isinstance(card, dict):
@@ -3287,6 +3289,13 @@ class Game:
                 TEAM_LINEUPS[self.user_team] = rebuilt_lineup
                 ROSTER_DATA[self.user_team] = rebuilt_reserves
                 self.apply_fantasy_club_identity()
+            lineup = TEAM_LINEUPS.get(self.user_team)
+            if not isinstance(lineup, list):
+                self.user_starting = []
+                self.user_bench = []
+                self.user_reserves = []
+                self.user_squad = []
+                return
         lineup = TEAM_LINEUPS.get(self.user_team, DEFAULT_LINEUP)
         starters = [
             normalize_entry(entry, i, self.user_team) for i, entry in enumerate(lineup[:11])
@@ -9799,6 +9808,7 @@ class Game:
                         if self.dev_console_tab == 3:
                             self.admin_update_settings(announcement=self.dev_announcement_input)
                         elif self.dev_console_tab == 1:
+                            self.dev_card_search_query = ""
                             self.dev_card_index = 0
                             self.state = "DEV_CARD_CATALOG"
                         else:
@@ -9836,6 +9846,7 @@ class Game:
                             if roster:
                                 self.admin_user_action(selected.get("username"), "remove_card", card_key=roster[0].get("card_key"))
                         elif event.key == pygame.K_k:
+                            self.dev_card_search_query = ""
                             self.dev_card_index = 0
                             self.state = "DEV_CARD_CATALOG"
                     elif selected and self.dev_console_tab == 2:
@@ -10877,7 +10888,7 @@ class Game:
         metrics = self.dev_admin_status.get("metrics", {})
         self.screen.fill((12, 16, 26))
         self.screen.blit(self.big.render("Developer Console", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER refresh/save | ESC back", True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER action | ESC back", True, (190, 200, 215)), (36, 56))
         tab_x = 34
         for idx, tab in enumerate(tabs):
             pill = pygame.Rect(tab_x, 88, 156, 34)
