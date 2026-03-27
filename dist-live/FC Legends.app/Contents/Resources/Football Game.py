@@ -3379,10 +3379,18 @@ class Game:
             )
         return paths
 
-    def apply_fantasy_evolution(self, card_idx, choice_idx):
-        if card_idx < 0 or card_idx >= len(self.fantasy_roster):
+    def apply_fantasy_evolution(self, card_ref, choice_idx):
+        card = None
+        if isinstance(card_ref, dict):
+            target_key = card_ref.get("card_key")
+            for existing in self.fantasy_roster:
+                if existing.get("card_key") == target_key:
+                    card = existing
+                    break
+        elif isinstance(card_ref, int) and 0 <= card_ref < len(self.fantasy_roster):
+            card = self.fantasy_roster[card_ref]
+        if not card:
             return
-        card = self.fantasy_roster[card_idx]
         paths = self.fantasy_evolution_paths(card)
         if choice_idx < 0 or choice_idx >= len(paths):
             return
@@ -5081,7 +5089,6 @@ class Game:
     def apply_fantasy_progression(self):
         if self.game_mode != "FANTASY":
             return
-        upgraded = []
         for card in self.fantasy_roster:
             name = card["name"]
             goals = self.get_player_stat(name, "goals")
@@ -5090,15 +5097,8 @@ class Game:
             clean = self.get_player_stat(name, "clean_sheets")
             milestone = goals // 5 + assists // 5 + tackles // 8 + clean // 3
             if milestone > card.get("milestone_level", 0):
-                delta = min(2, milestone - card.get("milestone_level", 0))
                 card["milestone_level"] = milestone
-                card["evo_level"] = card.get("evo_level", 0) + delta
-                card["rating"] = card["rating"] + delta
-                upgraded.append(card["name"])
-                self.update_team_lineup_rating(self.user_team, card["name"], card.get("number", 0), card["rating"])
-        if upgraded:
-            self.build_user_squad()
-            self.add_commentary("Evolutions: " + ", ".join(upgraded[:4]))
+        return
 
     def record_fantasy_competition_result(self, competition, won, drew, user_goals, opp_goals):
         if not competition:
@@ -9951,9 +9951,16 @@ class Game:
                     elif event.key == pygame.K_LEFT:
                         self.fantasy_evolution_choice = max(0, self.fantasy_evolution_choice - 1)
                     elif event.key == pygame.K_RIGHT:
-                        self.fantasy_evolution_choice = min(1, self.fantasy_evolution_choice + 1)
+                        cards = sorted(self.fantasy_roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
+                        if cards:
+                            current = cards[max(0, min(self.fantasy_evolution_index, len(cards) - 1))]
+                            max_choice = max(0, len(self.fantasy_evolution_paths(current)) - 1)
+                            self.fantasy_evolution_choice = min(max_choice, self.fantasy_evolution_choice + 1)
                     elif event.key == pygame.K_RETURN:
-                        self.apply_fantasy_evolution(self.fantasy_evolution_index, self.fantasy_evolution_choice)
+                        cards = sorted(self.fantasy_roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
+                        if cards:
+                            current = cards[max(0, min(self.fantasy_evolution_index, len(cards) - 1))]
+                            self.apply_fantasy_evolution(current, self.fantasy_evolution_choice)
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "LEAGUE"
                     continue
