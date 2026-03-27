@@ -1515,7 +1515,7 @@ class Game:
         self.big = pygame.font.SysFont("Arial", 26)
         self.small = pygame.font.SysFont("Arial", 14)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1551,6 +1551,7 @@ class Game:
         self.dev_coin_delta_index = 1
         self.dev_pack_index = 0
         self.dev_card_index = 0
+        self.dev_card_search_query = ""
         self.dev_announcement_input = ""
         self.profile_autosave_timer = 0.0
         self.fantasy_budget = 400
@@ -2151,6 +2152,26 @@ class Game:
             unique.values(),
             key=lambda card: (-card.get("rating", 0), card.get("name", ""), card.get("promo", "Base"), card.get("team", "")),
         )
+
+    def filtered_developer_card_catalog(self):
+        cards = self.developer_card_catalog()
+        query = self.dev_card_search_query.strip().lower()
+        if not query:
+            return cards
+        return [
+            card for card in cards
+            if query in str(card.get("name", "")).lower()
+            or query in str(card.get("promo", "")).lower()
+            or query in str(card.get("team", "")).lower()
+        ]
+
+    def selected_developer_catalog_card(self):
+        cards = self.filtered_developer_card_catalog()
+        if not cards:
+            self.dev_card_index = 0
+            return None
+        self.dev_card_index = max(0, min(self.dev_card_index, len(cards) - 1))
+        return cards[self.dev_card_index]
 
     def filtered_registered_users(self):
         users = self.cloud_registered_users or []
@@ -9777,6 +9798,9 @@ class Game:
                     elif event.key == pygame.K_RETURN:
                         if self.dev_console_tab == 3:
                             self.admin_update_settings(announcement=self.dev_announcement_input)
+                        elif self.dev_console_tab == 1:
+                            self.dev_card_index = 0
+                            self.state = "DEV_CARD_CATALOG"
                         else:
                             self.fetch_registered_users()
                             self.fetch_admin_status()
@@ -9811,6 +9835,9 @@ class Game:
                             roster = snapshot.get("fantasy_roster", [])
                             if roster:
                                 self.admin_user_action(selected.get("username"), "remove_card", card_key=roster[0].get("card_key"))
+                        elif event.key == pygame.K_k:
+                            self.dev_card_index = 0
+                            self.state = "DEV_CARD_CATALOG"
                     elif selected and self.dev_console_tab == 2:
                         if event.key == pygame.K_d:
                             self.admin_tournament_action(selected.get("username"), "reset_division")
@@ -9835,6 +9862,30 @@ class Game:
                             self.admin_user_action(selected.get("username"), "repair_account")
                     elif self.dev_console_tab == 0 and event.unicode and event.unicode.isprintable() and len(self.dev_search_query) < 24:
                         self.dev_search_query += event.unicode.lower()
+                    continue
+                if self.state == "DEV_CARD_CATALOG":
+                    cards = self.filtered_developer_card_catalog()
+                    selected_user = self.selected_registered_user()
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "DEV_REGISTERED_USERS"
+                    elif event.key == pygame.K_UP and cards:
+                        self.dev_card_index = max(0, self.dev_card_index - 1)
+                    elif event.key == pygame.K_DOWN and cards:
+                        self.dev_card_index = min(len(cards) - 1, self.dev_card_index + 1)
+                    elif event.key == pygame.K_PAGEUP and cards:
+                        self.dev_card_index = max(0, self.dev_card_index - 12)
+                    elif event.key == pygame.K_PAGEDOWN and cards:
+                        self.dev_card_index = min(len(cards) - 1, self.dev_card_index + 12)
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.dev_card_search_query = self.dev_card_search_query[:-1]
+                        self.dev_card_index = 0
+                    elif event.key == pygame.K_RETURN and selected_user and cards:
+                        self.admin_user_action(selected_user.get("username"), "add_card", card=cards[self.dev_card_index])
+                    elif event.key == pygame.K_g and selected_user and cards:
+                        self.admin_user_action(selected_user.get("username"), "add_card", card=cards[self.dev_card_index])
+                    elif event.unicode and event.unicode.isprintable() and len(self.dev_card_search_query) < 48:
+                        self.dev_card_search_query += event.unicode.lower()
+                        self.dev_card_index = 0
                     continue
                 if self.state == "FANTASY_BUILDER":
                     if event.key == pygame.K_p:
@@ -10895,61 +10946,32 @@ class Game:
                 self.screen.blit(self.small.render(line[:68], True, WHITE), (detail_panel.x + 18, y))
                 y += 34
         elif tab_name == "Economy":
-            catalog = self.developer_card_catalog()
-            gift_card = catalog[self.dev_card_index % len(catalog)] if catalog else {}
             selected_card = top_cards[0] if top_cards else {}
+            action_panel = pygame.Rect(detail_panel.x + 18, detail_panel.y + 274, detail_panel.w - 36, 150)
+            pygame.draw.rect(self.screen, (28, 34, 48), action_panel, 0, border_radius=14)
+            pygame.draw.rect(self.screen, (86, 98, 126), action_panel, 2, border_radius=14)
             lines = [
                 f"Target: {selected.get('username', '')}",
                 f"Coin Delta: {self.developer_coin_amounts()[self.dev_coin_delta_index]}",
                 f"Pack: {self.developer_pack_ids()[self.dev_pack_index % len(self.developer_pack_ids())]}",
-                f"Gift Card: {gift_card.get('name', 'None')} {gift_card.get('rating', '')}",
                 f"Remove Card: {selected_card.get('name', 'None')} {selected_card.get('rating', '')}",
                 "C add coins | X remove coins",
                 "O add pack | L remove pack",
-                "G gift selected card | R remove top card",
-                "[ / ] browse cards | PgUp/PgDn jump",
+                "K open card catalog | R remove top card",
+                "ENTER also opens the card catalog page",
             ]
             for line in lines:
                 self.screen.blit(self.small.render(line[:72], True, WHITE), (detail_panel.x + 18, y))
                 y += 34
-            card_list_panel = pygame.Rect(detail_panel.x + 18, detail_panel.y + 310, 300, 212)
-            preview_panel = pygame.Rect(detail_panel.x + 332, detail_panel.y + 310, 298, 212)
-            for panel in (card_list_panel, preview_panel):
-                pygame.draw.rect(self.screen, (28, 34, 48), panel, 0, border_radius=14)
-                pygame.draw.rect(self.screen, (86, 98, 126), panel, 2, border_radius=14)
-            self.screen.blit(self.small.render(f"Card Catalog ({len(catalog)})", True, WHITE), (card_list_panel.x + 12, card_list_panel.y + 10))
-            if catalog:
-                self.dev_card_index = max(0, min(self.dev_card_index, len(catalog) - 1))
-                visible_rows = 5
-                start_idx = max(0, min(self.dev_card_index - 2, max(0, len(catalog) - visible_rows)))
-                row_y = card_list_panel.y + 38
-                for idx in range(start_idx, min(len(catalog), start_idx + visible_rows)):
-                    card = catalog[idx]
-                    row = pygame.Rect(card_list_panel.x + 10, row_y, card_list_panel.w - 20, 30)
-                    active = idx == self.dev_card_index
-                    pygame.draw.rect(self.screen, (44, 54, 74) if active else (32, 38, 54), row, 0, border_radius=8)
-                    pygame.draw.rect(self.screen, YELLOW if active else (92, 104, 134), row, 2, border_radius=8)
-                    label = f"{card.get('name', '')[:14]:<14} {card.get('rating', 0):>3} {card.get('promo', 'Base')[:8]}"
-                    self.screen.blit(self.small.render(label, True, WHITE), (row.x + 8, row.y + 8))
-                    row_y += 34
-                if start_idx > 0:
-                    self.screen.blit(self.small.render("More above", True, (190, 200, 215)), (card_list_panel.right - 92, card_list_panel.y + 10))
-                if start_idx + visible_rows < len(catalog):
-                    self.screen.blit(self.small.render("More below", True, (190, 200, 215)), (card_list_panel.right - 92, card_list_panel.bottom - 20))
-                self.draw_card(preview_panel.x + 18, preview_panel.y + 18, 112, 164, gift_card)
-                preview_lines = [
-                    f"Club: {gift_card.get('team', 'None')}",
-                    f"League: {gift_card.get('league', get_team_league(gift_card.get('team', '')))}",
-                    f"Pos: {gift_card.get('position', 'ST')}",
-                    f"Rarity: {gift_card.get('rarity', 'Base')}",
-                    f"Promo: {gift_card.get('promo', 'Base')}",
-                ]
-                preview_y = preview_panel.y + 24
-                for line in preview_lines:
-                    self.screen.blit(self.small.render(line[:22], True, WHITE), (preview_panel.x + 142, preview_y))
-                    preview_y += 28
-            else:
-                self.screen.blit(self.small.render("No cards available", True, (190, 200, 215)), (card_list_panel.x + 12, card_list_panel.y + 42))
+            helper_lines = [
+                "Card gifting is now on a separate page.",
+                "Use search there by player name, promo, or club.",
+                "That keeps this screen readable and focused.",
+            ]
+            helper_y = action_panel.y + 18
+            for line in helper_lines:
+                self.screen.blit(self.small.render(line, True, (214, 222, 236)), (action_panel.x + 14, helper_y))
+                helper_y += 34
         elif tab_name == "Tournaments":
             lines = [
                 f"Target: {selected.get('username', '')}",
@@ -11005,6 +11027,77 @@ class Game:
                 line = f"{card.get('name', '')} | {card.get('rating', 0)} | {card.get('rarity', 'Bronze')}"
                 self.screen.blit(self.small.render(line[:52], True, (220, 228, 236)), (detail_panel.x + 18, y))
                 y += 28
+        if self.dev_action_message:
+            self.screen.blit(self.small.render(self.dev_action_message[:96], True, YELLOW), (36, HEIGHT - 24))
+
+    def draw_dev_card_catalog_page(self):
+        cards = self.filtered_developer_card_catalog()
+        selected_user = self.selected_registered_user()
+        selected_card = self.selected_developer_catalog_card()
+        self.screen.fill((12, 16, 26))
+        self.screen.blit(self.big.render("Developer Card Catalog", True, WHITE), (34, 22))
+        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | ESC back", True, (190, 200, 215)), (36, 56))
+
+        target_panel = pygame.Rect(34, 88, 1098, 44)
+        pygame.draw.rect(self.screen, (20, 28, 40), target_panel, 0, border_radius=12)
+        pygame.draw.rect(self.screen, (80, 92, 122), target_panel, 2, border_radius=12)
+        target_text = selected_user.get("username", "No target selected") if selected_user else "No target selected"
+        self.screen.blit(self.small.render(f"Target User: {target_text}", True, WHITE), (target_panel.x + 14, target_panel.y + 13))
+
+        search_panel = pygame.Rect(34, 146, 1098, 54)
+        pygame.draw.rect(self.screen, (22, 28, 40), search_panel, 0, border_radius=14)
+        pygame.draw.rect(self.screen, YELLOW, search_panel, 2, border_radius=14)
+        search_text = self.dev_card_search_query or "_"
+        self.screen.blit(self.small.render("Search by player, promo, or club", True, (190, 200, 215)), (search_panel.x + 16, search_panel.y + 8))
+        self.screen.blit(self.font.render(search_text, True, WHITE), (search_panel.x + 16, search_panel.y + 24))
+
+        list_panel = pygame.Rect(34, 220, 440, 466)
+        preview_panel = pygame.Rect(506, 220, 626, 466)
+        for panel in (list_panel, preview_panel):
+            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
+            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+
+        self.screen.blit(self.small.render(f"Catalog Results: {len(cards)}", True, WHITE), (list_panel.x + 14, list_panel.y + 12))
+        if not cards:
+            self.screen.blit(self.font.render("No cards match this search", True, WHITE), (list_panel.x + 16, list_panel.y + 60))
+        else:
+            visible_rows = 10
+            start_idx = max(0, min(self.dev_card_index - 4, max(0, len(cards) - visible_rows)))
+            row_y = list_panel.y + 42
+            for idx in range(start_idx, min(len(cards), start_idx + visible_rows)):
+                card = cards[idx]
+                row = pygame.Rect(list_panel.x + 10, row_y, list_panel.w - 20, 36)
+                active = idx == self.dev_card_index
+                pygame.draw.rect(self.screen, (44, 54, 74) if active else (32, 38, 54), row, 0, border_radius=8)
+                pygame.draw.rect(self.screen, YELLOW if active else (92, 104, 134), row, 2, border_radius=8)
+                label = f"{card.get('name', '')[:18]:<18} {card.get('rating', 0):>3} {card.get('promo', 'Base')[:10]}"
+                self.screen.blit(self.small.render(label, True, WHITE), (row.x + 8, row.y + 10))
+                row_y += 42
+            if start_idx > 0:
+                self.screen.blit(self.small.render("More above", True, (190, 200, 215)), (list_panel.right - 92, list_panel.y + 12))
+            if start_idx + visible_rows < len(cards):
+                self.screen.blit(self.small.render("More below", True, (190, 200, 215)), (list_panel.right - 92, list_panel.bottom - 24))
+
+        self.screen.blit(self.font.render("Selected Card", True, WHITE), (preview_panel.x + 18, preview_panel.y + 14))
+        if selected_card:
+            self.draw_card(preview_panel.x + 20, preview_panel.y + 48, 220, 320, selected_card)
+            info_lines = [
+                f"Name: {selected_card.get('name', '')}",
+                f"Club: {selected_card.get('team', 'None')}",
+                f"League: {selected_card.get('league', get_team_league(selected_card.get('team', '')))}",
+                f"Promo: {selected_card.get('promo', 'Base')}",
+                f"Rarity: {selected_card.get('rarity', 'Base')}",
+                f"Position: {selected_card.get('position', 'ST')}",
+                f"Rating: {selected_card.get('rating', 0)}",
+            ]
+            info_y = preview_panel.y + 66
+            for line in info_lines:
+                self.screen.blit(self.small.render(line[:40], True, WHITE), (preview_panel.x + 270, info_y))
+                info_y += 34
+            self.screen.blit(self.small.render("Press G or ENTER to gift this card to the target user.", True, LIGHT_GREEN), (preview_panel.x + 18, preview_panel.bottom - 62))
+        else:
+            self.screen.blit(self.font.render("Select a card from the list", True, WHITE), (preview_panel.x + 18, preview_panel.y + 60))
+
         if self.dev_action_message:
             self.screen.blit(self.small.render(self.dev_action_message[:96], True, YELLOW), (36, HEIGHT - 24))
 
@@ -12064,6 +12157,8 @@ class Game:
             self.draw_fantasy_champions_bracket_page()
         elif self.state == "DEV_REGISTERED_USERS":
             self.draw_registered_users_page()
+        elif self.state == "DEV_CARD_CATALOG":
+            self.draw_dev_card_catalog_page()
         elif self.state == "FANTASY_PLAYER_PICK":
             self.draw_fantasy_player_pick_page()
         elif self.state == "TEAM_SELECT":
