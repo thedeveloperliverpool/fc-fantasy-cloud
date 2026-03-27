@@ -6801,9 +6801,17 @@ class Game:
             y += 28
 
         self.screen.blit(self.font.render("Upgrade Paths", True, WHITE), (path_panel.x + 14, path_panel.y + 14))
+        row_h = 120
+        row_gap = 12
+        visible_rows = max(1, (path_panel.h - 84) // (row_h + row_gap))
+        path_start = 0
+        if len(paths) > visible_rows:
+            path_start = max(0, min(self.fantasy_evolution_choice - visible_rows + 1, len(paths) - visible_rows))
         y = path_panel.y + 56
-        for idx, path in enumerate(paths):
-            row = pygame.Rect(path_panel.x + 14, y, path_panel.w - 28, 152)
+        path_end = min(len(paths), path_start + visible_rows)
+        for idx in range(path_start, path_end):
+            path = paths[idx]
+            row = pygame.Rect(path_panel.x + 14, y, path_panel.w - 28, row_h)
             is_selected = idx == self.fantasy_evolution_choice
             ready = path["ready"] and self.fantasy_coins >= path["cost"] and selected.get("evo_level", 0) < 5
             pygame.draw.rect(self.screen, (42, 52, 72) if is_selected else (28, 34, 48), row, 0, border_radius=16)
@@ -6811,12 +6819,16 @@ class Game:
             self.screen.blit(self.font.render(path["name"], True, WHITE), (row.x + 14, row.y + 12))
             self.screen.blit(self.small.render(f"Upgrade: +{path['delta']} OVR", True, LIGHT_GREEN), (row.x + 14, row.y + 46))
             self.screen.blit(self.small.render(f"Cost: {path['cost']} coins", True, WHITE), (row.x + 14, row.y + 70))
-            self.screen.blit(self.small.render(f"Needs: {path['need_label']}", True, (212, 220, 232)), (row.x + 14, row.y + 96))
-            self.screen.blit(self.small.render(f"Trait: {path['trait']}", True, (190, 200, 215)), (row.x + 14, row.y + 120))
+            self.screen.blit(self.small.render(f"Needs: {path['need_label']}", True, (212, 220, 232)), (row.x + 14, row.y + 94))
+            self.screen.blit(self.small.render(f"Trait: {path['trait']}", True, (190, 200, 215)), (row.right - 150, row.y + 70))
             status = "Ready" if ready else "Need coins" if path["ready"] and self.fantasy_coins < path["cost"] else "Maxed" if selected.get("evo_level", 0) >= 5 else "Locked"
             color = LIGHT_GREEN if status == "Ready" else YELLOW if status == "Need coins" else (220, 170, 170)
             self.screen.blit(self.small.render(status, True, color), (row.right - 84, row.y + 14))
-            y += 166
+            y += row_h + row_gap
+        if path_start > 0:
+            self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (path_panel.right - 110, path_panel.y + 18))
+        if path_end < len(paths):
+            self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (path_panel.right - 110, path_panel.bottom - 24))
 
     def draw_fantasy_competitions_page(self):
         self.screen.fill((14, 18, 28))
