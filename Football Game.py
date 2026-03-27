@@ -2139,9 +2139,18 @@ class Game:
         return packs or ["gold"]
 
     def developer_card_catalog(self):
-        pool = self.fantasy_pool or []
-        cards = sorted(pool, key=lambda card: (-card.get("rating", 0), card.get("name", "")))
-        return cards[:120]
+        pool = self.fantasy_pool or self.build_fantasy_pool()
+        unique = {}
+        for card in pool:
+            if not isinstance(card, dict):
+                continue
+            key = card.get("card_key") or self.fantasy_card_key(card)
+            if key not in unique:
+                unique[key] = card.copy()
+        return sorted(
+            unique.values(),
+            key=lambda card: (-card.get("rating", 0), card.get("name", ""), card.get("promo", "Base"), card.get("team", "")),
+        )
 
     def filtered_registered_users(self):
         users = self.cloud_registered_users or []
@@ -9757,6 +9766,10 @@ class Game:
                         self.dev_card_index = (self.dev_card_index + 1) % len(self.developer_card_catalog())
                     elif event.key == pygame.K_LEFTBRACKET and self.dev_console_tab == 1 and self.developer_card_catalog():
                         self.dev_card_index = (self.dev_card_index - 1) % len(self.developer_card_catalog())
+                    elif event.key == pygame.K_PAGEDOWN and self.dev_console_tab == 1 and self.developer_card_catalog():
+                        self.dev_card_index = min(len(self.developer_card_catalog()) - 1, self.dev_card_index + 10)
+                    elif event.key == pygame.K_PAGEUP and self.dev_console_tab == 1 and self.developer_card_catalog():
+                        self.dev_card_index = max(0, self.dev_card_index - 10)
                     elif event.key == pygame.K_PERIOD and self.dev_console_tab == 1:
                         self.dev_pack_index = (self.dev_pack_index + 1) % len(self.developer_pack_ids())
                     elif event.key == pygame.K_COMMA and self.dev_console_tab == 1:
@@ -10894,11 +10907,49 @@ class Game:
                 "C add coins | X remove coins",
                 "O add pack | L remove pack",
                 "G gift selected card | R remove top card",
-                "LEFT/RIGHT changes amount, pack, and gift card",
+                "[ / ] browse cards | PgUp/PgDn jump",
             ]
             for line in lines:
                 self.screen.blit(self.small.render(line[:72], True, WHITE), (detail_panel.x + 18, y))
                 y += 34
+            card_list_panel = pygame.Rect(detail_panel.x + 18, detail_panel.y + 310, 300, 212)
+            preview_panel = pygame.Rect(detail_panel.x + 332, detail_panel.y + 310, 298, 212)
+            for panel in (card_list_panel, preview_panel):
+                pygame.draw.rect(self.screen, (28, 34, 48), panel, 0, border_radius=14)
+                pygame.draw.rect(self.screen, (86, 98, 126), panel, 2, border_radius=14)
+            self.screen.blit(self.small.render(f"Card Catalog ({len(catalog)})", True, WHITE), (card_list_panel.x + 12, card_list_panel.y + 10))
+            if catalog:
+                self.dev_card_index = max(0, min(self.dev_card_index, len(catalog) - 1))
+                visible_rows = 5
+                start_idx = max(0, min(self.dev_card_index - 2, max(0, len(catalog) - visible_rows)))
+                row_y = card_list_panel.y + 38
+                for idx in range(start_idx, min(len(catalog), start_idx + visible_rows)):
+                    card = catalog[idx]
+                    row = pygame.Rect(card_list_panel.x + 10, row_y, card_list_panel.w - 20, 30)
+                    active = idx == self.dev_card_index
+                    pygame.draw.rect(self.screen, (44, 54, 74) if active else (32, 38, 54), row, 0, border_radius=8)
+                    pygame.draw.rect(self.screen, YELLOW if active else (92, 104, 134), row, 2, border_radius=8)
+                    label = f"{card.get('name', '')[:14]:<14} {card.get('rating', 0):>3} {card.get('promo', 'Base')[:8]}"
+                    self.screen.blit(self.small.render(label, True, WHITE), (row.x + 8, row.y + 8))
+                    row_y += 34
+                if start_idx > 0:
+                    self.screen.blit(self.small.render("More above", True, (190, 200, 215)), (card_list_panel.right - 92, card_list_panel.y + 10))
+                if start_idx + visible_rows < len(catalog):
+                    self.screen.blit(self.small.render("More below", True, (190, 200, 215)), (card_list_panel.right - 92, card_list_panel.bottom - 20))
+                self.draw_card(preview_panel.x + 18, preview_panel.y + 18, 112, 164, gift_card)
+                preview_lines = [
+                    f"Club: {gift_card.get('team', 'None')}",
+                    f"League: {gift_card.get('league', get_team_league(gift_card.get('team', '')))}",
+                    f"Pos: {gift_card.get('position', 'ST')}",
+                    f"Rarity: {gift_card.get('rarity', 'Base')}",
+                    f"Promo: {gift_card.get('promo', 'Base')}",
+                ]
+                preview_y = preview_panel.y + 24
+                for line in preview_lines:
+                    self.screen.blit(self.small.render(line[:22], True, WHITE), (preview_panel.x + 142, preview_y))
+                    preview_y += 28
+            else:
+                self.screen.blit(self.small.render("No cards available", True, (190, 200, 215)), (card_list_panel.x + 12, card_list_panel.y + 42))
         elif tab_name == "Tournaments":
             lines = [
                 f"Target: {selected.get('username', '')}",
