@@ -9340,7 +9340,9 @@ class Game:
                 if self.state == "DEV_REGISTERED_USERS":
                     users = self.filtered_registered_users()
                     selected = self.selected_registered_user()
-                    if event.key == pygame.K_TAB:
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "MODE_SELECT"
+                    elif event.key == pygame.K_TAB:
                         self.dev_console_tab = (self.dev_console_tab + 1) % len(self.developer_tabs())
                     elif event.key == pygame.K_DOWN and users:
                         self.registered_users_index = (self.registered_users_index + 1) % len(users)
@@ -9430,8 +9432,6 @@ class Game:
                             self.admin_user_action(selected.get("username"), "repair_account")
                     elif self.dev_console_tab == 0 and event.unicode and event.unicode.isprintable() and len(self.dev_search_query) < 24:
                         self.dev_search_query += event.unicode.lower()
-                    elif event.key == pygame.K_ESCAPE:
-                        self.state = "MODE_SELECT"
                     continue
                 if self.state == "FANTASY_BUILDER":
                     if event.key == pygame.K_p:
