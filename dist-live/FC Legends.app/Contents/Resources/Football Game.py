@@ -1428,6 +1428,8 @@ LEGACY_LINEUPS = {
 }
 
 TEAM_LINEUPS = LEGACY_LINEUPS
+BASE_FANTASY_LINEUPS = json.loads(json.dumps(LEGACY_LINEUPS))
+BASE_FANTASY_ROSTERS = json.loads(json.dumps(ROSTER_DATA))
 
 
 
@@ -1953,7 +1955,12 @@ class Game:
     def restore_fantasy_club_state(self):
         if self.game_mode != "FANTASY":
             return
-        team_name = (self.user_team or self.fantasy_team_name or "").strip()
+        fantasy_name = (self.fantasy_team_name or "").strip()
+        current_team = (self.user_team or "").strip()
+        if fantasy_name:
+            team_name = fantasy_name
+        else:
+            team_name = current_team
         if not team_name:
             return
         self.user_team = team_name
@@ -2643,6 +2650,8 @@ class Game:
         self.fantasy_team_name = data.get("fantasy_team_name", self.fantasy_team_name)
         self.fantasy_budget = data.get("fantasy_budget", self.fantasy_budget)
         self.fantasy_roster = data.get("fantasy_roster", [])
+        if self.game_mode == "FANTASY" and self.fantasy_team_name:
+            self.user_team = self.fantasy_team_name
         self.fantasy_replaced_team = data.get("fantasy_replaced_team", self.fantasy_replaced_team)
         self.fantasy_coins = data.get("fantasy_coins", self.fantasy_coins)
         self.my_packs = data.get("my_packs", [])
@@ -3460,7 +3469,7 @@ class Game:
                 forged["card_key"] = f"{name}|{promo}|{forged['rating']}|{position}"
                 pool.append(forged)
 
-        for team, lineup in TEAM_LINEUPS.items():
+        for team, lineup in BASE_FANTASY_LINEUPS.items():
             for idx, entry in enumerate(lineup):
                 name, num = lineup_name_number(entry, idx)
                 key = normalize_name_key(name)
@@ -3470,7 +3479,7 @@ class Game:
                 pool.append(self.make_fantasy_card(name, team, rating, num, idx))
                 add_special_variants(name, team, rating, num, idx)
                 seen.add(key)
-        for team, roster in ROSTER_DATA.items():
+        for team, roster in BASE_FANTASY_ROSTERS.items():
             for idx, entry in enumerate(roster):
                 name, num = lineup_name_number(entry, idx)
                 key = normalize_name_key(name)
@@ -3604,6 +3613,9 @@ class Game:
             }
             card["card_key"] = f"{card['name']}|Signature|{card['rating']}|{card['position']}"
             pool.append(card)
+        fantasy_team_names = {name.strip() for name in (self.user_team, self.fantasy_team_name) if isinstance(name, str) and name.strip()}
+        if fantasy_team_names:
+            pool = [card for card in pool if card.get("team") not in fantasy_team_names]
         pool.sort(key=lambda p: (-p["rating"], p["name"]))
         self.fantasy_pool = pool
         self.fantasy_index = 0
@@ -5745,6 +5757,7 @@ class Game:
         if not self.fantasy_pool:
             self.add_commentary("No players available")
             return
+        fantasy_team_names = {name.strip() for name in (self.user_team, self.fantasy_team_name) if isinstance(name, str) and name.strip()}
         self.fantasy_coins -= cost
         band = pack.get("band", "mixed")
         is_event_pack = bool(pack.get("event_id"))
@@ -5868,6 +5881,7 @@ class Game:
                     candidates = [p for p in self.fantasy_pool if p["rating"] >= 72] or self.fantasy_pool
                 else:
                     candidates = self.fantasy_pool[:]
+            candidates = [card for card in candidates if card.get("team") not in fantasy_team_names] or candidates
             if allow_goat:
                 goat_candidates = self.cards_for_pack_band("GOAT")
                 if goat_candidates:
