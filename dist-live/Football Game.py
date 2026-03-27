@@ -6678,7 +6678,7 @@ class Game:
     def draw_fantasy_collection_page(self):
         self.screen.fill((14, 18, 28))
         self.screen.blit(self.big.render("Fantasy Collection", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("ARROWS move | G filter | TAB sort | F favorite | DEL discard | ESC back", True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.small.render("ARROWS move | G filter | TAB sort | F favorite | DEL/BKSP discard | ESC back", True, (190, 200, 215)), (36, 56))
         cards = self.filtered_collection_cards()
         if not cards:
             self.screen.blit(self.font.render("No cards match the current filter", True, WHITE), (40, 120))
@@ -9971,7 +9971,7 @@ class Game:
                         cards = self.filtered_collection_cards()
                         if cards:
                             self.toggle_favorite_card(cards[self.fantasy_collection_index])
-                    elif event.key == pygame.K_DELETE and self.fantasy_roster:
+                    elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE) and self.fantasy_roster:
                         cards = self.filtered_collection_cards()
                         if cards:
                             self.discard_fantasy_card(cards[self.fantasy_collection_index])
