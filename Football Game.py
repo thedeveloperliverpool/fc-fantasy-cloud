@@ -1798,6 +1798,23 @@ class Game:
             self.cloud_status_label = "Cloud Unavailable"
             raise RuntimeError("Cloud server unavailable")
 
+    def reconnect_cloud(self):
+        try:
+            if self.cloud_token:
+                data = self.cloud_request("GET", "/api/profile", needs_auth=True)
+                self.cloud_user_cache = data.get("user")
+                self.sync_record_to_local(self.cloud_user_cache)
+                self.account_storage_mode = "CLOUD"
+                self.account_message = "Cloud session restored"
+            else:
+                self.cloud_request("GET", "/health")
+                self.account_message = "Cloud server reachable. Sign in to sync."
+            self.cloud_status_label = "Connected to Cloud"
+            return True
+        except RuntimeError as exc:
+            self.account_message = str(exc)
+            return False
+
     def online_divisions_available(self):
         if self.account_storage_mode == "LOCAL" or not self.cloud_token:
             self.online_division_message = "Online Divisions requires a cloud account session"
@@ -8867,12 +8884,16 @@ class Game:
                         }
                         self.cloud_settings_index = 0
                         self.state = "CLOUD_SETTINGS"
+                    elif event.key == pygame.K_r:
+                        self.reconnect_cloud()
                     continue
                 if self.state in ("ACCOUNT_LOGIN", "ACCOUNT_CREATE", "ACCOUNT_DEV_LOGIN"):
                     fields = self.auth_fields_for_state()
                     if event.key == pygame.K_ESCAPE:
                         self.state = "ACCOUNT_HOME"
                         self.account_message = ""
+                    elif event.key == pygame.K_r:
+                        self.reconnect_cloud()
                     elif event.key == pygame.K_UP:
                         self.account_field_index = (self.account_field_index - 1) % len(fields)
                     elif event.key == pygame.K_DOWN:
@@ -8904,6 +8925,8 @@ class Game:
                     if event.key == pygame.K_ESCAPE:
                         self.state = "ACCOUNT_HOME"
                         self.account_message = ""
+                    elif event.key == pygame.K_r:
+                        self.reconnect_cloud()
                     elif event.key == pygame.K_UP:
                         self.cloud_settings_index = (self.cloud_settings_index - 1) % len(fields)
                     elif event.key == pygame.K_DOWN or event.key == pygame.K_TAB:
@@ -9691,7 +9714,7 @@ class Game:
         pygame.draw.rect(self.screen, (22, 28, 40), footer, 0, border_radius=18)
         pygame.draw.rect(self.screen, (70, 86, 122), footer, 2, border_radius=18)
         update_text = "Auto updates on" if self.app_version_info.get("manifest_url") else "Auto updates off"
-        self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
+        self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | R reconnect | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
         self.screen.blit(self.small.render(f"Installed {self.app_version} | {update_text}", True, (150, 210, 255)), (700, 646))
 
     def draw_account_form(self):
@@ -9705,7 +9728,7 @@ class Game:
         pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
         pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
         self.screen.blit(self.big.render(titles.get(self.state, "Account"), True, WHITE), (52, 44))
-        self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | ESC back", True, (190, 200, 215)), (54, 86))
+        self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | R reconnect | ESC back", True, (190, 200, 215)), (54, 86))
         badge_text = self.cloud_status_label
         if badge_text in ("Connected to Cloud", "Using Local Fallback"):
             badge_color = (92, 176, 255) if badge_text == "Connected to Cloud" else (244, 206, 84)
@@ -9935,7 +9958,7 @@ class Game:
         pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
         pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
         self.screen.blit(self.big.render("Cloud Settings", True, WHITE), (52, 42))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER save | ESC back", True, (190, 200, 215)), (54, 86))
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER save | R reconnect | ESC back", True, (190, 200, 215)), (54, 86))
         rows = [
             ("Cloud Mode", "REQUIRED"),
             ("Cloud API URL", self.cloud_settings_inputs.get("cloud_api_url", "")),
