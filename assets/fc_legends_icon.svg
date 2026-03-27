@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#05142b"/>
+      <stop offset="55%" stop-color="#0a2246"/>
+      <stop offset="100%" stop-color="#020914"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7df8ff"/>
+      <stop offset="50%" stop-color="#29b7ff"/>
+      <stop offset="100%" stop-color="#005dff"/>
+    </linearGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="358" fill="none" stroke="#153968" stroke-width="6" opacity="0.45"/>
+  <circle cx="512" cy="512" r="292" fill="none" stroke="#204b88" stroke-width="4" opacity="0.35"/>
+  <path d="M180 800 C330 620, 694 620, 844 800" fill="none" stroke="#10284e" stroke-width="24" opacity="0.75"/>
+  <g filter="url(#softGlow)">
+    <text x="276" y="645" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="420" font-weight="800" letter-spacing="-26" fill="url(#glow)">FC</text>
+  </g>
+  <text x="514" y="792" text-anchor="middle" font-family="Avenir Next, Helvetica, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="20" fill="#b8ebff" opacity="0.88">LEGENDS</text>
+</svg>

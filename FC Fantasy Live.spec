@@ -28,7 +28,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='FC Fantasy Live',
+    name='FC Legends',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -47,11 +47,11 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='FC Fantasy Live',
+    name='FC Legends',
 )
 app = BUNDLE(
     coll,
-    name='FC Fantasy Live.app',
-    icon=None,
+    name='FC Legends.app',
+    icon='/Users/josiahchang/Documents/New project 5/assets/fc_legends.icns',
     bundle_identifier=None,
 )

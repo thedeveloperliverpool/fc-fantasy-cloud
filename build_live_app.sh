@@ -3,7 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="$ROOT_DIR/dist-live"
-APP_NAME="FC Fantasy Live"
+APP_NAME="FC Legends"
+APP_VERSION="$(python3 - <<'PY'
+import json
+from pathlib import Path
+data = json.loads(Path("version.json").read_text(encoding="utf-8"))
+print(data.get("version", "1.0.0"))
+PY
+)"
 
 rm -rf "$DIST_DIR" "$ROOT_DIR/build/$APP_NAME"
 mkdir -p "$DIST_DIR"
@@ -12,10 +19,7 @@ PYINSTALLER_CONFIG_DIR=/tmp/pyinstaller \
 python3 -m PyInstaller \
   --noconfirm \
   --clean \
-  --windowed \
-  --collect-all pygame \
-  --name "$APP_NAME" \
-  "$ROOT_DIR/launcher.py"
+  "$ROOT_DIR/FC Legends.spec"
 
 cp "$ROOT_DIR/Football Game.py" "$DIST_DIR/Football Game.py"
 cp "$ROOT_DIR/version.json" "$DIST_DIR/version.json"

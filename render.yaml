@@ -5,7 +5,11 @@ services:
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     startCommand: python3 backend/server.py
-    plan: free
+    plan: starter
+    disk:
+      name: fc-legends-data
+      mountPath: /opt/render/project/src/backend/data
+      sizeGB: 5
     envVars:
       - key: FC_CLOUD_HOST
         value: 0.0.0.0

@@ -2,6 +2,7 @@ import json
 import math
 import os
 import random
+import socket
 import sys
 import hashlib
 from array import array
@@ -49,11 +50,13 @@ def player_speed_from_rating(rating):
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if getattr(sys, "frozen", False):
-    APP_DATA_DIR = os.path.join(os.path.expanduser("~/Library/Application Support"), "FC Fantasy Local")
+    APP_DATA_DIR = os.path.join(os.path.expanduser("~/Library/Application Support"), "FC Legends")
 else:
     APP_DATA_DIR = BASE_DIR
 os.makedirs(APP_DATA_DIR, exist_ok=True)
 RATING_CACHE_FILE = os.path.join(APP_DATA_DIR, "rating_cache.json")
+DEFAULT_FANTASY_COINS = 100
+DEVELOPER_FANTASY_COINS = 50000
 ACCOUNTS_FILE = os.path.join(APP_DATA_DIR, "accounts.json")
 SETTINGS_FILE = os.path.join(APP_DATA_DIR, "settings.json")
 DEVELOPER_CODE = "Reve1@+ion"
@@ -76,6 +79,20 @@ def load_app_settings():
     if CLOUD_API_BASE:
         defaults["cloud_api_url"] = CLOUD_API_BASE
     return defaults
+
+
+def load_app_version():
+    version_file = os.path.join(BASE_DIR, "version.json")
+    data = {}
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+        except Exception:
+            data = {}
+    version = str(os.environ.get("FC_APP_VERSION") or data.get("version") or "1.0.0")
+    manifest_url = str(data.get("manifest_url", "")).strip()
+    return {"version": version, "manifest_url": manifest_url}
 
 
 def save_app_settings(data):
@@ -422,7 +439,14 @@ TEAM_OVERALL = {
     "Sunderland": 66,
 }
 
+def normalize_player_name(name):
+    if isinstance(name, (list, tuple, set)):
+        return " | ".join(normalize_player_name(part) for part in name)
+    return str(name)
+
+
 def probable_rating(name, team, default=70):
+    name = normalize_player_name(name)
     if name in RATING_OVERRIDES:
         return RATING_OVERRIDES[name]
     if name in RATING_CACHE:
@@ -435,12 +459,12 @@ def probable_rating(name, team, default=70):
     return rating
 
 def normalize_entry(entry, idx, team=None):
-    if isinstance(entry, tuple):
-        name = entry[0]
+    if isinstance(entry, (tuple, list)):
+        name = normalize_player_name(entry[0])
         num = entry[1] if len(entry) > 1 else idx + 1
         rating = entry[2] if len(entry) > 2 else probable_rating(name, team or "Premier", 70)
     else:
-        name = entry
+        name = normalize_player_name(entry)
         num = idx + 1
         rating = probable_rating(name, team or "Premier", 70)
     rating = int(max(50, rating))
@@ -448,11 +472,11 @@ def normalize_entry(entry, idx, team=None):
 
 
 def lineup_name_number(entry, idx):
-    if isinstance(entry, tuple):
-        name = entry[0]
+    if isinstance(entry, (tuple, list)):
+        name = normalize_player_name(entry[0])
         num = entry[1] if len(entry) > 1 else idx + 1
     else:
-        name = entry
+        name = normalize_player_name(entry)
         num = idx + 1
     return name, num
 
@@ -1360,23 +1384,27 @@ class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Premier League Season (38 Matchweeks)")
+        pygame.display.set_caption("FC Legends")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 20)
         self.big = pygame.font.SysFont("Arial", 26)
         self.small = pygame.font.SysFont("Arial", 14)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | DEV_REGISTERED_USERS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | DEV_REGISTERED_USERS | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
-        self.accounts_data = {"users": {}}
+        self.accounts_data = load_accounts()
         self.active_account = None
+        self.account_storage_mode = "CLOUD"
         self.app_settings = load_app_settings()
+        self.app_version_info = load_app_version()
+        self.app_version = self.app_version_info.get("version", "1.0.0")
         self.cloud_api_base = self.app_settings["cloud_api_url"].rstrip("/")
         self.cloud_token = None
         self.cloud_user_cache = None
         self.cloud_registered_users = []
+        self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
             "cloud_api_url": self.app_settings.get("cloud_api_url", "http://127.0.0.1:8080"),
@@ -1428,6 +1456,12 @@ class Game:
         self.fantasy_competition_index = 0
         self.fantasy_active_competition = "division"
         self.fantasy_match_competition = "division"
+        self.online_division_data = {"entry": {}, "leaderboard": []}
+        self.online_division_index = 0
+        self.online_division_message = ""
+        self.online_tournament_data = {"entry": {}, "leaderboard": []}
+        self.online_tournament_index = 0
+        self.online_tournament_message = ""
         self.fantasy_player_pick_options = []
         self.fantasy_player_pick_index = 0
         self.fantasy_player_pick_title = "Player Pick"
@@ -1601,6 +1635,122 @@ class Game:
     def using_cloud_accounts(self):
         return True
 
+    def local_account_record(self, username=None):
+        username = (username or self.active_account or "").strip().lower()
+        if not username:
+            return None
+        users = self.accounts_data.get("users", {})
+        record = users.get(username)
+        if isinstance(record, dict):
+            return record
+        return None
+
+    def serialize_local_account(self, record, include_snapshots=False):
+        if not record:
+            return None
+        fantasy_snapshot = record.get("fantasy_snapshot") if include_snapshots else None
+        fantasy_roster = fantasy_snapshot.get("fantasy_roster", []) if isinstance(fantasy_snapshot, dict) else []
+        payload = {
+            "display_name": record.get("display_name", ""),
+            "username": record.get("username", ""),
+            "is_developer": bool(record.get("is_developer")),
+            "last_mode": record.get("last_mode", "CAREER"),
+            "storage_mode": "LOCAL",
+            "fantasy_summary": {
+                "has_save": bool(record.get("fantasy_snapshot")),
+                "team_name": fantasy_snapshot.get("fantasy_team_name") if isinstance(fantasy_snapshot, dict) else None,
+                "cards": len(fantasy_roster) if isinstance(fantasy_roster, list) else 0,
+                "coins": fantasy_snapshot.get("fantasy_coins", 0) if isinstance(fantasy_snapshot, dict) else 0,
+            },
+        }
+        if include_snapshots:
+            payload["career_snapshot"] = record.get("career_snapshot")
+            payload["fantasy_snapshot"] = record.get("fantasy_snapshot")
+        return payload
+
+    def persist_local_accounts(self):
+        save_accounts(self.accounts_data)
+
+    def sync_record_to_local(self, record=None, password=None):
+        record = record or {}
+        username = str(record.get("username") or self.active_account or "").strip().lower()
+        if not username:
+            return None
+        users = self.accounts_data.setdefault("users", {})
+        existing = users.get(username, {}) if isinstance(users.get(username), dict) else {}
+        local = dict(existing)
+        local["display_name"] = record.get("display_name", local.get("display_name", username))
+        local["username"] = username
+        local["is_developer"] = bool(record.get("is_developer", local.get("is_developer", False)))
+        local["last_mode"] = record.get("last_mode", local.get("last_mode", "CAREER"))
+        if "career_snapshot" in record and record.get("career_snapshot") is not None:
+            local["career_snapshot"] = record.get("career_snapshot")
+        if "fantasy_snapshot" in record and record.get("fantasy_snapshot") is not None:
+            local["fantasy_snapshot"] = record.get("fantasy_snapshot")
+        if password:
+            local["password_hash"] = self.hash_password(password)
+        users[username] = local
+        self.persist_local_accounts()
+        return local
+
+    def register_local_account(self, display_name, username, password, developer_code=""):
+        username = username.strip().lower()
+        users = self.accounts_data.setdefault("users", {})
+        if username in users:
+            raise RuntimeError("Username already exists locally")
+        local = {
+            "display_name": display_name.strip(),
+            "username": username,
+            "password_hash": self.hash_password(password),
+            "is_developer": developer_code == DEVELOPER_CODE,
+            "last_mode": "CAREER",
+            "career_snapshot": None,
+            "fantasy_snapshot": None,
+        }
+        users[username] = local
+        self.persist_local_accounts()
+        return self.serialize_local_account(local, include_snapshots=True)
+
+    def login_local_account(self, username, password, require_dev=False, developer_code=""):
+        record = self.local_account_record(username)
+        if not record:
+            raise RuntimeError("Local fallback account not found")
+        if record.get("password_hash") != self.hash_password(password):
+            raise RuntimeError("Invalid username or password.")
+        if require_dev and (not record.get("is_developer") or developer_code != DEVELOPER_CODE):
+            raise RuntimeError("Developer code required.")
+        return self.serialize_local_account(record, include_snapshots=True)
+
+    def save_local_snapshot(self, mode, snapshot):
+        local = self.local_account_record()
+        if not local:
+            base_record = self.cloud_user_cache or {
+                "username": self.active_account,
+                "display_name": self.active_account,
+                "is_developer": False,
+                "last_mode": mode,
+            }
+            local = self.sync_record_to_local(base_record)
+        if not local:
+            return False
+        if mode == "CAREER":
+            local["career_snapshot"] = snapshot
+        elif mode == "FANTASY":
+            local["fantasy_snapshot"] = snapshot
+        local["last_mode"] = mode
+        self.persist_local_accounts()
+        return True
+
+    def local_snapshot_for_mode(self, mode):
+        record = self.local_account_record()
+        if not record:
+            return None
+        if mode == "CAREER":
+            return record.get("career_snapshot")
+        if mode == "FANTASY":
+            return record.get("fantasy_snapshot")
+        return None
+
     def apply_cloud_settings(self):
         url = self.cloud_settings_inputs.get("cloud_api_url", "").strip().rstrip("/")
         if not url:
@@ -1621,6 +1771,7 @@ class Game:
 
     def cloud_request(self, method, path, payload=None, needs_auth=False):
         if not self.cloud_api_base:
+            self.cloud_status_label = "Cloud Not Configured"
             raise RuntimeError("Cloud backend not configured")
         url = f"{self.cloud_api_base}{path}"
         body = None
@@ -1633,6 +1784,7 @@ class Game:
         try:
             with urllib_request.urlopen(req, timeout=5) as response:
                 raw = response.read().decode("utf-8")
+                self.cloud_status_label = "Connected to Cloud"
                 return json.loads(raw) if raw else {}
         except urllib_error.HTTPError as exc:
             raw = exc.read().decode("utf-8")
@@ -1640,9 +1792,19 @@ class Game:
                 data = json.loads(raw) if raw else {}
             except Exception:
                 data = {}
+            self.cloud_status_label = "Cloud Auth Required" if exc.code == 401 else "Cloud Error"
             raise RuntimeError(data.get("error") or f"HTTP {exc.code}")
-        except urllib_error.URLError:
+        except (urllib_error.URLError, socket.timeout, TimeoutError):
+            self.cloud_status_label = "Cloud Unavailable"
             raise RuntimeError("Cloud server unavailable")
+
+    def online_divisions_available(self):
+        if self.account_storage_mode == "LOCAL" or not self.cloud_token:
+            self.online_division_message = "Online Divisions requires a cloud account session"
+            self.account_message = "Sign in with cloud access to use Online Divisions"
+            self.cloud_status_label = "Using Local Fallback" if self.account_storage_mode == "LOCAL" else "Cloud Auth Required"
+            return False
+        return True
 
     def enter_account_state(self, state):
         self.state = state
@@ -1653,6 +1815,9 @@ class Game:
             return None
         if self.cloud_user_cache and self.cloud_user_cache.get("username") == self.active_account:
             return self.cloud_user_cache
+        local = self.local_account_record()
+        if local:
+            return self.serialize_local_account(local, include_snapshots=True)
         return None
 
     def refresh_accounts_data(self):
@@ -1660,29 +1825,193 @@ class Game:
             try:
                 data = self.cloud_request("GET", "/api/profile", needs_auth=True)
                 self.cloud_user_cache = data.get("user")
+                self.sync_record_to_local(self.cloud_user_cache)
             except RuntimeError:
                 self.cloud_user_cache = None
 
     def fetch_registered_users(self):
+        local_users = []
+        seen = set()
+        for username, record in sorted(self.accounts_data.get("users", {}).items()):
+            if not isinstance(record, dict):
+                continue
+            local_payload = self.serialize_local_account(record, include_snapshots=True)
+            if not local_payload:
+                continue
+            local_users.append(local_payload)
+            seen.add(username)
         try:
             data = self.cloud_request("GET", "/api/admin/users", needs_auth=True)
-            self.cloud_registered_users = data.get("users", [])
+            cloud_users = data.get("users", [])
+            merged = list(cloud_users)
+            seen = {item.get("username") for item in cloud_users if isinstance(item, dict)}
+            for user in local_users:
+                if user.get("username") not in seen:
+                    merged.append(user)
+            self.cloud_registered_users = merged
             return self.cloud_registered_users
         except RuntimeError as exc:
-            self.account_message = str(exc)
-            return []
+            if local_users:
+                self.account_message = f"{str(exc)} | showing local fallback accounts"
+            else:
+                self.account_message = str(exc)
+            self.cloud_registered_users = local_users
+            return local_users
+
+    def update_online_division_cache(self, data):
+        self.online_division_data = {
+            "entry": data.get("entry", {}) if isinstance(data, dict) else {},
+            "leaderboard": data.get("leaderboard", []) if isinstance(data, dict) else [],
+        }
+        leaderboard = self.online_division_data.get("leaderboard", [])
+        self.online_division_index = max(0, min(self.online_division_index, max(0, len(leaderboard) - 1)))
+
+    def fetch_online_division_status(self):
+        if not self.online_divisions_available():
+            return None
+        try:
+            data = self.cloud_request("GET", "/api/online-divisions", needs_auth=True)
+            self.update_online_division_cache(data)
+            entry = self.online_division_data.get("entry", {})
+            self.online_division_message = f"Division {entry.get('division_tier', 10)} | {entry.get('points', 0)} pts"
+            return data
+        except RuntimeError as exc:
+            self.online_division_message = str(exc)
+            return None
+
+    def submit_online_division_squad(self):
+        if not self.online_divisions_available():
+            return
+        self.save_active_profile()
+        try:
+            data = self.cloud_request("PUT", "/api/online-divisions/submit", {}, needs_auth=True)
+            entry = data.get("entry", {})
+            self.online_division_data["entry"] = entry
+            self.fetch_online_division_status()
+            self.online_division_message = f"Submitted {entry.get('squad_name', 'your squad')} at {entry.get('squad_rating', 0)} OVR"
+        except RuntimeError as exc:
+            self.online_division_message = str(exc)
+
+    def play_online_division_match(self):
+        if not self.online_divisions_available():
+            return
+        self.save_active_profile()
+        try:
+            data = self.cloud_request("POST", "/api/online-divisions/play", {}, needs_auth=True)
+            self.update_online_division_cache(data)
+            match = data.get("match", {})
+            result = match.get("result", "D")
+            outcome = "won" if result == "W" else "drew" if result == "D" else "lost"
+            opponent = match.get("opponent", "opponent")
+            opponent_team = match.get("opponent_team") or opponent
+            opponent_tag = " (AI)" if match.get("opponent_is_ai") else ""
+            rating = match.get("opponent_rating")
+            rating_text = f" {int(rating)} OVR" if rating is not None else ""
+            self.online_division_message = (
+                f"You {outcome} {match.get('user_goals', 0)}-{match.get('opponent_goals', 0)} vs {opponent_team}{rating_text}{opponent_tag}"
+            )
+            if match.get("cycle_message"):
+                self.add_commentary(match.get("cycle_message"))
+        except RuntimeError as exc:
+            self.online_division_message = str(exc)
+
+    def claim_online_division_rewards(self):
+        if not self.online_divisions_available():
+            return
+        try:
+            data = self.cloud_request("POST", "/api/online-divisions/claim", {}, needs_auth=True)
+            reward = int(data.get("reward_coins", 0))
+            self.fantasy_coins += reward
+            self.update_online_division_cache(data)
+            self.online_division_message = f"Claimed {reward} online division coins"
+            self.save_active_profile()
+        except RuntimeError as exc:
+            self.online_division_message = str(exc)
+
+    def online_tournaments_available(self):
+        return self.online_divisions_available()
+
+    def fetch_online_tournament_status(self):
+        if not self.online_tournaments_available():
+            return None
+        try:
+            data = self.cloud_request("GET", "/api/online-tournaments", needs_auth=True)
+            self.online_tournament_data = {
+                "entry": data.get("entry", {}) if isinstance(data, dict) else {},
+                "leaderboard": data.get("leaderboard", []) if isinstance(data, dict) else [],
+            }
+            leaderboard = self.online_tournament_data.get("leaderboard", [])
+            self.online_tournament_index = max(0, min(self.online_tournament_index, max(0, len(leaderboard) - 1)))
+            entry = self.online_tournament_data.get("entry", {})
+            self.online_tournament_message = f"Round {entry.get('round', 1)} | {entry.get('wins', 0)}W/{entry.get('losses', 0)}L | Reward {entry.get('reward_coins', 0)}"
+            return data
+        except RuntimeError as exc:
+            self.online_tournament_message = str(exc)
+            return None
+
+    def play_online_tournament_match(self):
+        if not self.online_tournaments_available():
+            return
+        self.save_active_profile()
+        try:
+            data = self.cloud_request("POST", "/api/online-tournaments/play", {}, needs_auth=True)
+            self.online_tournament_data = {
+                "entry": data.get("entry", {}) if isinstance(data, dict) else {},
+                "leaderboard": data.get("leaderboard", []) if isinstance(data, dict) else [],
+            }
+            match = data.get("match", {})
+            self.online_tournament_message = f"Tournament {match.get('result', 'play')} {match.get('user_goals', 0)}-{match.get('opponent_goals', 0)} vs {match.get('opponent', 'opponent')}"
+            if match.get("opponent_display"):
+                self.add_commentary(f"Played {match['opponent_display']} in the tournament.")
+        except RuntimeError as exc:
+            self.online_tournament_message = str(exc)
+
+    def submit_online_tournament_squad(self):
+        if not self.online_divisions_available():
+            return
+        self.submit_online_division_squad()
+        self.fetch_online_tournament_status()
+
+    def claim_online_tournament_rewards(self):
+        if not self.online_tournaments_available():
+            return
+        try:
+            data = self.cloud_request("POST", "/api/online-tournaments/claim", {}, needs_auth=True)
+            reward = int(data.get("reward_coins", 0))
+            self.fantasy_coins += reward
+            self.online_tournament_data = {
+                "entry": data.get("entry", {}) if isinstance(data, dict) else {},
+                "leaderboard": data.get("leaderboard", []) if isinstance(data, dict) else [],
+            }
+            self.online_tournament_message = f"Claimed {reward} tournament coins"
+            self.save_active_profile()
+        except RuntimeError as exc:
+            self.online_tournament_message = str(exc)
 
     def logout_account(self):
         self.save_active_profile()
         self.active_account = None
         self.cloud_token = None
         self.cloud_user_cache = None
+        self.account_storage_mode = "CLOUD"
+        self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.cloud_registered_users = []
         self.account_message = ""
         self.state = "ACCOUNT_HOME"
 
     def build_full_snapshot(self):
-        return {
+        def sanitize(value):
+            if isinstance(value, (set, frozenset)):
+                return list(value)
+            if isinstance(value, dict):
+                return {k: sanitize(v) for k, v in value.items()}
+            if isinstance(value, tuple):
+                return [sanitize(v) for v in value]
+            if isinstance(value, list):
+                return [sanitize(v) for v in value]
+            return value
+
+        snapshot = {
             "game_mode": self.game_mode,
             "user_team": self.user_team,
             "user_player_index": self.user_player_index,
@@ -1741,6 +2070,7 @@ class Game:
             "fantasy_draft_saved_player_index": self.fantasy_draft_saved_player_index,
             "event_evo_tokens": self.event_evo_tokens,
         }
+        return sanitize(snapshot)
 
     def apply_full_snapshot(self, data):
         self.game_mode = data.get("game_mode", "CAREER")
@@ -1828,6 +2158,8 @@ class Game:
         if not record or self.game_mode not in ("CAREER", "FANTASY"):
             return
         snapshot = self.build_full_snapshot()
+        local_saved = self.save_local_snapshot(self.game_mode, snapshot)
+        cloud_saved = False
         try:
             data = self.cloud_request(
                 "PUT",
@@ -1836,8 +2168,14 @@ class Game:
                 needs_auth=True,
             )
             self.cloud_user_cache = data.get("user", self.cloud_user_cache)
+            self.sync_record_to_local(self.cloud_user_cache)
+            cloud_saved = True
         except RuntimeError as exc:
-            self.account_message = str(exc)
+            self.account_message = "Saved locally; cloud sync unavailable" if local_saved else str(exc)
+        if cloud_saved and self.account_storage_mode == "LOCAL":
+            self.account_message = "Cloud sync restored"
+            self.account_storage_mode = "CLOUD"
+            self.cloud_status_label = "Connected to Cloud"
 
     def load_profile_mode(self, mode):
         record = self.active_account_record()
@@ -1852,6 +2190,13 @@ class Game:
         except RuntimeError as exc:
             self.account_message = str(exc)
             snapshot = None
+        if snapshot is None:
+            local_snapshot = self.local_snapshot_for_mode(mode)
+            if local_snapshot:
+                snapshot = local_snapshot
+                self.account_storage_mode = "LOCAL"
+                self.account_message = "Using local fallback save"
+                self.cloud_status_label = "Using Local Fallback"
         if snapshot:
             self.apply_full_snapshot(snapshot)
             self.game_mode = mode
@@ -1872,7 +2217,7 @@ class Game:
             self.fantasy_draft_round = 0
             self.fantasy_draft_active = False
             self.last_pack = []
-            self.fantasy_coins = 10000 if record.get("is_developer") else 100
+            self.fantasy_coins = DEVELOPER_FANTASY_COINS if record.get("is_developer") else DEFAULT_FANTASY_COINS
             self.fantasy_season_xp = 0
             self.fantasy_season_claimed = 0
             self.fantasy_sbc_index = 0
@@ -1887,15 +2232,25 @@ class Game:
         if self.cloud_user_cache is None:
             self.cloud_user_cache = {}
         self.cloud_user_cache["last_mode"] = mode
+        local = self.local_account_record()
+        if local:
+            local["last_mode"] = mode
+            self.persist_local_accounts()
         self.profile_autosave_timer = 8.0
 
-    def begin_account_session(self, username, record=None):
+    def begin_account_session(self, username, record=None, storage_mode="CLOUD"):
         self.active_account = username
-        if record is not None:
+        self.account_storage_mode = storage_mode
+        self.cloud_status_label = "Using Local Fallback" if storage_mode == "LOCAL" else "Connected to Cloud"
+        if record is not None and storage_mode == "CLOUD":
             self.cloud_user_cache = record
+        elif storage_mode == "LOCAL":
+            self.cloud_user_cache = None
+            self.cloud_token = None
         record = self.active_account_record() or record or {}
         self.mode_select_index = 0
-        self.account_message = f"Welcome {record.get('display_name', username)}"
+        suffix = " (local fallback)" if storage_mode == "LOCAL" else ""
+        self.account_message = f"Welcome {record.get('display_name', username)}{suffix}"
         self.state = "MODE_SELECT"
         self.profile_autosave_timer = 8.0
 
@@ -1919,9 +2274,18 @@ class Game:
                 },
             )
             self.cloud_token = data.get("token")
-            self.begin_account_session(username, data.get("user"))
+            self.sync_record_to_local(data.get("user"), password=password)
+            self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
-            self.account_message = str(exc)
+            if "Cloud server unavailable" in str(exc) or "Cloud backend not configured" in str(exc):
+                try:
+                    local_record = self.register_local_account(display_name, username, password, developer_code)
+                    self.begin_account_session(username, local_record, storage_mode="LOCAL")
+                    self.account_message = "Created local fallback account"
+                except RuntimeError as local_exc:
+                    self.account_message = str(local_exc)
+            else:
+                self.account_message = str(exc)
 
     def login_account(self, require_dev=False):
         username = self.account_inputs["username"].strip().lower()
@@ -1939,11 +2303,19 @@ class Game:
                 },
             )
             self.cloud_token = data.get("token")
-            self.begin_account_session(username, data.get("user"))
+            self.sync_record_to_local(data.get("user"), password=password)
+            self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
-            self.account_message = str(exc)
+            try:
+                local_record = self.login_local_account(username, password, require_dev=require_dev, developer_code=developer_code)
+                self.begin_account_session(username, local_record, storage_mode="LOCAL")
+                self.account_message = "Signed in with local fallback"
+            except RuntimeError:
+                self.account_message = str(exc)
 
     def onboarding_starter_pulls(self):
+        record = self.active_account_record() or {}
+        is_developer = record.get("is_developer")
         normal_pool = [
             p for p in self.fantasy_pool
             if self.rarity_rank(p.get("rarity", "Bronze")) <= self.rarity_rank("Diamond")
@@ -1958,6 +2330,7 @@ class Game:
         ]
         gk_pool = [p for p in normal_pool if p.get("position") == "GK"] or normal_pool[:]
         diamond_pool = [p for p in normal_pool if p.get("rarity") == "Diamond"] or normal_pool[:]
+        elite_pool = [p for p in self.fantasy_pool if p.get("rarity") in ("Elite", "Icon", "GOAT") or p.get("promo") == "Signature"]
         pulls = []
         used_names = set()
 
@@ -1971,10 +2344,14 @@ class Game:
             pulls.append(take(gk_pool))
         while len(pulls) < 14 and normal_pool:
             pulls.append(take(normal_pool))
-        if random.random() < 0.01 and higher_pool:
+        if is_developer and elite_pool:
+            pulls.append(take(elite_pool))
+        elif random.random() < 0.01 and higher_pool:
             pulls.append(take(higher_pool))
         else:
             pulls.append(take(diamond_pool))
+        if is_developer and higher_pool and len(pulls) < 15:
+            pulls.append(take(higher_pool))
         return pulls[:15]
 
     def finish_fantasy_team_setup(self):
@@ -2460,6 +2837,16 @@ class Game:
         pool = []
         seen = set()
 
+        def normalize_rating_name(value):
+            if isinstance(value, (list, tuple)):
+                return "|".join(str(v) for v in value)
+            return value
+
+        def normalize_name_key(name):
+            if isinstance(name, (list, tuple, set)):
+                return tuple(name)
+            return name
+
         def add_special_variants(name, team, rating, num, idx):
             variants = []
             position = self.infer_card_position(idx)
@@ -2498,21 +2885,23 @@ class Game:
         for team, lineup in TEAM_LINEUPS.items():
             for idx, entry in enumerate(lineup):
                 name, num = lineup_name_number(entry, idx)
-                if name in seen:
+                key = normalize_name_key(name)
+                if key in seen:
                     continue
-                rating = entry[2] if isinstance(entry, tuple) and len(entry) > 2 else probable_rating(name, team, 70)
+                rating = entry[2] if isinstance(entry, (tuple, list)) and len(entry) > 2 else probable_rating(normalize_rating_name(name), team, 70)
                 pool.append(self.make_fantasy_card(name, team, rating, num, idx))
                 add_special_variants(name, team, rating, num, idx)
-                seen.add(name)
+                seen.add(key)
         for team, roster in ROSTER_DATA.items():
             for idx, entry in enumerate(roster):
                 name, num = lineup_name_number(entry, idx)
-                if name in seen:
+                key = normalize_name_key(name)
+                if key in seen:
                     continue
-                rating = entry[2] if isinstance(entry, tuple) and len(entry) > 2 else probable_rating(name, team, 70)
+                rating = entry[2] if isinstance(entry, (tuple, list)) and len(entry) > 2 else probable_rating(normalize_rating_name(name), team, 70)
                 pool.append(self.make_fantasy_card(name, team, rating, num, idx))
                 add_special_variants(name, team, rating, num, idx)
-                seen.add(name)
+                seen.add(key)
         for idx, icon in enumerate(ICON_PLAYERS):
             card = {
                 "name": icon["name"],
@@ -2892,6 +3281,7 @@ class Game:
         theme_name = self.fantasy_competitions.get("theme", {}).get("name", self.current_theme)
         return [
             ("division", "Division Match", "Win for points and coin promotions"),
+            ("online_tournament", "Online Tournament", "Automatic bracket runs with your live squad"),
             ("cup", "Knockout Cup", "Progress for an Elite Pack reward"),
             ("weekend", "Weekend Challenge", "String wins together for pack and coin rewards"),
             ("theme", theme_name, "Play themed matches for a featured player reward"),
@@ -5799,6 +6189,9 @@ class Game:
             comp = comps.get(key, {})
             if key == "division":
                 reward_text = f"Reward: {comp.get('reward', 120)} coins on promotion"
+            elif key == "online":
+                entry = self.online_division_data.get("entry", {})
+                reward_text = f"Reward ready: {entry.get('reward_coins', 0)} coins | Tier {entry.get('division_tier', 10)}"
             elif key == "cup":
                 reward_text = f"Reward: {comp.get('reward_pack', 'elite').title()} Pack on cup win"
             elif key == "weekend":
@@ -5812,7 +6205,11 @@ class Game:
             self.screen.blit(self.font.render(title, True, WHITE), (row.x + 16, row.y + 14))
             self.screen.blit(self.small.render(desc, True, (212, 220, 232)), (row.x + 16, row.y + 46))
             self.screen.blit(self.small.render(reward_text, True, LIGHT_GREEN), (row.x + 16, row.y + 74))
-            if key == "draft":
+            if key == "online":
+                entry = self.online_division_data.get("entry", {})
+                status_text = f"{entry.get('points', 0)} pts | {entry.get('wins', 0)}W-{entry.get('draws', 0)}D-{entry.get('losses', 0)}L"
+                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
+            elif key == "draft":
                 run_text = f"{comp.get('wins', 0)}W-{comp.get('losses', 0)}L | {'Active draft squad' if self.fantasy_draft_active else 'Build a fresh squad'}"
                 self.screen.blit(self.small.render(run_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
             row_y += row_h + row_gap
@@ -5820,6 +6217,113 @@ class Game:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (panel.right - 110, panel.y + 10))
         if end < total:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
+
+    def draw_online_divisions_page(self):
+        self.screen.fill((10, 16, 28))
+        self.screen.blit(self.big.render("Online Divisions", True, WHITE), (34, 22))
+        hint = "S submit squad | SPACE play async match | C claim reward | R refresh | UP/DOWN leaderboard | ESC back"
+        self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (36, 56))
+
+        entry = self.online_division_data.get("entry", {})
+        leaderboard = self.online_division_data.get("leaderboard", [])
+
+        left = pygame.Rect(34, 96, 470, 590)
+        right = pygame.Rect(528, 96, 638, 590)
+        for panel in (left, right):
+            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
+            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+
+        self.screen.blit(self.font.render("Your Division Entry", True, WHITE), (left.x + 18, left.y + 18))
+        info_lines = [
+            f"Team: {entry.get('squad_name', self.fantasy_team_name or 'Unsubmitted')}",
+            f"Division: {entry.get('division_tier', 10)}",
+            f"Submitted: {'Yes' if entry.get('submitted') else 'No'}",
+            f"Squad Rating: {entry.get('squad_rating', 0)}",
+            f"Record: {entry.get('wins', 0)}W-{entry.get('draws', 0)}D-{entry.get('losses', 0)}L",
+            f"Points: {entry.get('points', 0)}",
+            f"Goal Difference: {entry.get('goal_difference', 0)}",
+            f"Cycle: {entry.get('cycle_played', 0)}/5 matches | {entry.get('cycle_points', 0)} pts",
+            f"Reward Coins: {entry.get('reward_coins', 0)}",
+            f"Captain: {entry.get('captain', 'None')}",
+        ]
+        y = left.y + 58
+        for line in info_lines:
+            self.screen.blit(self.small.render(line[:44], True, (220, 228, 236)), (left.x + 18, y))
+            y += 34
+
+        self.screen.blit(self.font.render("Recent Results", True, WHITE), (left.x + 18, y + 8))
+        y += 44
+        recent = entry.get("recent_results", [])
+        if not recent:
+            self.screen.blit(self.small.render("No online matches played yet", True, (190, 200, 215)), (left.x + 18, y))
+        else:
+            for result in recent[:5]:
+                line = f"{result.get('result', '-')} vs {result.get('opponent', 'opponent')}  {result.get('score', '0-0')}"
+                self.screen.blit(self.small.render(line[:44], True, (220, 228, 236)), (left.x + 18, y))
+                y += 28
+
+        self.screen.blit(self.font.render("Division Leaderboard", True, WHITE), (right.x + 18, right.y + 18))
+        self.screen.blit(self.small.render("Current tier only. Submit your squad to appear here.", True, (190, 200, 215)), (right.x + 18, right.y + 50))
+        list_y = right.y + 92
+        if not leaderboard:
+            self.screen.blit(self.small.render("No submitted squads in this division yet", True, (190, 200, 215)), (right.x + 18, list_y))
+        else:
+            self.online_division_index = max(0, min(self.online_division_index, len(leaderboard) - 1))
+            start = max(0, min(self.online_division_index - 5, max(0, len(leaderboard) - 10)))
+            shown = leaderboard[start:start + 10]
+            for idx, row in enumerate(shown, start=start):
+                item = pygame.Rect(right.x + 14, list_y, right.w - 28, 46)
+                active = idx == self.online_division_index
+                pygame.draw.rect(self.screen, (34, 42, 58), item, 0, border_radius=12)
+                pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), item, 2, border_radius=12)
+                label = f"{idx + 1:>2}. {row.get('username', '')[:14]:<14} T{row.get('division_tier', 10)}  {row.get('points', 0):>2} pts  GD {row.get('goal_difference', 0):>3}  OVR {row.get('squad_rating', 0):>3}"
+                self.screen.blit(self.small.render(label, True, WHITE), (item.x + 12, item.y + 15))
+                list_y += 52
+
+        if self.online_division_message:
+            self.screen.blit(self.small.render(self.online_division_message[:120], True, YELLOW), (36, HEIGHT - 28))
+
+    def draw_online_tournament_page(self):
+        self.screen.fill((10, 16, 28))
+        self.screen.blit(self.big.render("Online Tournament", True, WHITE), (34, 22))
+        hint = "SPACE play match | B submit squad | C claim reward | R refresh | UP/DOWN leaderboard | ESC back"
+        self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (36, 56))
+
+        entry = self.online_tournament_data.get("entry", {})
+        leaderboard = self.online_tournament_data.get("leaderboard", [])
+
+        panel = pygame.Rect(34, 96, 470, 574)
+        pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
+        pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        self.screen.blit(self.font.render("Your Tournament Entry", True, WHITE), (panel.x + 18, panel.y + 18))
+        lines = [
+            f"Round: {entry.get('round', 1)}",
+            f"Record: {entry.get('wins', 0)}W-{entry.get('losses', 0)}L",
+            f"Matches played: {entry.get('matches_played', 0)}",
+            f"Queued reward: {entry.get('reward_coins', 0)} coins",
+        ]
+        y = panel.y + 58
+        for line in lines:
+            self.screen.blit(self.small.render(line, True, (220, 228, 236)), (panel.x + 18, y))
+            y += 34
+        if leaderboard:
+            self.screen.blit(self.font.render("Leaderboard snapshot", True, WHITE), (panel.x + 18, y + 8))
+            y += 34
+            start = max(0, min(self.online_tournament_index - 4, max(0, len(leaderboard) - 8)))
+            shown = leaderboard[start : start + 8]
+            for idx, row in enumerate(shown, start=start):
+                item = pygame.Rect(panel.x + 18, y, panel.w - 36, 40)
+                active = idx == self.online_tournament_index
+                pygame.draw.rect(self.screen, (34, 42, 58), item, 0, border_radius=10)
+                pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), item, 2, border_radius=10)
+                label = f"{idx + 1:>2}. {row.get('username', '')[:16]:<16} R{row.get('round', 1)} {row.get('wins', 0)}W-{row.get('losses', 0)}L"
+                self.screen.blit(self.small.render(label, True, WHITE), (item.x + 12, item.y + 12))
+                y += 48
+        else:
+            self.screen.blit(self.small.render("No tournament data yet", True, (190, 200, 215)), (panel.x + 18, y))
+
+        if self.online_tournament_message:
+            self.screen.blit(self.small.render(self.online_tournament_message[:120], True, YELLOW), (36, HEIGHT - 28))
 
     def draw_fantasy_draft_page(self):
         self.screen.fill((10, 14, 24))
@@ -7061,7 +7565,7 @@ class Game:
                 entry_name, entry_num = lineup_name_number(entry, i)
                 if entry_name != name:
                     continue
-                if isinstance(entry, tuple) and len(entry) > 2:
+                if isinstance(entry, (tuple, list)) and len(entry) > 2:
                     rating = entry[2]
                 else:
                     rating = probable_rating(name, team, 70)
@@ -7129,7 +7633,7 @@ class Game:
         for i, entry in enumerate(lineup):
             n, num = lineup_name_number(entry, i)
             if n == name:
-                if isinstance(entry, tuple) and len(entry) > 2:
+                if isinstance(entry, (tuple, list)) and len(entry) > 2:
                     rating = entry[2]
                 else:
                     rating = probable_rating(name, team, 70)
@@ -8614,7 +9118,11 @@ class Game:
                         self.fantasy_competition_index = (self.fantasy_competition_index + 1) % len(menu)
                     elif event.key == pygame.K_RETURN:
                         self.fantasy_active_competition = menu[self.fantasy_competition_index][0]
-                        if self.fantasy_active_competition == "draft":
+                        if self.fantasy_active_competition == "online_tournament":
+                            data = self.fetch_online_tournament_status()
+                            if data is not None:
+                                self.state = "ONLINE_TOURNAMENTS"
+                        elif self.fantasy_active_competition == "draft":
                             self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                         else:
                             self.state = "LEAGUE"
@@ -8622,6 +9130,23 @@ class Game:
                         self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "LEAGUE"
+                    continue
+                if self.state == "ONLINE_TOURNAMENTS":
+                    leaderboard = self.online_tournament_data.get("leaderboard", [])
+                    if event.key == pygame.K_UP and leaderboard:
+                        self.online_tournament_index = max(0, self.online_tournament_index - 1)
+                    elif event.key == pygame.K_DOWN and leaderboard:
+                        self.online_tournament_index = min(len(leaderboard) - 1, self.online_tournament_index + 1)
+                    elif event.key == pygame.K_r:
+                        self.fetch_online_tournament_status()
+                    elif event.key == pygame.K_b:
+                        self.submit_online_tournament_squad()
+                    elif event.key == pygame.K_c:
+                        self.claim_online_tournament_rewards()
+                    elif event.key == pygame.K_SPACE:
+                        self.play_online_tournament_match()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "FANTASY_COMPETITIONS"
                     continue
                 if self.state == "FANTASY_DRAFT":
                     if event.key == pygame.K_LEFT:
@@ -8698,7 +9223,7 @@ class Game:
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_SPACE:
                         self.start_week()
-                    elif event.key == pygame.K_s:
+                    elif event.key == pygame.K_s and self.game_mode != "FANTASY":
                         self.skip_to_end_of_season()
                     elif event.key == pygame.K_t:
                         if self.game_mode != "FANTASY" and self.user_budget >= 2:
@@ -9051,7 +9576,8 @@ class Game:
         username = record.get("username", self.active_account or "")
         mode = self.game_mode.title() if self.game_mode else "Menu"
         self.screen.blit(self.font.render(display_name[:18], True, WHITE), (x + 16, y + 14))
-        sub = f"@{username}" if username else "Cloud profile"
+        source_label = "local fallback" if self.account_storage_mode == "LOCAL" else "cloud profile"
+        sub = f"@{username} | {source_label}" if username else source_label
         self.screen.blit(self.small.render(sub, True, (190, 200, 215)), (x + 16, y + 42))
         pill = pygame.Rect(x + 16, y + 66, 84, 26)
         pygame.draw.rect(self.screen, (16, 22, 32), pill, 0, border_radius=10)
@@ -9072,6 +9598,8 @@ class Game:
 
     def draw_account_home(self):
         self.screen.fill((10, 14, 24))
+        storage_label = "Local Fallback" if self.account_storage_mode == "LOCAL" else "Cloud"
+        storage_accent = (244, 206, 84) if self.account_storage_mode == "LOCAL" else (92, 176, 255)
         hero = pygame.Rect(34, 24, 1098, 150)
         pygame.draw.rect(self.screen, (20, 28, 44), hero, 0, border_radius=26)
         pygame.draw.rect(self.screen, (80, 112, 166), hero, 2, border_radius=26)
@@ -9079,9 +9607,17 @@ class Game:
         pygame.draw.ellipse(glow, (86, 170, 255, 54), (-40, -24, hero.w * 0.7, hero.h + 44))
         pygame.draw.ellipse(glow, (244, 206, 84, 34), (hero.w * 0.48, -30, hero.w * 0.44, hero.h + 50))
         self.screen.blit(glow, (hero.x, hero.y))
-        self.screen.blit(self.big.render("FC Fantasy Cloud Profiles", True, WHITE), (54, 44))
+        self.screen.blit(self.big.render("FC Legends Cloud Profiles", True, WHITE), (54, 44))
         self.screen.blit(self.font.render("Cloud accounts for career and fantasy saves", True, (214, 222, 236)), (56, 84))
         self.screen.blit(self.small.render("Create an account, sign in, or use developer sign in.", True, (190, 200, 215)), (56, 116))
+        version_badge = pygame.Rect(910, 42, 170, 34)
+        pygame.draw.rect(self.screen, (18, 24, 34), version_badge, 0, border_radius=12)
+        pygame.draw.rect(self.screen, (92, 176, 255), version_badge, 2, border_radius=12)
+        self.screen.blit(self.small.render(f"VERSION {self.app_version}", True, WHITE), (version_badge.x + 24, version_badge.y + 9))
+        storage_badge = pygame.Rect(850, 88, 230, 34)
+        pygame.draw.rect(self.screen, (18, 24, 34), storage_badge, 0, border_radius=12)
+        pygame.draw.rect(self.screen, storage_accent, storage_badge, 2, border_radius=12)
+        self.screen.blit(self.small.render(f"ACCOUNT STORAGE: {storage_label.upper()}", True, WHITE), (storage_badge.x + 14, storage_badge.y + 9))
         options = ["Sign In", "Create Account", "Developer Sign In"]
         y = 226
         for idx, label in enumerate(options):
@@ -9099,8 +9635,9 @@ class Game:
         self.screen.blit(self.font.render("Cloud Saving", True, WHITE), (info.x + 18, info.y + 18))
         lines = [
             "Career and fantasy progress sync through the cloud server.",
+            "Every successful sign-in is mirrored locally as a fallback.",
             "Fantasy starter coins: 100",
-            "Developer accounts: 10000 coins and hidden packs.",
+            f"Developer accounts: {DEVELOPER_FANTASY_COINS} coins, hidden packs, elite starter pull.",
             "Developer user view shows usernames and card collections.",
             "Passwords stay hidden and stored as hashes.",
         ]
@@ -9111,7 +9648,9 @@ class Game:
         footer = pygame.Rect(34, 628, 1098, 66)
         pygame.draw.rect(self.screen, (22, 28, 40), footer, 0, border_radius=18)
         pygame.draw.rect(self.screen, (70, 86, 122), footer, 2, border_radius=18)
-        self.screen.blit(self.small.render("Use UP/DOWN and ENTER | C cloud settings", True, (190, 200, 215)), (54, 650))
+        update_text = "Auto updates on" if self.app_version_info.get("manifest_url") else "Auto updates off"
+        self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
+        self.screen.blit(self.small.render(f"Installed {self.app_version} | {update_text}", True, (150, 210, 255)), (700, 646))
 
     def draw_account_form(self):
         self.screen.fill((12, 16, 26))
@@ -9125,6 +9664,13 @@ class Game:
         pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
         self.screen.blit(self.big.render(titles.get(self.state, "Account"), True, WHITE), (52, 44))
         self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | ESC back", True, (190, 200, 215)), (54, 86))
+        badge_text = self.cloud_status_label
+        if badge_text in ("Connected to Cloud", "Using Local Fallback"):
+            badge_color = (92, 176, 255) if badge_text == "Connected to Cloud" else (244, 206, 84)
+            badge = pygame.Rect(830, 42, 250, 34)
+            pygame.draw.rect(self.screen, (18, 24, 34), badge, 0, border_radius=12)
+            pygame.draw.rect(self.screen, badge_color, badge, 2, border_radius=12)
+            self.screen.blit(self.small.render(badge_text, True, WHITE), (badge.x + 16, badge.y + 9))
         fields = self.auth_fields_for_state()
         labels = {
             "display_name": "Display Name",
@@ -9154,11 +9700,12 @@ class Game:
             "Career and fantasy saves are stored separately.",
             "Fantasy accounts keep packs, coins, cards, and events.",
             "Profiles sync to the shared cloud backend.",
+            "If cloud sync disappears, local fallback keeps your account usable.",
         ]
         if self.state == "ACCOUNT_DEV_LOGIN":
             info_lines = [
                 "Developer code unlocks hidden packs.",
-                "Developer profiles start with 10000 fantasy coins.",
+                f"Developer profiles start with {DEVELOPER_FANTASY_COINS} fantasy coins.",
                 "Registered users page becomes available.",
             ]
         elif self.state == "ACCOUNT_CREATE":
@@ -9179,6 +9726,7 @@ class Game:
         title = self.big.render("Choose Game Mode", True, WHITE)
         self.screen.blit(title, (52, 42))
         self.screen.blit(self.small.render(f"Signed in as {record.get('display_name', self.active_account or 'Guest')}", True, (190, 200, 215)), (54, 84))
+        self.screen.blit(self.small.render(f"Version {self.app_version}", True, (150, 210, 255)), (54, 110))
         if record.get("is_developer"):
             badge = pygame.Rect(910, 44, 170, 34)
             pygame.draw.rect(self.screen, (18, 24, 34), badge, 0, border_radius=12)
@@ -9215,7 +9763,8 @@ class Game:
         for line in lines:
             self.screen.blit(self.small.render(line, True, (210, 218, 230)), (side.x + 18, sy))
             sy += 34
-        self.screen.blit(self.small.render("Cloud sync enabled", True, (190, 200, 215)), (side.x + 18, side.y + 204))
+        sync_line = self.cloud_status_label if self.cloud_status_label in ("Connected to Cloud", "Using Local Fallback") else "Cloud sync enabled"
+        self.screen.blit(self.small.render(sync_line, True, (190, 200, 215)), (side.x + 18, side.y + 204))
         hint = "Use UP/DOWN and ENTER"
         if record.get("is_developer"):
             hint += " | U registered users"
@@ -9238,11 +9787,14 @@ class Game:
         pygame.draw.rect(self.screen, (22, 28, 40), side, 0, border_radius=20)
         pygame.draw.rect(self.screen, (70, 86, 122), side, 2, border_radius=20)
         self.screen.blit(self.font.render("Account Bonus", True, WHITE), (side.x + 18, side.y + 18))
-        coins = 10000 if (self.active_account_record() or {}).get("is_developer") else 100
+        coins = DEVELOPER_FANTASY_COINS if (self.active_account_record() or {}).get("is_developer") else DEFAULT_FANTASY_COINS
         hidden_text = "Hidden packs unlocked" if (self.active_account_record() or {}).get("is_developer") else "Hidden packs locked"
         self.screen.blit(self.small.render(f"Starting coins: {coins}", True, (210, 218, 230)), (side.x + 18, side.y + 58))
         self.screen.blit(self.small.render(hidden_text, True, (210, 218, 230)), (side.x + 18, side.y + 92))
-        self.screen.blit(self.small.render("Starter pack begins after naming the club.", True, (210, 218, 230)), (side.x + 18, side.y + 126))
+        starter_text = "Starter pack begins after naming the club."
+        if (self.active_account_record() or {}).get("is_developer"):
+            starter_text = "Developer bonus: guaranteed elite-or-better starter card."
+        self.screen.blit(self.small.render(starter_text, True, (210, 218, 230)), (side.x + 18, side.y + 126))
         info = [
             "Starter pack: 15 players",
             "Guaranteed at least 1 goalkeeper",
@@ -9278,7 +9830,7 @@ class Game:
             active = idx == self.registered_users_index
             pygame.draw.rect(self.screen, (36, 44, 60), row, 0, border_radius=10)
             pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), row, 2, border_radius=10)
-            label = f"{user.get('username', '')} {'DEV' if user.get('is_developer') else 'USER'}"
+            label = f"{user.get('username', '')} {'DEV' if user.get('is_developer') else 'USER'} {user.get('storage_mode', 'CLOUD')}"
             self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 12))
             y += 46
         summary = selected.get("fantasy_summary", {})
@@ -9287,20 +9839,46 @@ class Game:
         if not cards and summary:
             cards = [{}] * summary.get("cards", 0)
         top_cards = sorted(cards, key=lambda card: (-card.get("rating", 0), card.get("name", "")))[:6]
+        lineup = snapshot.get("lineup") or []
+        coins = snapshot.get("fantasy_coins", summary.get("coins", 0))
+        packs = len(snapshot.get("my_packs", []))
+        xp = snapshot.get("fantasy_season_xp", summary.get("xp", 0))
+        team_name = summary.get("team_name") or snapshot.get("fantasy_team_name", "None")
+        highest_card = max((card.get("rating", 0) for card in cards if isinstance(card, dict)), default=0)
+        avg_top_five = 0
+        rated_cards = [card.get("rating", 0) for card in cards if isinstance(card, dict) and card.get("rating")]
+        if rated_cards:
+            top_five = sorted(rated_cards, reverse=True)[:5]
+            avg_top_five = sum(top_five) // max(1, len(top_five))
         lines = [
             f"Display Name: {selected.get('display_name', '')}",
             f"Username: {selected.get('username', '')}",
+            f"Storage: {selected.get('storage_mode', 'CLOUD')}",
             f"Developer: {'Yes' if selected.get('is_developer') else 'No'}",
             f"Last Mode: {selected.get('last_mode', 'CAREER')}",
-            f"Fantasy Team: {summary.get('team_name') or snapshot.get('fantasy_team_name', 'None')}",
+            f"Fantasy Team: {team_name}",
             f"Fantasy Cards: {summary.get('cards', len(cards))}",
+            f"Lineup Ready: {'Yes' if len(lineup) >= 11 else 'No'}",
+            f"Coins: {coins}",
+            f"My Packs: {packs}",
+            f"Season XP: {xp}",
+            f"Highest Card: {highest_card}",
+            f"Top 5 Avg: {avg_top_five}",
+            f"Career Save: {'Yes' if selected.get('career_snapshot') else 'No'}",
+            f"Fantasy Save: {'Yes' if selected.get('fantasy_snapshot') else 'No'}",
         ]
         y = detail_panel.y + 24
-        for line in lines:
-            self.screen.blit(self.font.render(line, True, WHITE), (detail_panel.x + 18, y))
-            y += 40
-        self.screen.blit(self.font.render("Top Cards", True, WHITE), (detail_panel.x + 18, y + 10))
-        y += 52
+        left_x = detail_panel.x + 18
+        right_x = detail_panel.x + 330
+        for idx, line in enumerate(lines):
+            x = left_x if idx < 7 else right_x
+            row_y = y + (idx % 7) * 38
+            self.screen.blit(self.small.render(line[:34], True, WHITE), (x, row_y))
+        meta_y = detail_panel.y + 314
+        updated_label = selected.get("updated_at") or selected.get("created_at") or "Unknown"
+        self.screen.blit(self.small.render(f"Last server update: {str(updated_label)[:36]}", True, (190, 200, 215)), (detail_panel.x + 18, meta_y))
+        self.screen.blit(self.font.render("Top Cards", True, WHITE), (detail_panel.x + 18, meta_y + 36))
+        y = meta_y + 78
         if not top_cards or not top_cards[0]:
             self.screen.blit(self.small.render("No fantasy cards yet", True, (190, 200, 215)), (detail_panel.x + 18, y))
         else:
@@ -9722,7 +10300,7 @@ class Game:
         if self.user_team:
             self.screen.blit(self.font.render(f"Club: {self.user_team}", True, WHITE), (30, 78))
         if self.game_mode == "FANTASY":
-            top_hint = "TAB cycle | SPACE play | S skip | P/W shop | D draft | ESC modes | Q logout"
+            top_hint = "TAB cycle | SPACE play | P/W shop | D draft | ESC modes | Q logout"
             bottom_hint = "A/J objectives | B SBCs | N collection | R market | M my packs | E evolutions | O competitions"
             if self.fantasy_active_competition == "champions":
                 bottom_hint = "A/J objectives | B SBCs | N collection | R market | M my packs | O competitions | K bracket"
@@ -9731,7 +10309,10 @@ class Game:
             self.screen.blit(self.small.render(top_hint, True, (180, 190, 205)), (30, 106))
             self.screen.blit(self.small.render(bottom_hint, True, (180, 190, 205)), (30, 126))
         else:
-            self.screen.blit(self.small.render("TAB cycle | SPACE play | S skip | A academy | ESC modes | Q logout", True, (180, 190, 205)), (30, 106))
+            desc = "TAB cycle | SPACE play | A academy | ESC modes | Q logout"
+            if self.game_mode != "FANTASY":
+                desc = "TAB cycle | SPACE play | S skip | A academy | ESC modes | Q logout"
+            self.screen.blit(self.small.render(desc, True, (180, 190, 205)), (30, 106))
             self.screen.blit(self.small.render("T train | C calendar | O cups | W transfers | Y youth intake", True, (180, 190, 205)), (30, 126))
 
         card_x = 30
