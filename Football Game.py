@@ -4154,6 +4154,10 @@ class Game:
             self.fantasy_favorites.append(key)
 
     def discard_fantasy_card(self, card):
+        record = self.active_account_record() or {}
+        if not record.get("is_developer"):
+            self.add_commentary("Only developer accounts can discard cards")
+            return
         if not card:
             return
         target_key = card.get("card_key")
@@ -6678,7 +6682,12 @@ class Game:
     def draw_fantasy_collection_page(self):
         self.screen.fill((14, 18, 28))
         self.screen.blit(self.big.render("Fantasy Collection", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("ARROWS move | G filter | TAB sort | F favorite | DEL/BKSP discard | ESC back", True, (190, 200, 215)), (36, 56))
+        record = self.active_account_record() or {}
+        controls = "ARROWS move | G filter | TAB sort | F favorite"
+        if record.get("is_developer"):
+            controls += " | DEL/BKSP discard"
+        controls += " | ESC back"
+        self.screen.blit(self.small.render(controls, True, (190, 200, 215)), (36, 56))
         cards = self.filtered_collection_cards()
         if not cards:
             self.screen.blit(self.font.render("No cards match the current filter", True, WHITE), (40, 120))
@@ -9973,7 +9982,8 @@ class Game:
                             self.toggle_favorite_card(cards[self.fantasy_collection_index])
                     elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE) and self.fantasy_roster:
                         cards = self.filtered_collection_cards()
-                        if cards:
+                        record = self.active_account_record() or {}
+                        if cards and record.get("is_developer"):
                             self.discard_fantasy_card(cards[self.fantasy_collection_index])
                     elif event.key == pygame.K_r:
                         self.open_fantasy_market()
