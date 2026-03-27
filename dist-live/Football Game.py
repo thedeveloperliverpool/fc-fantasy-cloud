@@ -1517,6 +1517,7 @@ class Game:
         self.cloud_runtime_config = {"announcement": "", "maintenance_mode": False, "disabled_modes": {}}
         self.dev_admin_status = {"ok": False, "settings": {}, "metrics": {}}
         self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
+        self.reconnect_button_rect = None
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
             "cloud_api_url": self.app_settings.get("cloud_api_url", "http://127.0.0.1:8080"),
@@ -9217,6 +9218,11 @@ class Game:
                 self.save_active_profile()
                 pygame.quit()
                 sys.exit(0)
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self.reconnect_button_rect and self.reconnect_button_rect.collidepoint(event.pos):
+                    if self.state in ("ACCOUNT_HOME", "ACCOUNT_LOGIN", "ACCOUNT_CREATE", "ACCOUNT_DEV_LOGIN", "CLOUD_SETTINGS", "MODE_SELECT"):
+                        self.reconnect_cloud()
+                        continue
             if event.type == pygame.KEYDOWN:
                 if self.state == "ACCOUNT_HOME":
                     options = ["Sign In", "Create Account", "Developer Sign In"]
@@ -10108,8 +10114,19 @@ class Game:
         value_label = f"Coins: {self.fantasy_coins}" if self.game_mode == "FANTASY" else f"Budget: {self.user_budget}"
         self.screen.blit(self.small.render(value_label, True, WHITE), (x + 150, y + 48))
 
+    def draw_reconnect_button(self, x, y, width=170, height=38, label="Reconnect Cloud"):
+        rect = pygame.Rect(x, y, width, height)
+        self.reconnect_button_rect = rect
+        accent = (92, 176, 255) if self.cloud_status_label == "Connected to Cloud" else (244, 206, 84)
+        pygame.draw.rect(self.screen, (18, 24, 34), rect, 0, border_radius=12)
+        pygame.draw.rect(self.screen, accent, rect, 2, border_radius=12)
+        text = self.small.render(label, True, WHITE)
+        self.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+        return rect
+
     def draw_account_home(self):
         self.screen.fill((10, 14, 24))
+        self.reconnect_button_rect = None
         local = self.local_account_record()
         local_cloud_state = (local or {}).get("cloud_state", "LOCAL_ONLY")
         if self.account_storage_mode == "LOCAL":
@@ -10143,6 +10160,7 @@ class Game:
         pygame.draw.rect(self.screen, (18, 24, 34), storage_badge, 0, border_radius=12)
         pygame.draw.rect(self.screen, storage_accent, storage_badge, 2, border_radius=12)
         self.screen.blit(self.small.render(f"ACCOUNT STORAGE: {storage_label.upper()}", True, WHITE), (storage_badge.x + 14, storage_badge.y + 9))
+        self.draw_reconnect_button(850, 128, width=230, label="Reconnect to Cloud")
         options = ["Sign In", "Create Account", "Developer Sign In"]
         y = 226
         for idx, label in enumerate(options):
@@ -10174,11 +10192,12 @@ class Game:
         pygame.draw.rect(self.screen, (22, 28, 40), footer, 0, border_radius=18)
         pygame.draw.rect(self.screen, (70, 86, 122), footer, 2, border_radius=18)
         update_text = "Auto updates on" if self.app_version_info.get("manifest_url") else "Auto updates off"
-        self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | TAB reconnect | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
+        self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | Click reconnect | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
         self.screen.blit(self.small.render(f"Installed {self.app_version} | {update_text}", True, (150, 210, 255)), (700, 646))
 
     def draw_account_form(self):
         self.screen.fill((12, 16, 26))
+        self.reconnect_button_rect = None
         titles = {
             "ACCOUNT_LOGIN": "Sign In",
             "ACCOUNT_CREATE": "Create Account",
@@ -10188,7 +10207,8 @@ class Game:
         pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
         pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
         self.screen.blit(self.big.render(titles.get(self.state, "Account"), True, WHITE), (52, 44))
-        self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | TAB reconnect | ESC back", True, (190, 200, 215)), (54, 86))
+        self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | Click reconnect | ESC back", True, (190, 200, 215)), (54, 86))
+        self.draw_reconnect_button(880, 78, width=180)
         badge_text = self.cloud_status_label
         if badge_text in ("Connected to Cloud", "Using Local Fallback"):
             badge_color = (92, 176, 255) if badge_text == "Connected to Cloud" else (244, 206, 84)
@@ -10244,6 +10264,7 @@ class Game:
 
     def draw_mode_select(self):
         self.screen.fill((12, 16, 26))
+        self.reconnect_button_rect = None
         record = self.active_account_record() or {}
         header = pygame.Rect(34, 24, 1098, 128)
         pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
@@ -10252,6 +10273,7 @@ class Game:
         self.screen.blit(title, (52, 42))
         self.screen.blit(self.small.render(f"Signed in as {record.get('display_name', self.active_account or 'Guest')}", True, (190, 200, 215)), (54, 84))
         self.screen.blit(self.small.render(f"Version {self.app_version}", True, (150, 210, 255)), (54, 110))
+        self.draw_reconnect_button(884, 86, width=196)
         if record.get("is_developer"):
             badge = pygame.Rect(910, 44, 170, 34)
             pygame.draw.rect(self.screen, (18, 24, 34), badge, 0, border_radius=12)
@@ -10487,11 +10509,13 @@ class Game:
 
     def draw_cloud_settings_page(self):
         self.screen.fill((12, 16, 26))
+        self.reconnect_button_rect = None
         header = pygame.Rect(34, 24, 1098, 120)
         pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
         pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
         self.screen.blit(self.big.render("Cloud Settings", True, WHITE), (52, 42))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER save | TAB reconnect | ESC back", True, (190, 200, 215)), (54, 86))
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER save | Click reconnect | ESC back", True, (190, 200, 215)), (54, 86))
+        self.draw_reconnect_button(888, 78, width=192)
         rows = [
             ("Cloud Mode", "REQUIRED"),
             ("Cloud API URL", self.cloud_settings_inputs.get("cloud_api_url", "")),
