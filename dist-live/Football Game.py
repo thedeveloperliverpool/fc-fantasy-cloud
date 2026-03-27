@@ -1650,12 +1650,14 @@ class Game:
             return None
         fantasy_snapshot = record.get("fantasy_snapshot") if include_snapshots else None
         fantasy_roster = fantasy_snapshot.get("fantasy_roster", []) if isinstance(fantasy_snapshot, dict) else []
+        cloud_state = record.get("cloud_state", "LOCAL_ONLY")
         payload = {
             "display_name": record.get("display_name", ""),
             "username": record.get("username", ""),
             "is_developer": bool(record.get("is_developer")),
             "last_mode": record.get("last_mode", "CAREER"),
             "storage_mode": "LOCAL",
+            "cloud_state": cloud_state,
             "fantasy_summary": {
                 "has_save": bool(record.get("fantasy_snapshot")),
                 "team_name": fantasy_snapshot.get("fantasy_team_name") if isinstance(fantasy_snapshot, dict) else None,
@@ -1683,12 +1685,14 @@ class Game:
         local["username"] = username
         local["is_developer"] = bool(record.get("is_developer", local.get("is_developer", False)))
         local["last_mode"] = record.get("last_mode", local.get("last_mode", "CAREER"))
+        local["cloud_state"] = "SYNCED"
         if "career_snapshot" in record and record.get("career_snapshot") is not None:
             local["career_snapshot"] = record.get("career_snapshot")
         if "fantasy_snapshot" in record and record.get("fantasy_snapshot") is not None:
             local["fantasy_snapshot"] = record.get("fantasy_snapshot")
         if password:
             local["password_hash"] = self.hash_password(password)
+            local["sync_password"] = password
         users[username] = local
         self.persist_local_accounts()
         return local
@@ -1702,7 +1706,10 @@ class Game:
             "display_name": display_name.strip(),
             "username": username,
             "password_hash": self.hash_password(password),
+            "sync_password": password,
             "is_developer": developer_code == DEVELOPER_CODE,
+            "developer_code": developer_code.strip(),
+            "cloud_state": "PENDING_CREATE",
             "last_mode": "CAREER",
             "career_snapshot": None,
             "fantasy_snapshot": None,
@@ -1719,6 +1726,10 @@ class Game:
             raise RuntimeError("Invalid username or password.")
         if require_dev and (not record.get("is_developer") or developer_code != DEVELOPER_CODE):
             raise RuntimeError("Developer code required.")
+        record["sync_password"] = password
+        if developer_code:
+            record["developer_code"] = developer_code.strip()
+        self.persist_local_accounts()
         return self.serialize_local_account(record, include_snapshots=True)
 
     def save_local_snapshot(self, mode, snapshot):
@@ -1806,6 +1817,10 @@ class Game:
                 self.sync_record_to_local(self.cloud_user_cache)
                 self.account_storage_mode = "CLOUD"
                 self.account_message = "Cloud session restored"
+            elif self.try_sync_active_account_to_cloud():
+                self.account_storage_mode = "CLOUD"
+                self.cloud_status_label = "Connected to Cloud"
+                return True
             else:
                 self.cloud_request("GET", "/health")
                 self.account_message = "Cloud server reachable. Sign in to sync."
@@ -1814,6 +1829,52 @@ class Game:
         except RuntimeError as exc:
             self.account_message = str(exc)
             return False
+
+    def try_sync_active_account_to_cloud(self):
+        local = self.local_account_record()
+        if not local:
+            return False
+        password = local.get("sync_password")
+        if not password:
+            self.account_message = "Local account needs a fresh sign-in before cloud sync"
+            return False
+        username = local.get("username", "")
+        developer_code = local.get("developer_code", "")
+        register_payload = {
+            "display_name": local.get("display_name", username),
+            "username": username,
+            "password": password,
+            "developer_code": developer_code,
+        }
+        login_payload = {
+            "username": username,
+            "password": password,
+            "developer_code": developer_code,
+            "require_dev": False,
+        }
+        data = None
+        cloud_state = local.get("cloud_state", "LOCAL_ONLY")
+        if cloud_state == "PENDING_CREATE":
+            try:
+                data = self.cloud_request("POST", "/api/register", register_payload)
+                self.account_message = "Local account promoted to cloud"
+            except RuntimeError as exc:
+                if "already exists" not in str(exc).lower():
+                    raise
+        if data is None:
+            data = self.cloud_request("POST", "/api/login", login_payload)
+            if cloud_state != "SYNCED":
+                self.account_message = "Local account linked to cloud"
+        self.cloud_token = data.get("token")
+        self.cloud_user_cache = data.get("user")
+        synced = self.sync_record_to_local(self.cloud_user_cache, password=password)
+        if synced is not None:
+            synced["cloud_state"] = "SYNCED"
+            if developer_code:
+                synced["developer_code"] = developer_code
+            self.persist_local_accounts()
+        self.migrate_local_snapshots_to_cloud()
+        return True
 
     def online_divisions_available(self):
         if self.account_storage_mode == "LOCAL" or not self.cloud_token:
@@ -2307,7 +2368,17 @@ class Game:
             self.migrate_local_snapshots_to_cloud()
         record = self.active_account_record() or record or {}
         self.mode_select_index = 0
-        suffix = " (local fallback)" if storage_mode == "LOCAL" else ""
+        local = self.local_account_record(username)
+        if storage_mode == "LOCAL":
+            cloud_state = (local or {}).get("cloud_state", "LOCAL_ONLY")
+            if cloud_state == "SYNCED":
+                suffix = " (offline mirror)"
+            elif cloud_state == "PENDING_CREATE":
+                suffix = " (awaiting cloud sync)"
+            else:
+                suffix = " (local fallback)"
+        else:
+            suffix = ""
         if not self.account_message or self.account_message == prior_message:
             self.account_message = f"Welcome {record.get('display_name', username)}{suffix}"
         self.state = "MODE_SELECT"
@@ -9663,7 +9734,17 @@ class Game:
 
     def draw_account_home(self):
         self.screen.fill((10, 14, 24))
-        storage_label = "Local Fallback" if self.account_storage_mode == "LOCAL" else "Cloud"
+        local = self.local_account_record()
+        local_cloud_state = (local or {}).get("cloud_state", "LOCAL_ONLY")
+        if self.account_storage_mode == "LOCAL":
+            if local_cloud_state == "SYNCED":
+                storage_label = "Offline Mirror"
+            elif local_cloud_state == "PENDING_CREATE":
+                storage_label = "Waiting for Cloud"
+            else:
+                storage_label = "Local Fallback"
+        else:
+            storage_label = "Cloud"
         storage_accent = (244, 206, 84) if self.account_storage_mode == "LOCAL" else (92, 176, 255)
         hero = pygame.Rect(34, 24, 1098, 150)
         pygame.draw.rect(self.screen, (20, 28, 44), hero, 0, border_radius=26)
