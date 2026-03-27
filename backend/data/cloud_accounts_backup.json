@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "display_name": "Dev",
+      "username": "devuser",
+      "password_hash": "d22f6ee220f388a24c63ddf2226542e879a5674555412456e1383f529f80125f",
+      "password_salt": "92162b9e5b758ba743f7cab3957cfa99",
+      "is_developer": 1,
+      "is_banned": 0,
+      "suspended_until": null,
+      "career_snapshot": null,
+      "fantasy_snapshot": null,
+      "last_mode": "CAREER",
+      "created_at": "2026-03-27T05:44:23+00:00",
+      "updated_at": "2026-03-27T05:44:23+00:00"
+    },
+    {
+      "id": 2,
+      "display_name": "Player",
+      "username": "player1",
+      "password_hash": "59b3015d7486b2d3ae0dace13814129797849efd4ae077f698e828675907a0de",
+      "password_salt": "ead1af1c753848d342004aa01d7c955f",
+      "is_developer": 0,
+      "is_banned": 0,
+      "suspended_until": null,
+      "career_snapshot": null,
+      "fantasy_snapshot": "{\"game_mode\": \"FANTASY\", \"fantasy_team_name\": \"Player FC\", \"fantasy_roster\": [], \"fantasy_coins\": 3500, \"my_packs\": [\"gold\", \"gold\"], \"fantasy_season_xp\": 0, \"fantasy_season_claimed\": 0, \"fantasy_objectives\": {}, \"fantasy_competitions\": {}, \"fantasy_active_competition\": \"division\", \"fantasy_match_competition\": \"division\", \"current_theme\": \"Open\", \"team_lineups\": {\"Player FC\": []}, \"roster_data\": {\"Player FC\": []}, \"rating_cache\": {}, \"event_evo_tokens\": 0}",
+      "last_mode": "CAREER",
+      "created_at": "2026-03-27T05:44:23+00:00",
+      "updated_at": "2026-03-27T05:44:23+00:00"
+    }
+  ],
+  "online_divisions": [],
+  "online_tournaments": [],
+  "backed_up_at": "2026-03-27T05:44:23+00:00"
+}

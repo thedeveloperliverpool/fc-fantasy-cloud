@@ -686,6 +686,116 @@ def get_team_league(team):
         return "Premier League"
     return "World League"
 
+
+LEAGUE_NATIONS = {
+    "Premier League": "England",
+    "La Liga": "Spain",
+    "Bundesliga": "Germany",
+    "Serie A": "Italy",
+    "Ligue 1": "France",
+    "MLS": "United States",
+    "Liga MX": "Mexico",
+    "Saudi Pro League": "Saudi Arabia",
+    "Liga Portugal": "Portugal",
+    "Eredivisie": "Netherlands",
+    "Super Lig": "Turkey",
+    "Scottish Premiership": "Scotland",
+    "Belgian Pro League": "Belgium",
+    "Austrian Bundesliga": "Austria",
+    "Ukrainian Premier League": "Ukraine",
+    "Croatian League": "Croatia",
+    "Danish Superliga": "Denmark",
+    "Brazil Serie A": "Brazil",
+    "Argentine Primera": "Argentina",
+    "Icons": "Icons",
+    "GOAT": "Legends",
+    "World League": "World",
+}
+
+PLAYER_NATIONS = {
+    "Kylian Mbappe": "France",
+    "Erling Haaland": "Norway",
+    "Jude Bellingham": "England",
+    "Vinicius Junior": "Brazil",
+    "Neymar": "Brazil",
+    "Mohamed Salah": "Egypt",
+    "Harry Kane": "England",
+    "Jamal Musiala": "Germany",
+    "Lionel Messi": "Argentina",
+    "Cristiano Ronaldo": "Portugal",
+    "Robert Lewandowski": "Poland",
+    "Lamine Yamal": "Spain",
+    "Pedri": "Spain",
+    "Frenkie de Jong": "Netherlands",
+    "Raphinha": "Brazil",
+    "Ronald Araujo": "Uruguay",
+    "Antoine Griezmann": "France",
+    "Jan Oblak": "Slovenia",
+    "Julian Alvarez": "Argentina",
+    "Nico Williams": "Spain",
+    "Takefusa Kubo": "Japan",
+    "Alexander Isak": "Sweden",
+    "Joshua Kimmich": "Germany",
+    "Florian Wirtz": "Germany",
+    "Victor Boniface": "Nigeria",
+    "Jeremie Frimpong": "Netherlands",
+    "Serhou Guirassy": "Guinea",
+    "Gregor Kobel": "Switzerland",
+    "Victor Osimhen": "Nigeria",
+    "Khvicha Kvaratskhelia": "Georgia",
+    "Lautaro Martinez": "Argentina",
+    "Nicolo Barella": "Italy",
+    "Hakan Calhanoglu": "Turkey",
+    "Mike Maignan": "France",
+    "Rafael Leao": "Portugal",
+    "Theo Hernandez": "France",
+    "Christian Pulisic": "United States",
+    "Dusan Vlahovic": "Serbia",
+    "Paulo Dybala": "Argentina",
+    "Gianluigi Donnarumma": "Italy",
+    "Ousmane Dembele": "France",
+    "Achraf Hakimi": "Morocco",
+    "Joao Neves": "Portugal",
+    "Bradley Barcola": "France",
+    "Marquinhos": "Brazil",
+    "Karim Benzema": "France",
+    "Sadio Mane": "Senegal",
+    "Ruben Neves": "Portugal",
+    "Aleksandar Mitrovic": "Serbia",
+    "Angel Di Maria": "Argentina",
+    "Diogo Costa": "Portugal",
+    "Lev Yashin": "Icons",
+    "Cafu": "Brazil",
+    "Franz Beckenbauer": "Germany",
+    "Paolo Maldini": "Italy",
+    "Roberto Carlos": "Brazil",
+    "Xavi": "Spain",
+    "Zinedine Zidane": "France",
+    "Diego Maradona": "Argentina",
+    "Johan Cruyff": "Netherlands",
+    "Pele": "Brazil",
+    "Ronaldinho": "Brazil",
+    "Gianluigi Buffon": "Italy",
+    "Franco Baresi": "Italy",
+    "Carlos Alberto Torres": "Brazil",
+    "Sergio Ramos": "Spain",
+    "Andres Iniesta": "Spain",
+    "Michel Platini": "France",
+    "David Beckham": "England",
+    "Ronaldo Nazario": "Brazil",
+    "Thierry Henry": "France",
+    "George Best": "Northern Ireland",
+    "Garrincha": "Brazil",
+}
+
+
+def get_team_nation(team):
+    return LEAGUE_NATIONS.get(get_team_league(team), "World")
+
+
+def get_player_nation(name, team):
+    return PLAYER_NATIONS.get(normalize_player_name(name), get_team_nation(team))
+
 STADIUMS = {
     "Arsenal": "Emirates Stadium",
     "Aston Villa": "Villa Park",
@@ -1404,6 +1514,8 @@ class Game:
         self.cloud_token = None
         self.cloud_user_cache = None
         self.cloud_registered_users = []
+        self.cloud_runtime_config = {"announcement": "", "maintenance_mode": False, "disabled_modes": {}}
+        self.dev_admin_status = {"ok": False, "settings": {}, "metrics": {}}
         self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
@@ -1417,6 +1529,13 @@ class Game:
         self.account_inputs = {"display_name": "", "username": "", "password": "", "developer_code": ""}
         self.mode_select_index = 0
         self.registered_users_index = 0
+        self.dev_console_tab = 0
+        self.dev_search_query = ""
+        self.dev_action_message = ""
+        self.dev_coin_delta_index = 1
+        self.dev_pack_index = 0
+        self.dev_card_index = 0
+        self.dev_announcement_input = ""
         self.profile_autosave_timer = 0.0
         self.fantasy_budget = 400
         self.fantasy_roster = []
@@ -1811,6 +1930,7 @@ class Game:
 
     def reconnect_cloud(self):
         try:
+            self.fetch_cloud_runtime_config()
             if self.cloud_token:
                 data = self.cloud_request("GET", "/api/profile", needs_auth=True)
                 self.cloud_user_cache = data.get("user")
@@ -1829,6 +1949,133 @@ class Game:
         except RuntimeError as exc:
             self.account_message = str(exc)
             return False
+
+    def fetch_cloud_runtime_config(self):
+        try:
+            data = self.cloud_request("GET", "/api/config")
+            if isinstance(data, dict):
+                self.cloud_runtime_config = {
+                    "announcement": data.get("announcement", ""),
+                    "maintenance_mode": bool(data.get("maintenance_mode")),
+                    "disabled_modes": data.get("disabled_modes", {}) if isinstance(data.get("disabled_modes"), dict) else {},
+                }
+            return self.cloud_runtime_config
+        except RuntimeError:
+            return self.cloud_runtime_config
+
+    def developer_tabs(self):
+        return ["Users", "Economy", "Tournaments", "Live Ops", "Support"]
+
+    def developer_coin_amounts(self):
+        return [100, 1000, 10000, 50000]
+
+    def developer_pack_ids(self):
+        packs = [pack["id"] for pack in SHOP_PACKS]
+        event_pack = self.active_event_pack_entry()
+        if event_pack and event_pack["id"] not in packs:
+            packs.append(event_pack["id"])
+        return packs or ["gold"]
+
+    def developer_card_catalog(self):
+        pool = self.fantasy_pool or []
+        cards = sorted(pool, key=lambda card: (-card.get("rating", 0), card.get("name", "")))
+        return cards[:120]
+
+    def filtered_registered_users(self):
+        users = self.cloud_registered_users or []
+        query = self.dev_search_query.strip().lower()
+        if not query:
+            return users
+        return [
+            user for user in users
+            if query in str(user.get("username", "")).lower() or query in str(user.get("display_name", "")).lower()
+        ]
+
+    def selected_registered_user(self):
+        users = self.filtered_registered_users()
+        if not users:
+            return None
+        self.registered_users_index = max(0, min(self.registered_users_index, len(users) - 1))
+        return users[self.registered_users_index]
+
+    def refresh_dev_user(self, user):
+        if not user:
+            return
+        username = user.get("username")
+        replaced = False
+        for idx, existing in enumerate(self.cloud_registered_users):
+            if existing.get("username") == username:
+                self.cloud_registered_users[idx] = user
+                replaced = True
+                break
+        if not replaced:
+            self.cloud_registered_users.append(user)
+            self.cloud_registered_users.sort(key=lambda item: item.get("username", ""))
+        if username == self.active_account:
+            self.cloud_user_cache = user
+            local = self.sync_record_to_local(user)
+            if local is not None and self.account_storage_mode == "LOCAL":
+                self.account_storage_mode = "CLOUD"
+
+    def fetch_admin_status(self):
+        try:
+            data = self.cloud_request("GET", "/api/admin/status", needs_auth=True)
+            if isinstance(data, dict):
+                self.dev_admin_status = data
+                self.dev_announcement_input = data.get("settings", {}).get("announcement", self.dev_announcement_input)
+            return self.dev_admin_status
+        except RuntimeError as exc:
+            self.dev_action_message = str(exc)
+            return self.dev_admin_status
+
+    def admin_user_action(self, username, action, **payload):
+        try:
+            data = self.cloud_request(
+                "POST",
+                "/api/admin/user-action",
+                {"username": username, "action": action, **payload},
+                needs_auth=True,
+            )
+            user = data.get("user")
+            self.refresh_dev_user(user)
+            self.dev_action_message = f"{action.replace('_', ' ').title()} complete for {username}"
+            return user
+        except RuntimeError as exc:
+            self.dev_action_message = str(exc)
+            return None
+
+    def admin_tournament_action(self, username, action, **payload):
+        try:
+            self.cloud_request(
+                "POST",
+                "/api/admin/tournament-action",
+                {"username": username, "action": action, **payload},
+                needs_auth=True,
+            )
+            self.fetch_registered_users()
+            self.dev_action_message = f"{action.replace('_', ' ').title()} complete for {username}"
+            return True
+        except RuntimeError as exc:
+            self.dev_action_message = str(exc)
+            return False
+
+    def admin_update_settings(self, **payload):
+        try:
+            data = self.cloud_request("PUT", "/api/admin/settings", payload, needs_auth=True)
+            settings = data.get("settings", {})
+            self.dev_admin_status["settings"] = settings
+            self.cloud_runtime_config.update(
+                {
+                    "announcement": settings.get("announcement", ""),
+                    "maintenance_mode": bool(settings.get("maintenance_mode")),
+                    "disabled_modes": settings.get("disabled_modes", {}),
+                }
+            )
+            self.dev_action_message = "Developer settings updated"
+            return settings
+        except RuntimeError as exc:
+            self.dev_action_message = str(exc)
+            return None
 
     def try_sync_active_account_to_cloud(self):
         local = self.local_account_record()
@@ -1959,12 +2206,21 @@ class Game:
         try:
             data = self.cloud_request("GET", "/api/admin/users", needs_auth=True)
             cloud_users = data.get("users", [])
+            if isinstance(data.get("settings"), dict):
+                self.dev_admin_status = {
+                    "ok": True,
+                    "settings": data.get("settings", {}),
+                    "metrics": data.get("health", {}),
+                }
+                self.dev_announcement_input = data.get("settings", {}).get("announcement", self.dev_announcement_input)
             merged = list(cloud_users)
             seen = {item.get("username") for item in cloud_users if isinstance(item, dict)}
             for user in local_users:
                 if user.get("username") not in seen:
                     merged.append(user)
             self.cloud_registered_users = merged
+            filtered = self.filtered_registered_users()
+            self.registered_users_index = max(0, min(self.registered_users_index, max(0, len(filtered) - 1)))
             return self.cloud_registered_users
         except RuntimeError as exc:
             if local_users:
@@ -2404,6 +2660,7 @@ class Game:
                 },
             )
             self.cloud_token = data.get("token")
+            self.fetch_cloud_runtime_config()
             self.sync_record_to_local(data.get("user"), password=password)
             self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
@@ -2433,6 +2690,7 @@ class Game:
                 },
             )
             self.cloud_token = data.get("token")
+            self.fetch_cloud_runtime_config()
             self.sync_record_to_local(data.get("user"), password=password)
             self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
@@ -2995,6 +3253,7 @@ class Game:
                     "name": name,
                     "team": team,
                     "league": get_team_league(team),
+                    "nation": get_player_nation(name, team),
                     "rating": promo_rating,
                     "base_rating": rating,
                     "price": max(5, int(promo_rating * 0.6)),
@@ -3037,6 +3296,7 @@ class Game:
                 "name": icon["name"],
                 "team": icon["team"],
                 "league": get_team_league(icon["team"]),
+                "nation": get_player_nation(icon["name"], icon["team"]),
                 "rating": icon["rating"],
                 "base_rating": icon["rating"],
                 "price": max(5, int(icon["rating"] * 0.6)),
@@ -3064,6 +3324,7 @@ class Game:
                 "name": name,
                 "team": team,
                 "league": get_team_league(team),
+                "nation": get_player_nation(name, team),
                 "rating": rating,
                 "base_rating": rating,
                 "price": max(5, int(rating * 0.6)),
@@ -3092,6 +3353,7 @@ class Game:
                 "name": name,
                 "team": team,
                 "league": get_team_league(team),
+                "nation": get_player_nation(name, team),
                 "rating": rating,
                 "base_rating": rating,
                 "price": max(5, int(rating * 0.6)),
@@ -3114,6 +3376,7 @@ class Game:
                 "name": goat["name"],
                 "team": goat["team"],
                 "league": get_team_league(goat["team"]),
+                "nation": get_player_nation(goat["name"], goat["team"]),
                 "rating": goat["rating"],
                 "base_rating": goat["rating"],
                 "price": max(5, int(goat["rating"] * 0.6)),
@@ -3135,6 +3398,7 @@ class Game:
                 "name": player["name"],
                 "team": player["team"],
                 "league": get_team_league(player["team"]),
+                "nation": get_player_nation(player["name"], player["team"]),
                 "rating": player["rating"],
                 "base_rating": player["rating"],
                 "price": max(5, int(player["rating"] * 0.6)),
@@ -3491,22 +3755,27 @@ class Game:
         positions = self.get_home_positions()
         team_counts = {}
         league_counts = {}
+        nation_counts = {}
         preferred_positions = []
         clubs = []
         leagues = []
+        nations = []
         roles = []
         rarities = []
         for name, num, rating in self.user_starting:
             meta = self.get_fantasy_card_meta(name, num, rating) or self.get_fantasy_card_meta(name)
             club = meta.get("team", "") if meta else ""
             league = meta.get("league", get_team_league(club)) if meta else ""
+            nation = meta.get("nation", get_player_nation(name, club)) if meta else get_player_nation(name, club)
             team_counts[club] = team_counts.get(club, 0) + 1
             league_counts[league] = league_counts.get(league, 0) + 1
+            nation_counts[nation] = nation_counts.get(nation, 0) + 1
         for i, (name, num, rating) in enumerate(self.user_starting):
             meta = self.get_fantasy_card_meta(name, num, rating) or self.get_fantasy_card_meta(name)
             preferred = meta.get("position", "ST") if meta else "ST"
             club = meta.get("team", "") if meta else ""
             league = meta.get("league", get_team_league(club)) if meta else ""
+            nation = meta.get("nation", get_player_nation(name, club)) if meta else get_player_nation(name, club)
             rarity = meta.get("rarity", "Bronze") if meta else "Bronze"
             role = positions[i][2] if i < len(positions) else "FW"
             chem = 0
@@ -3517,6 +3786,9 @@ class Game:
             if team_counts.get(club, 0) >= 2:
                 chem += 1
                 tags.append("CLUB")
+            elif nation_counts.get(nation, 0) >= 2 and nation not in ("World", "Icons", "Legends"):
+                chem += 1
+                tags.append("NATION")
             elif league_counts.get(league, 0) >= 2:
                 chem += 1
                 tags.append("LEAGUE")
@@ -3537,6 +3809,7 @@ class Game:
             preferred_positions.append(preferred)
             clubs.append(club)
             leagues.append(league)
+            nations.append(nation)
             roles.append(role)
             rarities.append(rarity)
         seen_links = set()
@@ -3560,6 +3833,7 @@ class Game:
                 seen_links.add(edge)
                 same_club = clubs[i] and clubs[i] == clubs[j]
                 same_league = leagues[i] and leagues[i] == leagues[j]
+                same_nation = nations[i] and nations[i] == nations[j] and nations[i] not in ("World", "Icons", "Legends")
                 unique_anchor = rarities[i] in ("Icon", "GOAT") or rarities[j] in ("Icon", "GOAT")
                 rivalry = self.are_rival_teams(clubs[i], clubs[j])
                 both_fit = self.role_accepts_position(roles[i], preferred_positions[i]) and self.role_accepts_position(roles[j], preferred_positions[j])
@@ -3569,6 +3843,9 @@ class Game:
                 elif same_club:
                     strength = 3
                     label = "CLUB"
+                elif same_nation:
+                    strength = 2
+                    label = "NATION"
                 elif same_league:
                     strength = 2
                     label = "LEAGUE"
@@ -4540,6 +4817,7 @@ class Game:
             "name": name,
             "team": team,
             "league": get_team_league(team),
+            "nation": get_player_nation(name, team),
             "rating": rating,
             "base_rating": original_rating,
             "price": max(5, int(rating * 0.6)),
@@ -7269,6 +7547,7 @@ class Game:
                 controlled_entry = self.user_starting[self.user_player_index]
         a_list[a_idx], b_list[b_idx] = b_list[b_idx], a_list[a_idx]
         self.persist_user_squad_layout()
+        self.update_fantasy_chemistry()
         if controlled_entry is not None:
             if controlled_entry in self.user_starting:
                 self.user_player_index = self.user_starting.index(controlled_entry)
@@ -9028,6 +9307,7 @@ class Game:
                         record = self.active_account_record() or {}
                         if record.get("is_developer"):
                             self.fetch_registered_users()
+                            self.fetch_admin_status()
                             self.registered_users_index = 0
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_ESCAPE:
@@ -9046,11 +9326,98 @@ class Game:
                                 self.fantasy_team_name += event.unicode
                     continue
                 if self.state == "DEV_REGISTERED_USERS":
-                    users = self.fetch_registered_users()
-                    if event.key == pygame.K_DOWN and users:
+                    users = self.filtered_registered_users()
+                    selected = self.selected_registered_user()
+                    if event.key == pygame.K_TAB:
+                        self.dev_console_tab = (self.dev_console_tab + 1) % len(self.developer_tabs())
+                    elif event.key == pygame.K_DOWN and users:
                         self.registered_users_index = (self.registered_users_index + 1) % len(users)
                     elif event.key == pygame.K_UP and users:
                         self.registered_users_index = (self.registered_users_index - 1) % len(users)
+                    elif event.key == pygame.K_BACKSPACE:
+                        if self.dev_console_tab == 0:
+                            self.dev_search_query = self.dev_search_query[:-1]
+                        elif self.dev_console_tab == 3:
+                            self.dev_announcement_input = self.dev_announcement_input[:-1]
+                    elif event.key == pygame.K_RIGHT:
+                        if self.dev_console_tab == 1:
+                            self.dev_coin_delta_index = (self.dev_coin_delta_index + 1) % len(self.developer_coin_amounts())
+                        elif self.dev_console_tab == 2 and users:
+                            self.dev_pack_index = (self.dev_pack_index + 1) % len(self.developer_pack_ids())
+                    elif event.key == pygame.K_LEFT:
+                        if self.dev_console_tab == 1:
+                            self.dev_coin_delta_index = (self.dev_coin_delta_index - 1) % len(self.developer_coin_amounts())
+                        elif self.dev_console_tab == 2 and users:
+                            self.dev_pack_index = (self.dev_pack_index - 1) % len(self.developer_pack_ids())
+                    elif event.key == pygame.K_RIGHTBRACKET and self.dev_console_tab == 1 and self.developer_card_catalog():
+                        self.dev_card_index = (self.dev_card_index + 1) % len(self.developer_card_catalog())
+                    elif event.key == pygame.K_LEFTBRACKET and self.dev_console_tab == 1 and self.developer_card_catalog():
+                        self.dev_card_index = (self.dev_card_index - 1) % len(self.developer_card_catalog())
+                    elif event.key == pygame.K_PERIOD and self.dev_console_tab == 1:
+                        self.dev_pack_index = (self.dev_pack_index + 1) % len(self.developer_pack_ids())
+                    elif event.key == pygame.K_COMMA and self.dev_console_tab == 1:
+                        self.dev_pack_index = (self.dev_pack_index - 1) % len(self.developer_pack_ids())
+                    elif event.key == pygame.K_RETURN:
+                        if self.dev_console_tab == 3:
+                            self.admin_update_settings(announcement=self.dev_announcement_input)
+                        else:
+                            self.fetch_registered_users()
+                            self.fetch_admin_status()
+                    elif selected and self.dev_console_tab == 0:
+                        if event.key == pygame.K_b:
+                            self.admin_user_action(selected.get("username"), "unban" if selected.get("is_banned") else "ban")
+                        elif event.key == pygame.K_v:
+                            self.admin_user_action(selected.get("username"), "unsuspend" if selected.get("is_suspended") else "suspend", days=7)
+                        elif event.key == pygame.K_p:
+                            self.admin_user_action(selected.get("username"), "revoke_developer" if selected.get("is_developer") else "promote_developer")
+                        elif event.key == pygame.K_w:
+                            self.admin_user_action(selected.get("username"), "reset_password", new_password="legend123")
+                        elif event.key == pygame.K_f:
+                            self.admin_user_action(selected.get("username"), "repair_account")
+                    elif selected and self.dev_console_tab == 1:
+                        amount = self.developer_coin_amounts()[self.dev_coin_delta_index]
+                        if event.key == pygame.K_c:
+                            self.admin_user_action(selected.get("username"), "grant_coins", amount=amount)
+                        elif event.key == pygame.K_x:
+                            self.admin_user_action(selected.get("username"), "grant_coins", amount=-amount)
+                        elif event.key == pygame.K_o:
+                            pack_ids = self.developer_pack_ids()
+                            self.admin_user_action(selected.get("username"), "grant_packs", pack_id=pack_ids[self.dev_pack_index % len(pack_ids)], amount=1)
+                        elif event.key == pygame.K_l:
+                            pack_ids = self.developer_pack_ids()
+                            self.admin_user_action(selected.get("username"), "grant_packs", pack_id=pack_ids[self.dev_pack_index % len(pack_ids)], amount=-1)
+                        elif event.key == pygame.K_g and self.developer_card_catalog():
+                            card = self.developer_card_catalog()[self.dev_card_index % len(self.developer_card_catalog())]
+                            self.admin_user_action(selected.get("username"), "add_card", card=card)
+                        elif event.key == pygame.K_r:
+                            snapshot = selected.get("fantasy_snapshot") or {}
+                            roster = snapshot.get("fantasy_roster", [])
+                            if roster:
+                                self.admin_user_action(selected.get("username"), "remove_card", card_key=roster[0].get("card_key"))
+                    elif selected and self.dev_console_tab == 2:
+                        if event.key == pygame.K_d:
+                            self.admin_tournament_action(selected.get("username"), "reset_division")
+                        elif event.key == pygame.K_t:
+                            self.admin_tournament_action(selected.get("username"), "reset_tournament")
+                        elif event.key == pygame.K_a:
+                            self.admin_tournament_action(selected.get("username"), "award_tournament_coins", amount=self.developer_coin_amounts()[self.dev_coin_delta_index])
+                    elif self.dev_console_tab == 3:
+                        if event.key == pygame.K_m:
+                            settings = self.dev_admin_status.get("settings", {})
+                            self.admin_update_settings(maintenance_mode=not settings.get("maintenance_mode", False))
+                        elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                            keys = ["tournaments", "market", "objectives"]
+                            target_key = keys[[pygame.K_1, pygame.K_2, pygame.K_3].index(event.key)]
+                            disabled = dict(self.dev_admin_status.get("settings", {}).get("disabled_modes", {}))
+                            disabled[target_key] = not disabled.get(target_key, False)
+                            self.admin_update_settings(disabled_modes=disabled)
+                        elif event.unicode and event.unicode.isprintable() and len(self.dev_announcement_input) < 240:
+                            self.dev_announcement_input += event.unicode
+                    elif selected and self.dev_console_tab == 4:
+                        if event.key == pygame.K_f:
+                            self.admin_user_action(selected.get("username"), "repair_account")
+                    elif self.dev_console_tab == 0 and event.unicode and event.unicode.isprintable() and len(self.dev_search_query) < 24:
+                        self.dev_search_query += event.unicode.lower()
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "MODE_SELECT"
                     continue
@@ -9353,6 +9720,7 @@ class Game:
                         record = self.active_account_record() or {}
                         if record.get("is_developer"):
                             self.fetch_registered_users()
+                            self.fetch_admin_status()
                             self.registered_users_index = 0
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_SPACE:
@@ -9450,7 +9818,17 @@ class Game:
                         self.home_kit_index = (self.home_kit_index + 1) % 3
                     elif event.key == pygame.K_j:
                         self.away_kit_index = (self.away_kit_index + 1) % 3
-                    if event.key == pygame.K_LEFT:
+                    if event.key == pygame.K_ESCAPE:
+                        if self.lineup_pick is not None:
+                            self.lineup_pick = None
+                            self.dragging_lineup = None
+                            self.message = "Swap cancelled"
+                        else:
+                            self.lineup_pick = None
+                            self.dragging_lineup = None
+                            self.state = "LEAGUE"
+                            self.message = ""
+                    elif event.key == pygame.K_LEFT:
                         self.lineup_col = 0
                         self.lineup_idx = min(self.lineup_idx, len(self.user_starting) - 1)
                     elif event.key == pygame.K_RIGHT:
@@ -9724,7 +10102,7 @@ class Game:
             self.screen.blit(self.small.render("DEVELOPER", True, WHITE), (dev_pill.x + 8, dev_pill.y + 6))
         action = "ESC modes | Q logout"
         if record.get("is_developer"):
-            action += " | U users"
+            action += " | U console"
         action += " | C cloud"
         self.screen.blit(self.small.render(action, True, (200, 210, 220)), (x + 150, y + 18))
         value_label = f"Coins: {self.fantasy_coins}" if self.game_mode == "FANTASY" else f"Budget: {self.user_budget}"
@@ -9754,6 +10132,9 @@ class Game:
         self.screen.blit(self.big.render("FC Legends Cloud Profiles", True, WHITE), (54, 44))
         self.screen.blit(self.font.render("Cloud accounts for career and fantasy saves", True, (214, 222, 236)), (56, 84))
         self.screen.blit(self.small.render("Create an account, sign in, or use developer sign in.", True, (190, 200, 215)), (56, 116))
+        announcement = self.cloud_runtime_config.get("announcement", "")
+        if announcement:
+            self.screen.blit(self.small.render(f"Cloud notice: {announcement[:96]}", True, (244, 206, 84)), (56, 144))
         version_badge = pygame.Rect(910, 42, 170, 34)
         pygame.draw.rect(self.screen, (18, 24, 34), version_badge, 0, border_radius=12)
         pygame.draw.rect(self.screen, (92, 176, 255), version_badge, 2, border_radius=12)
@@ -9782,7 +10163,7 @@ class Game:
             "Every successful sign-in is mirrored locally as a fallback.",
             "Fantasy starter coins: 100",
             f"Developer accounts: {DEVELOPER_FANTASY_COINS} coins, hidden packs, elite starter pull.",
-            "Developer user view shows usernames and card collections.",
+            "Developer console can inspect accounts, grant rewards, and run live ops.",
             "Passwords stay hidden and stored as hashes.",
         ]
         y = info.y + 64
@@ -9911,7 +10292,7 @@ class Game:
         self.screen.blit(self.small.render(sync_line, True, (190, 200, 215)), (side.x + 18, side.y + 204))
         hint = "Use UP/DOWN and ENTER"
         if record.get("is_developer"):
-            hint += " | U registered users"
+            hint += " | U developer console"
         hint += " | C cloud settings | ESC log out"
         self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (42, HEIGHT - 44))
 
@@ -9952,33 +10333,46 @@ class Game:
             y += 34
 
     def draw_registered_users_page(self):
-        users = self.cloud_registered_users
+        users = self.filtered_registered_users()
+        selected = self.selected_registered_user()
+        tabs = self.developer_tabs()
+        tab_name = tabs[self.dev_console_tab]
+        settings = self.dev_admin_status.get("settings", {})
+        metrics = self.dev_admin_status.get("metrics", {})
         self.screen.fill((12, 16, 26))
-        self.screen.blit(self.big.render("Registered Users", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN browse | ESC back", True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.big.render("Developer Console", True, WHITE), (34, 22))
+        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER refresh/save | ESC back", True, (190, 200, 215)), (36, 56))
+        tab_x = 34
+        for idx, tab in enumerate(tabs):
+            pill = pygame.Rect(tab_x, 88, 156, 34)
+            active = idx == self.dev_console_tab
+            pygame.draw.rect(self.screen, (20, 28, 40), pill, 0, border_radius=12)
+            pygame.draw.rect(self.screen, YELLOW if active else (80, 92, 122), pill, 2, border_radius=12)
+            self.screen.blit(self.small.render(tab, True, WHITE), (pill.x + 16, pill.y + 9))
+            tab_x += 168
         if not users:
-            self.screen.blit(self.font.render("No users registered", True, WHITE), (40, 120))
+            self.screen.blit(self.font.render("No users registered", True, WHITE), (40, 150))
             return
-        self.registered_users_index = max(0, min(self.registered_users_index, len(users) - 1))
-        selected = users[self.registered_users_index]
-        list_panel = pygame.Rect(34, 96, 420, 590)
-        detail_panel = pygame.Rect(486, 96, 648, 590)
+        list_panel = pygame.Rect(34, 140, 420, 546)
+        detail_panel = pygame.Rect(486, 140, 648, 546)
         for panel in (list_panel, detail_panel):
             pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
             pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+        self.screen.blit(self.small.render(f"Search: {self.dev_search_query or '_'}", True, (214, 222, 236)), (list_panel.x + 16, list_panel.y + 14))
         start = max(0, min(self.registered_users_index - 6, max(0, len(users) - 12)))
-        y = list_panel.y + 14
+        y = list_panel.y + 44
         for idx in range(start, min(len(users), start + 12)):
             user = users[idx]
             row = pygame.Rect(list_panel.x + 12, y, list_panel.w - 24, 40)
             active = idx == self.registered_users_index
             pygame.draw.rect(self.screen, (36, 44, 60), row, 0, border_radius=10)
             pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), row, 2, border_radius=10)
-            label = f"{user.get('username', '')} {'DEV' if user.get('is_developer') else 'USER'} {user.get('storage_mode', 'CLOUD')}"
+            status = "BANNED" if user.get("is_banned") else "SUSP" if user.get("is_suspended") else "OK"
+            label = f"{user.get('username', '')} {'DEV' if user.get('is_developer') else 'USER'} {status}"
             self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 12))
             y += 46
-        summary = selected.get("fantasy_summary", {})
-        snapshot = selected.get("fantasy_snapshot") or selected.get("career_snapshot") or {}
+        summary = selected.get("fantasy_summary", {}) if selected else {}
+        snapshot = (selected.get("fantasy_snapshot") or selected.get("career_snapshot") or {}) if selected else {}
         cards = snapshot.get("fantasy_roster", [])
         if not cards and summary:
             cards = [{}] * summary.get("cards", 0)
@@ -9994,42 +10388,102 @@ class Game:
         if rated_cards:
             top_five = sorted(rated_cards, reverse=True)[:5]
             avg_top_five = sum(top_five) // max(1, len(top_five))
-        lines = [
-            f"Display Name: {selected.get('display_name', '')}",
-            f"Username: {selected.get('username', '')}",
-            f"Storage: {selected.get('storage_mode', 'CLOUD')}",
-            f"Developer: {'Yes' if selected.get('is_developer') else 'No'}",
-            f"Last Mode: {selected.get('last_mode', 'CAREER')}",
-            f"Fantasy Team: {team_name}",
-            f"Fantasy Cards: {summary.get('cards', len(cards))}",
-            f"Lineup Ready: {'Yes' if len(lineup) >= 11 else 'No'}",
-            f"Coins: {coins}",
-            f"My Packs: {packs}",
-            f"Season XP: {xp}",
-            f"Highest Card: {highest_card}",
-            f"Top 5 Avg: {avg_top_five}",
-            f"Career Save: {'Yes' if selected.get('career_snapshot') else 'No'}",
-            f"Fantasy Save: {'Yes' if selected.get('fantasy_snapshot') else 'No'}",
-        ]
         y = detail_panel.y + 24
-        left_x = detail_panel.x + 18
-        right_x = detail_panel.x + 330
-        for idx, line in enumerate(lines):
-            x = left_x if idx < 7 else right_x
-            row_y = y + (idx % 7) * 38
-            self.screen.blit(self.small.render(line[:34], True, WHITE), (x, row_y))
-        meta_y = detail_panel.y + 314
-        updated_label = selected.get("updated_at") or selected.get("created_at") or "Unknown"
-        self.screen.blit(self.small.render(f"Last server update: {str(updated_label)[:36]}", True, (190, 200, 215)), (detail_panel.x + 18, meta_y))
-        self.screen.blit(self.font.render("Top Cards", True, WHITE), (detail_panel.x + 18, meta_y + 36))
-        y = meta_y + 78
+        if tab_name == "Users":
+            lines = [
+                f"Display Name: {selected.get('display_name', '')}",
+                f"Username: {selected.get('username', '')}",
+                f"Storage: {selected.get('storage_mode', 'CLOUD')}",
+                f"Developer: {'Yes' if selected.get('is_developer') else 'No'}",
+                f"Banned: {'Yes' if selected.get('is_banned') else 'No'}",
+                f"Suspended: {'Yes' if selected.get('is_suspended') else 'No'}",
+                f"Last Mode: {selected.get('last_mode', 'CAREER')}",
+                f"Fantasy Team: {team_name}",
+                f"Cards: {summary.get('cards', len(cards))}",
+                f"Coins: {coins}",
+                f"Packs: {packs}",
+                f"Season XP: {xp}",
+                "B ban/unban | V suspend | P dev toggle",
+                "W reset password to legend123 | F repair",
+            ]
+            for line in lines:
+                self.screen.blit(self.small.render(line[:68], True, WHITE), (detail_panel.x + 18, y))
+                y += 34
+        elif tab_name == "Economy":
+            catalog = self.developer_card_catalog()
+            gift_card = catalog[self.dev_card_index % len(catalog)] if catalog else {}
+            selected_card = top_cards[0] if top_cards else {}
+            lines = [
+                f"Target: {selected.get('username', '')}",
+                f"Coin Delta: {self.developer_coin_amounts()[self.dev_coin_delta_index]}",
+                f"Pack: {self.developer_pack_ids()[self.dev_pack_index % len(self.developer_pack_ids())]}",
+                f"Gift Card: {gift_card.get('name', 'None')} {gift_card.get('rating', '')}",
+                f"Remove Card: {selected_card.get('name', 'None')} {selected_card.get('rating', '')}",
+                "C add coins | X remove coins",
+                "O add pack | L remove pack",
+                "G gift selected card | R remove top card",
+                "LEFT/RIGHT changes amount, pack, and gift card",
+            ]
+            for line in lines:
+                self.screen.blit(self.small.render(line[:72], True, WHITE), (detail_panel.x + 18, y))
+                y += 34
+        elif tab_name == "Tournaments":
+            lines = [
+                f"Target: {selected.get('username', '')}",
+                f"Division rewards preset: {self.developer_coin_amounts()[self.dev_coin_delta_index]}",
+                f"Users tracked: {metrics.get('users', 0)}",
+                f"Division entries: {metrics.get('online_divisions', 0)}",
+                f"Tournament entries: {metrics.get('online_tournaments', 0)}",
+                "D reset online division",
+                "T reset tournament run",
+                "A add tournament reward coins",
+            ]
+            for line in lines:
+                self.screen.blit(self.small.render(line[:72], True, WHITE), (detail_panel.x + 18, y))
+                y += 34
+        elif tab_name == "Live Ops":
+            disabled = settings.get("disabled_modes", {})
+            lines = [
+                f"Maintenance: {'ON' if settings.get('maintenance_mode') else 'OFF'}",
+                f"Tournaments disabled: {'Yes' if disabled.get('tournaments') else 'No'}",
+                f"Market disabled: {'Yes' if disabled.get('market') else 'No'}",
+                f"Objectives disabled: {'Yes' if disabled.get('objectives') else 'No'}",
+                f"Announcement: {self.dev_announcement_input[:60] or 'None'}",
+                "M toggle maintenance",
+                "1/2/3 toggle tournaments, market, objectives",
+                "Type announcement text and press ENTER to save",
+            ]
+            for line in lines:
+                self.screen.blit(self.small.render(line[:76], True, WHITE), (detail_panel.x + 18, y))
+                y += 34
+        else:
+            local = self.local_account_record(selected.get("username")) if selected else None
+            compare = "Local mirror found" if local else "No local mirror on this Mac"
+            updated_label = selected.get("updated_at") or selected.get("created_at") or "Unknown"
+            lines = [
+                f"Target: {selected.get('username', '')}",
+                f"Save source: {selected.get('storage_mode', 'CLOUD')}",
+                f"Career save: {'Yes' if selected.get('career_snapshot') else 'No'}",
+                f"Fantasy save: {'Yes' if selected.get('fantasy_snapshot') else 'No'}",
+                compare,
+                f"Last server update: {str(updated_label)[:36]}",
+                "F repair fantasy snapshot and sync structure",
+            ]
+            for line in lines:
+                self.screen.blit(self.small.render(line[:74], True, WHITE), (detail_panel.x + 18, y))
+                y += 34
+        meta_y = detail_panel.bottom - 160
+        self.screen.blit(self.font.render("Top Cards", True, WHITE), (detail_panel.x + 18, meta_y))
+        y = meta_y + 38
         if not top_cards or not top_cards[0]:
             self.screen.blit(self.small.render("No fantasy cards yet", True, (190, 200, 215)), (detail_panel.x + 18, y))
         else:
-            for card in top_cards:
+            for card in top_cards[:4]:
                 line = f"{card.get('name', '')} | {card.get('rating', 0)} | {card.get('rarity', 'Bronze')}"
                 self.screen.blit(self.small.render(line[:52], True, (220, 228, 236)), (detail_panel.x + 18, y))
                 y += 28
+        if self.dev_action_message:
+            self.screen.blit(self.small.render(self.dev_action_message[:96], True, YELLOW), (36, HEIGHT - 24))
 
     def draw_cloud_settings_page(self):
         self.screen.fill((12, 16, 26))
@@ -10372,9 +10826,9 @@ class Game:
             self.lineup_rects[(2, i)] = row_rect
             y += reserve_line_h
 
-        self.screen.blit(self.small.render("Drag or ENTER to swap | TAB/ARROWS move | SPACE start", True, (190, 200, 210)), (24, HEIGHT - 28))
+        self.screen.blit(self.small.render("Drag or ENTER to swap | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
         if self.game_mode == "FANTASY":
-            self.screen.blit(self.small.render("Links: green strong | gold medium | red weak", True, (190, 200, 210)), (430, HEIGHT - 28))
+            self.screen.blit(self.small.render("Links: club/nation/league | green strong | gold medium | red weak", True, (190, 200, 210)), (430, HEIGHT - 28))
 
     def draw_kit_picker(self, x, y, home, away):
         home_kits = get_team_kits(home)

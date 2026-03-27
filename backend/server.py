@@ -26,6 +26,15 @@ PBKDF2_ROUNDS = 200_000
 ONLINE_DIVISION_MATCHES_PER_CYCLE = 5
 ONLINE_TOURNAMENT_TARGET_WINS = 3
 ONLINE_TOURNAMENT_MAX_LOSSES = 2
+DEFAULT_ADMIN_SETTINGS = {
+    "announcement": "",
+    "maintenance_mode": False,
+    "disabled_modes": {
+        "tournaments": False,
+        "market": False,
+        "objectives": False,
+    },
+}
 
 
 def utc_now():
@@ -83,6 +92,8 @@ class CloudStore:
                     password_hash TEXT NOT NULL,
                     password_salt TEXT NOT NULL,
                     is_developer INTEGER NOT NULL DEFAULT 0,
+                    is_banned INTEGER NOT NULL DEFAULT 0,
+                    suspended_until TEXT,
                     career_snapshot TEXT,
                     fantasy_snapshot TEXT,
                     last_mode TEXT NOT NULL DEFAULT 'CAREER',
@@ -129,10 +140,31 @@ class CloudStore:
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS app_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 """
             )
+            self._ensure_schema(conn)
+            self._ensure_app_state(conn)
             conn.commit()
             self._restore_from_backup_if_needed(conn)
+
+    def _ensure_schema(self, conn):
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "is_banned" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0")
+        if "suspended_until" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN suspended_until TEXT")
+
+    def _ensure_app_state(self, conn):
+        for key, value in DEFAULT_ADMIN_SETTINGS.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)",
+                (key, json.dumps(value)),
+            )
 
     def _write_backup(self, conn):
         users = [
@@ -140,8 +172,8 @@ class CloudStore:
             for row in conn.execute(
                 """
                 SELECT id, display_name, username, password_hash, password_salt,
-                       is_developer, career_snapshot, fantasy_snapshot, last_mode,
-                       created_at, updated_at
+                       is_developer, is_banned, suspended_until, career_snapshot,
+                       fantasy_snapshot, last_mode, created_at, updated_at
                 FROM users
                 ORDER BY id
                 """
@@ -194,9 +226,9 @@ class CloudStore:
                 """
                 INSERT OR REPLACE INTO users (
                     id, display_name, username, password_hash, password_salt,
-                    is_developer, career_snapshot, fantasy_snapshot, last_mode,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_developer, is_banned, suspended_until, career_snapshot,
+                    fantasy_snapshot, last_mode, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row.get("id"),
@@ -205,6 +237,8 @@ class CloudStore:
                     row.get("password_hash"),
                     row.get("password_salt"),
                     row.get("is_developer", 0),
+                    row.get("is_banned", 0),
+                    row.get("suspended_until"),
                     row.get("career_snapshot"),
                     row.get("fantasy_snapshot"),
                     row.get("last_mode", "CAREER"),
@@ -312,14 +346,24 @@ class CloudStore:
             "team_name": snapshot.get("fantasy_team_name"),
             "cards": len(roster) if isinstance(roster, list) else 0,
             "coins": snapshot.get("fantasy_coins", 0),
+            "packs": len(snapshot.get("my_packs", [])) if isinstance(snapshot.get("my_packs"), list) else 0,
+            "season_xp": snapshot.get("fantasy_season_xp", 0),
         }
 
     def _serialize_user(self, row, include_snapshots=False):
         fantasy_summary = self._snapshot_summary(row["fantasy_snapshot"])
+        suspended_until = row["suspended_until"]
+        suspended = False
+        if suspended_until:
+            until = parse_iso(suspended_until)
+            suspended = bool(until and until > utc_now())
         payload = {
             "display_name": row["display_name"],
             "username": row["username"],
             "is_developer": bool(row["is_developer"]),
+            "is_banned": bool(row["is_banned"]),
+            "is_suspended": suspended,
+            "suspended_until": suspended_until,
             "last_mode": row["last_mode"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
@@ -350,6 +394,117 @@ class CloudStore:
                 """,
                 (user_id,),
             ).fetchone()
+        return row
+
+    def _load_settings(self, conn=None):
+        owns_conn = conn is None
+        conn = conn or self._connect()
+        try:
+            rows = conn.execute("SELECT key, value FROM app_state").fetchall()
+            settings = json.loads(json.dumps(DEFAULT_ADMIN_SETTINGS))
+            for row in rows:
+                try:
+                    settings[row["key"]] = json.loads(row["value"])
+                except Exception:
+                    settings[row["key"]] = row["value"]
+            if not isinstance(settings.get("disabled_modes"), dict):
+                settings["disabled_modes"] = dict(DEFAULT_ADMIN_SETTINGS["disabled_modes"])
+            return settings
+        finally:
+            if owns_conn:
+                conn.close()
+
+    def _save_settings(self, conn, settings):
+        for key, value in settings.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
+                (key, json.dumps(value)),
+            )
+
+    def _require_developer(self, token):
+        row = self.get_user_by_token(token)
+        if not row:
+            raise PermissionError("Invalid or expired session.")
+        if not row["is_developer"]:
+            raise PermissionError("Developer access required.")
+        return row
+
+    def _check_user_access(self, row):
+        if row["is_banned"]:
+            raise PermissionError("This account has been banned.")
+        if row["suspended_until"]:
+            until = parse_iso(row["suspended_until"])
+            if until and until > utc_now():
+                raise PermissionError(f"Account suspended until {row['suspended_until']}.")
+
+    def _build_default_fantasy_snapshot(self, row):
+        return {
+            "game_mode": "FANTASY",
+            "fantasy_team_name": f"{row['display_name'] or row['username']} FC",
+            "fantasy_roster": [],
+            "fantasy_coins": 3000,
+            "my_packs": [],
+            "fantasy_season_xp": 0,
+            "fantasy_season_claimed": 0,
+            "fantasy_objectives": {},
+            "fantasy_competitions": {},
+            "fantasy_active_competition": "division",
+            "fantasy_match_competition": "division",
+            "current_theme": "Open",
+            "team_lineups": {},
+            "roster_data": {},
+            "rating_cache": {},
+            "event_evo_tokens": 0,
+        }
+
+    def _repair_fantasy_snapshot(self, snapshot, row=None):
+        snapshot = dict(snapshot or {})
+        default_team_name = f"{(row['display_name'] if row else '') or (row['username'] if row else 'Fantasy')} FC" if row else "Fantasy FC"
+        team_name = snapshot.get("fantasy_team_name") or default_team_name
+        roster = snapshot.get("fantasy_roster")
+        if not isinstance(roster, list):
+            roster = []
+        lineup_entries = []
+        reserve_entries = []
+        used_numbers = set()
+        for idx, card in enumerate(roster):
+            if not isinstance(card, dict):
+                continue
+            name = str(card.get("name") or f"Player {idx + 1}")
+            rating = int(card.get("rating", 60))
+            number = int(card.get("number", idx + 1))
+            while number in used_numbers:
+                number += 1
+            used_numbers.add(number)
+            card["number"] = number
+            entry = (name, number, rating)
+            if len(lineup_entries) < 11:
+                lineup_entries.append(entry)
+            else:
+                reserve_entries.append(entry)
+        team_lineups = snapshot.get("team_lineups")
+        if not isinstance(team_lineups, dict):
+            team_lineups = {}
+        roster_data = snapshot.get("roster_data")
+        if not isinstance(roster_data, dict):
+            roster_data = {}
+        team_lineups[team_name] = lineup_entries
+        roster_data[team_name] = reserve_entries
+        snapshot["fantasy_team_name"] = team_name
+        snapshot["fantasy_roster"] = roster
+        snapshot["fantasy_coins"] = int(snapshot.get("fantasy_coins", 3000))
+        packs = snapshot.get("my_packs")
+        snapshot["my_packs"] = packs if isinstance(packs, list) else []
+        snapshot["fantasy_season_xp"] = int(snapshot.get("fantasy_season_xp", 0))
+        snapshot["fantasy_season_claimed"] = int(snapshot.get("fantasy_season_claimed", 0))
+        snapshot["team_lineups"] = team_lineups
+        snapshot["roster_data"] = roster_data
+        return snapshot
+
+    def _load_user_row_by_username(self, conn, username):
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username.strip().lower(),)).fetchone()
+        if not row:
+            raise ValueError("User not found.")
         return row
 
     def _online_recent_results(self, value):
@@ -1012,6 +1167,10 @@ class CloudStore:
             raise ValueError("Display name, username, and password are required.")
         if not valid_username(username):
             raise ValueError("Username can only contain letters, numbers, _, -, ., @ and +.")
+        with self._connect() as conn:
+            settings = self._load_settings(conn)
+        if settings.get("maintenance_mode") and developer_code != DEVELOPER_CODE:
+            raise PermissionError("Cloud is in maintenance mode.")
         salt = secrets.token_hex(16)
         password_hash = self._hash_password(password, salt)
         is_developer = 1 if developer_code == DEVELOPER_CODE else 0
@@ -1024,10 +1183,10 @@ class CloudStore:
                 """
                 INSERT INTO users (
                     display_name, username, password_hash, password_salt,
-                    is_developer, career_snapshot, fantasy_snapshot, last_mode,
-                    created_at, updated_at
+                    is_developer, is_banned, suspended_until, career_snapshot,
+                    fantasy_snapshot, last_mode, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, NULL, NULL, 'CAREER', ?, ?)
+                VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 'CAREER', ?, ?)
                 """,
                 (display_name, username, password_hash, salt, is_developer, timestamp, timestamp),
             )
@@ -1043,8 +1202,13 @@ class CloudStore:
             row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if not row or not self._verify_password(password, row["password_salt"], row["password_hash"]):
             raise PermissionError("Invalid username or password.")
+        with self._connect() as conn:
+            settings = self._load_settings(conn)
+        if settings.get("maintenance_mode") and not row["is_developer"]:
+            raise PermissionError("Cloud is in maintenance mode.")
         if require_dev and (not row["is_developer"] or developer_code != DEVELOPER_CODE):
             raise PermissionError("Developer code required.")
+        self._check_user_access(row)
         token = self._make_session(row["id"])
         return token, self._serialize_user(row, include_snapshots=True)
 
@@ -1080,9 +1244,12 @@ class CloudStore:
         row = self.get_user_by_token(token)
         if not row:
             raise PermissionError("Invalid or expired session.")
+        self._check_user_access(row)
         if mode not in ("CAREER", "FANTASY"):
             raise ValueError("Invalid mode.")
         column = "career_snapshot" if mode == "CAREER" else "fantasy_snapshot"
+        if mode == "FANTASY":
+            snapshot = self._repair_fantasy_snapshot(snapshot, row=row)
         with self.lock, self._connect() as conn:
             conn.execute(
                 f"""
@@ -1101,6 +1268,7 @@ class CloudStore:
         row = self.get_user_by_token(token)
         if not row:
             raise PermissionError("Invalid or expired session.")
+        self._check_user_access(row)
         if mode not in ("CAREER", "FANTASY"):
             raise ValueError("Invalid mode.")
         column = "career_snapshot" if mode == "CAREER" else "fantasy_snapshot"
@@ -1108,11 +1276,7 @@ class CloudStore:
         return json.loads(snapshot_text) if snapshot_text else None
 
     def list_users(self, token):
-        row = self.get_user_by_token(token)
-        if not row:
-            raise PermissionError("Invalid or expired session.")
-        if not row["is_developer"]:
-            raise PermissionError("Developer access required.")
+        self._require_developer(token)
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -1121,7 +1285,223 @@ class CloudStore:
                 ORDER BY username ASC
                 """
             ).fetchall()
-        return [self._serialize_user(item) for item in rows]
+            settings = self._load_settings(conn)
+        return {
+            "users": [self._serialize_user(item, include_snapshots=True) for item in rows],
+            "settings": settings,
+            "health": {
+                "ok": True,
+                "database_path": self.db_path,
+                "user_count": len(rows),
+            },
+        }
+
+    def public_config(self):
+        with self._connect() as conn:
+            settings = self._load_settings(conn)
+        return {
+            "announcement": settings.get("announcement", ""),
+            "maintenance_mode": bool(settings.get("maintenance_mode")),
+            "disabled_modes": settings.get("disabled_modes", {}),
+        }
+
+    def admin_status(self, token):
+        self._require_developer(token)
+        with self._connect() as conn:
+            user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            online_div_count = conn.execute("SELECT COUNT(*) FROM online_divisions").fetchone()[0]
+            online_tour_count = conn.execute("SELECT COUNT(*) FROM online_tournaments").fetchone()[0]
+            settings = self._load_settings(conn)
+        return {
+            "ok": True,
+            "settings": settings,
+            "metrics": {
+                "users": user_count,
+                "online_divisions": online_div_count,
+                "online_tournaments": online_tour_count,
+            },
+        }
+
+    def _grant_packs(self, snapshot, pack_id, amount):
+        packs = snapshot.get("my_packs")
+        if not isinstance(packs, list):
+            packs = []
+        if amount >= 0:
+            packs.extend([pack_id] * amount)
+        else:
+            remove_count = abs(amount)
+            kept = []
+            removed = 0
+            for item in packs:
+                if item == pack_id and removed < remove_count:
+                    removed += 1
+                    continue
+                kept.append(item)
+            packs = kept
+        snapshot["my_packs"] = packs
+
+    def _add_card(self, snapshot, card):
+        roster = snapshot.get("fantasy_roster")
+        if not isinstance(roster, list):
+            roster = []
+        gifted = dict(card or {})
+        gifted["rating"] = int(gifted.get("rating", 60))
+        gifted["position"] = gifted.get("position", "ST")
+        gifted["promo"] = gifted.get("promo", "Base")
+        gifted["rarity"] = gifted.get("rarity", "Bronze")
+        gifted["team"] = gifted.get("team", "")
+        gifted["league"] = gifted.get("league", "")
+        gifted["nation"] = gifted.get("nation", "")
+        gifted["number"] = int(gifted.get("number", len(roster) + 1))
+        gifted["card_key"] = gifted.get("card_key") or f"{gifted.get('name', 'Player')}|{gifted['promo']}|{gifted['rating']}|{gifted['position']}"
+        roster.append(gifted)
+        snapshot["fantasy_roster"] = roster
+
+    def _remove_card(self, snapshot, card_key):
+        roster = snapshot.get("fantasy_roster")
+        if not isinstance(roster, list):
+            snapshot["fantasy_roster"] = []
+            return False
+        removed = False
+        kept = []
+        for card in roster:
+            if not removed and isinstance(card, dict) and card.get("card_key") == card_key:
+                removed = True
+                continue
+            kept.append(card)
+        snapshot["fantasy_roster"] = kept
+        return removed
+
+    def admin_user_action(self, token, username, action, payload=None):
+        payload = payload or {}
+        admin_row = self._require_developer(token)
+        timestamp = utc_iso(utc_now())
+        with self.lock, self._connect() as conn:
+            target = self._load_user_row_by_username(conn, username)
+            if target["username"] == admin_row["username"] and action in ("revoke_developer", "ban"):
+                raise ValueError("You cannot remove your own developer access or ban yourself.")
+            updates = {}
+            fantasy_snapshot = json.loads(target["fantasy_snapshot"]) if target["fantasy_snapshot"] else None
+            if action == "promote_developer":
+                updates["is_developer"] = 1
+            elif action == "revoke_developer":
+                updates["is_developer"] = 0
+            elif action == "ban":
+                updates["is_banned"] = 1
+            elif action == "unban":
+                updates["is_banned"] = 0
+            elif action == "suspend":
+                days = max(1, int(payload.get("days", 7)))
+                updates["suspended_until"] = utc_iso(utc_now() + timedelta(days=days))
+            elif action == "unsuspend":
+                updates["suspended_until"] = None
+            elif action == "reset_password":
+                new_password = str(payload.get("new_password") or "legend123").strip()
+                if len(new_password) < 4:
+                    raise ValueError("Password reset must be at least 4 characters.")
+                salt = secrets.token_hex(16)
+                updates["password_salt"] = salt
+                updates["password_hash"] = self._hash_password(new_password, salt)
+            elif action == "grant_coins":
+                fantasy_snapshot = fantasy_snapshot or self._build_default_fantasy_snapshot(target)
+                fantasy_snapshot["fantasy_coins"] = max(0, int(fantasy_snapshot.get("fantasy_coins", 0)) + int(payload.get("amount", 0)))
+                updates["fantasy_snapshot"] = json.dumps(self._repair_fantasy_snapshot(fantasy_snapshot, row=target))
+            elif action == "grant_packs":
+                fantasy_snapshot = fantasy_snapshot or self._build_default_fantasy_snapshot(target)
+                self._grant_packs(fantasy_snapshot, str(payload.get("pack_id") or "gold"), int(payload.get("amount", 1)))
+                updates["fantasy_snapshot"] = json.dumps(self._repair_fantasy_snapshot(fantasy_snapshot, row=target))
+            elif action == "add_card":
+                fantasy_snapshot = fantasy_snapshot or self._build_default_fantasy_snapshot(target)
+                self._add_card(fantasy_snapshot, payload.get("card") or {})
+                updates["fantasy_snapshot"] = json.dumps(self._repair_fantasy_snapshot(fantasy_snapshot, row=target))
+            elif action == "remove_card":
+                fantasy_snapshot = fantasy_snapshot or self._build_default_fantasy_snapshot(target)
+                removed = self._remove_card(fantasy_snapshot, str(payload.get("card_key") or ""))
+                if not removed:
+                    raise ValueError("Card not found on this account.")
+                updates["fantasy_snapshot"] = json.dumps(self._repair_fantasy_snapshot(fantasy_snapshot, row=target))
+            elif action == "repair_account":
+                fantasy_snapshot = fantasy_snapshot or self._build_default_fantasy_snapshot(target)
+                updates["fantasy_snapshot"] = json.dumps(self._repair_fantasy_snapshot(fantasy_snapshot, row=target))
+            else:
+                raise ValueError("Unknown admin user action.")
+            updates["updated_at"] = timestamp
+            assignments = ", ".join(f"{key} = ?" for key in updates.keys())
+            conn.execute(
+                f"UPDATE users SET {assignments} WHERE id = ?",
+                tuple(updates.values()) + (target["id"],),
+            )
+            conn.commit()
+            self._write_backup(conn)
+            refreshed = conn.execute("SELECT * FROM users WHERE id = ?", (target["id"],)).fetchone()
+        return self._serialize_user(refreshed, include_snapshots=True)
+
+    def admin_settings_update(self, token, payload):
+        self._require_developer(token)
+        payload = payload or {}
+        with self.lock, self._connect() as conn:
+            settings = self._load_settings(conn)
+            if "announcement" in payload:
+                settings["announcement"] = str(payload.get("announcement") or "")[:240]
+            if "maintenance_mode" in payload:
+                settings["maintenance_mode"] = bool(payload.get("maintenance_mode"))
+            if "disabled_modes" in payload and isinstance(payload.get("disabled_modes"), dict):
+                merged = dict(settings.get("disabled_modes", {}))
+                for key, value in payload["disabled_modes"].items():
+                    merged[str(key)] = bool(value)
+                settings["disabled_modes"] = merged
+            self._save_settings(conn, settings)
+            conn.commit()
+        return settings
+
+    def admin_tournament_action(self, token, username, action, payload=None):
+        payload = payload or {}
+        self._require_developer(token)
+        with self.lock, self._connect() as conn:
+            target = self._load_user_row_by_username(conn, username)
+            if action == "reset_division":
+                conn.execute(
+                    """
+                    INSERT INTO online_divisions (user_id, updated_at)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        division_tier = 10, points = 0, wins = 0, draws = 0, losses = 0,
+                        goals_for = 0, goals_against = 0, cycle_played = 0, cycle_points = 0,
+                        reward_coins = 0, recent_results = '[]', updated_at = excluded.updated_at
+                    """,
+                    (target["id"], utc_iso(utc_now())),
+                )
+            elif action == "reset_tournament":
+                conn.execute(
+                    """
+                    INSERT INTO online_tournaments (user_id, updated_at)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        round = 1, wins = 0, losses = 0, matches_played = 0, reward_coins = 0,
+                        updated_at = excluded.updated_at
+                    """,
+                    (target["id"], utc_iso(utc_now())),
+                )
+            elif action == "award_tournament_coins":
+                amount = max(0, int(payload.get("amount", 0)))
+                conn.execute(
+                    """
+                    INSERT INTO online_tournaments (user_id, reward_coins, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        reward_coins = reward_coins + excluded.reward_coins,
+                        updated_at = excluded.updated_at
+                    """,
+                    (target["id"], amount, utc_iso(utc_now())),
+                )
+            else:
+                raise ValueError("Unknown tournament action.")
+            conn.commit()
+            self._write_backup(conn)
+        return {
+            "user": self.get_user_by_username(username, include_snapshots=True),
+            "division": self.get_online_division_status(token) if action == "reset_division" and username == self._require_developer(token)["username"] else None,
+        }
 
 
 STORE = CloudStore(DB_PATH)
@@ -1172,7 +1552,10 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/health":
-                self._send_json(HTTPStatus.OK, {"ok": True, "service": "fc-fantasy-cloud"})
+                self._send_json(HTTPStatus.OK, {"ok": True, "service": "fc-fantasy-cloud", **STORE.public_config()})
+                return
+            if parsed.path == "/api/config":
+                self._send_json(HTTPStatus.OK, STORE.public_config())
                 return
             if parsed.path == "/api/profile":
                 token = self._bearer_token()
@@ -1195,8 +1578,13 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/admin/users":
                 token = self._bearer_token()
-                users = STORE.list_users(token)
-                self._send_json(HTTPStatus.OK, {"users": users})
+                payload = STORE.list_users(token)
+                self._send_json(HTTPStatus.OK, payload)
+                return
+            if parsed.path == "/api/admin/status":
+                token = self._bearer_token()
+                payload = STORE.admin_status(token)
+                self._send_json(HTTPStatus.OK, payload)
                 return
             if parsed.path == "/api/online-divisions":
                 token = self._bearer_token()
@@ -1258,6 +1646,26 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
                 payload = STORE.claim_online_tournament_reward(token)
                 self._send_json(HTTPStatus.OK, payload)
                 return
+            if parsed.path == "/api/admin/user-action":
+                token = self._bearer_token()
+                payload = STORE.admin_user_action(
+                    token,
+                    body.get("username", ""),
+                    body.get("action", ""),
+                    body,
+                )
+                self._send_json(HTTPStatus.OK, {"user": payload})
+                return
+            if parsed.path == "/api/admin/tournament-action":
+                token = self._bearer_token()
+                payload = STORE.admin_tournament_action(
+                    token,
+                    body.get("username", ""),
+                    body.get("action", ""),
+                    body,
+                )
+                self._send_json(HTTPStatus.OK, payload)
+                return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
         except PermissionError as exc:
             self._send_json(HTTPStatus.UNAUTHORIZED, {"error": str(exc)})
@@ -1283,6 +1691,11 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
                 token = self._bearer_token()
                 payload = STORE.submit_online_division(token)
                 self._send_json(HTTPStatus.OK, {"submitted": True, "entry": payload})
+                return
+            if parsed.path == "/api/admin/settings":
+                token = self._bearer_token()
+                payload = STORE.admin_settings_update(token, self._json_body())
+                self._send_json(HTTPStatus.OK, {"settings": payload})
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
         except PermissionError as exc:
