@@ -18,9 +18,16 @@ def load_version():
     return data, match
 
 
+def normalized_bump_every(data):
+    bump_every = int(data.get("bump_every", 2) or 2)
+    return max(1, bump_every)
+
+
 def main():
     data, match = load_version()
     major, minor, patch = (int(part) for part in match.groups())
+    bump_every = normalized_bump_every(data)
+    pending_updates = int(data.get("pending_updates", 0) or 0)
 
     if len(sys.argv) > 1:
         base = sys.argv[1].strip()
@@ -29,14 +36,20 @@ def main():
             raise SystemExit("Base version must look like 1.2")
         major, minor = (int(part) for part in base_match.groups())
         patch = 0
+        pending_updates = 0
     else:
-        patch += 1
+        pending_updates += 1
+        if pending_updates >= bump_every:
+            patch += 1
+            pending_updates = 0
 
     if patch > 99:
         minor += 1
         patch = 0
 
     data["version"] = f"{major}.{minor}.{patch:02d}"
+    data["bump_every"] = bump_every
+    data["pending_updates"] = pending_updates
     VERSION_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(data["version"])
 

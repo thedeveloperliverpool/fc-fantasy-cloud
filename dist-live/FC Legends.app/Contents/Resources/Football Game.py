@@ -1,3 +1,4 @@
+import base64
 import json
 import math
 import os
@@ -61,6 +62,18 @@ ACCOUNTS_FILE = os.path.join(APP_DATA_DIR, "accounts.json")
 SETTINGS_FILE = os.path.join(APP_DATA_DIR, "settings.json")
 DEVELOPER_CODE = "Reve1@+ion"
 CLOUD_API_BASE = os.environ.get("FC_CLOUD_API_URL", "").rstrip("/")
+FANTASY_CLUB_BADGES = ["Falcon", "Crown", "Bolt", "Anchor", "Nova", "Lion"]
+FANTASY_CLUB_PALETTES = [
+    ("Neon Blue", (54, 136, 255)),
+    ("Crimson", (210, 52, 72)),
+    ("Emerald", (44, 184, 122)),
+    ("Gold", (224, 176, 56)),
+    ("Violet", (154, 92, 255)),
+    ("Arctic", (196, 226, 255)),
+    ("Midnight", (26, 42, 82)),
+    ("Coral", (255, 122, 94)),
+]
+FANTASY_STADIUM_OPTIONS = ["Fantasy Arena", "Legends Dome", "Blue Voltage Park", "Royal Terrace", "Nightwave Ground"]
 
 
 def load_app_settings():
@@ -1500,7 +1513,7 @@ class Game:
         self.big = pygame.font.SysFont("Arial", 26)
         self.small = pygame.font.SysFont("Arial", 14)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | DEV_REGISTERED_USERS | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1589,6 +1602,10 @@ class Game:
         self.fantasy_chemistry_map = {}
         self.fantasy_chemistry_breakdown = {}
         self.fantasy_chemistry_links = []
+        self.fantasy_club_custom = {"badge": 0, "primary": 0, "secondary": 5, "stadium": 0}
+        self.fantasy_club_cursor = 0
+        self.fantasy_share_input = ""
+        self.fantasy_share_message = ""
         self.fantasy_market_offers = []
         self.fantasy_market_index = 0
         self.pack_event_index = -1
@@ -1898,6 +1915,112 @@ class Game:
         self.active_account = None
         self.account_message = "Cloud settings saved"
         self.state = "ACCOUNT_HOME"
+        return True
+
+    def fantasy_palette_color(self, idx):
+        if not FANTASY_CLUB_PALETTES:
+            return (54, 136, 255)
+        return FANTASY_CLUB_PALETTES[idx % len(FANTASY_CLUB_PALETTES)][1]
+
+    def fantasy_club_badge_name(self):
+        return FANTASY_CLUB_BADGES[self.fantasy_club_custom.get("badge", 0) % len(FANTASY_CLUB_BADGES)]
+
+    def ensure_fantasy_club_defaults(self):
+        custom = self.fantasy_club_custom if isinstance(self.fantasy_club_custom, dict) else {}
+        custom["badge"] = int(custom.get("badge", 0)) % len(FANTASY_CLUB_BADGES)
+        custom["primary"] = int(custom.get("primary", 0)) % len(FANTASY_CLUB_PALETTES)
+        custom["secondary"] = int(custom.get("secondary", 5)) % len(FANTASY_CLUB_PALETTES)
+        if custom["secondary"] == custom["primary"]:
+            custom["secondary"] = (custom["primary"] + 1) % len(FANTASY_CLUB_PALETTES)
+        custom["stadium"] = int(custom.get("stadium", 0)) % len(FANTASY_STADIUM_OPTIONS)
+        self.fantasy_club_custom = custom
+        return custom
+
+    def apply_fantasy_club_identity(self):
+        if self.game_mode != "FANTASY" or not self.user_team:
+            return
+        custom = self.ensure_fantasy_club_defaults()
+        primary = self.fantasy_palette_color(custom["primary"])
+        secondary = self.fantasy_palette_color(custom["secondary"])
+        keeper = tuple(max(18, int((primary[i] + 20) * 0.45)) for i in range(3))
+        TEAM_KITS[self.user_team] = [
+            (primary, secondary),
+            (secondary, primary),
+            (keeper, primary),
+        ]
+        STADIUMS[self.user_team] = FANTASY_STADIUM_OPTIONS[custom["stadium"]]
+
+    def fantasy_share_payload(self):
+        custom = self.ensure_fantasy_club_defaults()
+        lineup = []
+        for idx, entry in enumerate(self.user_starting):
+            name, number, rating = entry
+            meta = self.get_fantasy_card_meta(name, number, rating) or self.get_fantasy_card_meta(name)
+            if not meta:
+                continue
+            lineup.append(meta.get("card_key") or self.fantasy_card_key(meta))
+        return {
+            "team_name": self.fantasy_team_name.strip() or "Fantasy FC",
+            "badge": custom["badge"],
+            "primary": custom["primary"],
+            "secondary": custom["secondary"],
+            "stadium": custom["stadium"],
+            "lineup": lineup,
+        }
+
+    def export_squad_share_code(self):
+        if self.game_mode != "FANTASY" or not self.fantasy_roster:
+            self.fantasy_share_message = "Build a fantasy squad first"
+            return ""
+        raw = json.dumps(self.fantasy_share_payload(), separators=(",", ":")).encode("utf-8")
+        code = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+        self.fantasy_share_input = code
+        self.fantasy_share_message = "Share code ready"
+        return code
+
+    def import_squad_share_code(self, code):
+        code = (code or "").strip()
+        if not code:
+            self.fantasy_share_message = "Paste a share code first"
+            return False
+        padding = "=" * (-len(code) % 4)
+        try:
+            payload = json.loads(base64.urlsafe_b64decode((code + padding).encode("ascii")).decode("utf-8"))
+        except Exception:
+            self.fantasy_share_message = "Invalid share code"
+            return False
+        lineup_keys = payload.get("lineup", [])
+        if not isinstance(lineup_keys, list) or not lineup_keys:
+            self.fantasy_share_message = "Share code has no lineup"
+            return False
+        matched = []
+        used = set()
+        for card_key in lineup_keys:
+            for idx, card in enumerate(self.fantasy_roster):
+                candidate_key = card.get("card_key") or self.fantasy_card_key(card)
+                if idx in used:
+                    continue
+                if candidate_key == card_key or card.get("name") == card_key:
+                    matched.append(card.copy())
+                    used.add(idx)
+                    break
+        if len(matched) < min(11, len(lineup_keys)):
+            self.fantasy_share_message = f"Only matched {len(matched)} of {min(11, len(lineup_keys))} starters"
+            return False
+        ordered = matched + [card.copy() for idx, card in enumerate(self.fantasy_roster) if idx not in used]
+        self.fantasy_roster = ordered
+        self.fantasy_team_name = payload.get("team_name", self.fantasy_team_name)[:16] or self.fantasy_team_name
+        self.fantasy_club_custom = {
+            "badge": int(payload.get("badge", self.fantasy_club_custom.get("badge", 0))),
+            "primary": int(payload.get("primary", self.fantasy_club_custom.get("primary", 0))),
+            "secondary": int(payload.get("secondary", self.fantasy_club_custom.get("secondary", 5))),
+            "stadium": int(payload.get("stadium", self.fantasy_club_custom.get("stadium", 0))),
+        }
+        self.ensure_fantasy_club_defaults()
+        if self.user_team:
+            self.apply_roster_to_team(self.fantasy_roster)
+            self.apply_fantasy_club_identity()
+        self.fantasy_share_message = f"Imported lineup with {len(matched)} matched starters"
         return True
 
     def cloud_request(self, method, path, payload=None, needs_auth=False):
@@ -2435,6 +2558,7 @@ class Game:
             "fantasy_match_competition": self.fantasy_match_competition,
             "fantasy_competition_index": self.fantasy_competition_index,
             "current_theme": self.current_theme,
+            "fantasy_club_custom": self.fantasy_club_custom,
             "fantasy_favorites": self.fantasy_favorites,
             "pack_event_index": self.pack_event_index,
             "current_pack_event": self.current_pack_event,
@@ -2506,6 +2630,7 @@ class Game:
         self.fantasy_match_competition = data.get("fantasy_match_competition", "division")
         self.fantasy_competition_index = data.get("fantasy_competition_index", 0)
         self.current_theme = data.get("current_theme", self.current_theme)
+        self.fantasy_club_custom = data.get("fantasy_club_custom", self.fantasy_club_custom)
         self.fantasy_favorites = data.get("fantasy_favorites", [])
         self.pack_event_index = data.get("pack_event_index", -1)
         self.current_pack_event = data.get("current_pack_event", {})
@@ -2523,6 +2648,7 @@ class Game:
             self.build_fantasy_pool()
             if not self.fantasy_competitions:
                 self.init_fantasy_competitions()
+            self.apply_fantasy_club_identity()
             if not self.fantasy_objectives:
                 self.init_fantasy_objectives()
             if not self.current_pack_event:
@@ -2591,6 +2717,9 @@ class Game:
             self.active_teams = TEAMS[:]
             self.user_team = None
             self.fantasy_roster = []
+            self.fantasy_club_custom = {"badge": 0, "primary": 0, "secondary": 5, "stadium": 0}
+            self.fantasy_share_input = ""
+            self.fantasy_share_message = ""
             self.fantasy_draft_roster = []
             self.fantasy_draft_options = []
             self.fantasy_draft_round = 0
@@ -3066,6 +3195,31 @@ class Game:
     def build_user_squad(self):
         if not self.user_team:
             return
+        lineup = TEAM_LINEUPS.get(self.user_team)
+        if self.game_mode == "FANTASY":
+            needs_rebuild = (
+                not isinstance(lineup, list)
+                or len(lineup) < min(11, len(self.fantasy_roster))
+            )
+            if needs_rebuild and self.fantasy_roster:
+                used_numbers = set()
+                rebuilt_lineup = []
+                rebuilt_reserves = []
+                for i, card in enumerate(self.fantasy_roster):
+                    suggested = card.get("number", random.randint(1, 99))
+                    number = suggested
+                    while number in used_numbers:
+                        number += 1
+                    used_numbers.add(number)
+                    card["number"] = number
+                    entry = (card["name"], number, card["rating"])
+                    if i < 11:
+                        rebuilt_lineup.append(entry)
+                    else:
+                        rebuilt_reserves.append(entry)
+                TEAM_LINEUPS[self.user_team] = rebuilt_lineup
+                ROSTER_DATA[self.user_team] = rebuilt_reserves
+                self.apply_fantasy_club_identity()
         lineup = TEAM_LINEUPS.get(self.user_team, DEFAULT_LINEUP)
         starters = [
             normalize_entry(entry, i, self.user_team) for i, entry in enumerate(lineup[:11])
@@ -3452,6 +3606,7 @@ class Game:
         self.current_theme = random.choice(["Premier Pulse", "Counter Kings", "Clean Sheet Club", "North London Heat", "Power Finish"])
         self.fantasy_competitions = {
             "division": {"tier": 10, "points": 0, "played": 0, "wins": 0, "reward": 120, "reward_type": "coins"},
+            "ladder": {"week": 1, "points": 0, "played": 0, "wins": 0, "streak": 0, "target": 6, "reward_pack": "elite", "reward_coins": 160, "reward_type": "hybrid"},
             "cup": {"round": 1, "alive": True, "wins": 0, "reward_pack": "elite", "reward_type": "pack"},
             "weekend": {"played": 0, "wins": 0, "target": 5, "reward_pack": "gold", "reward_coins": 80, "active": True, "reward_type": "hybrid"},
             "theme": {"name": self.current_theme, "progress": 0, "target": 3, "reward_type": "pick", "pick_count": 3, "pick_band": "Mythic"},
@@ -3682,6 +3837,7 @@ class Game:
         theme_name = self.fantasy_competitions.get("theme", {}).get("name", self.current_theme)
         return [
             ("division", "Division Match", "Win for points and coin promotions"),
+            ("ladder", "Weekly Ladder", "Six-match form race with rolling rewards"),
             ("online_tournament", "Online Tournament", "Automatic bracket runs with your live squad"),
             ("cup", "Knockout Cup", "Progress for an Elite Pack reward"),
             ("weekend", "Weekend Challenge", "String wins together for pack and coin rewards"),
@@ -4934,6 +5090,40 @@ class Game:
                 self.fantasy_coins += div.get("reward", 120)
                 self.add_commentary(f"Division promotion. Tier {div['tier']}")
             self.update_objective_progress("division_tier", absolute=div.get("tier", 10))
+        elif competition_key == "ladder":
+            ladder = comps.get("ladder", {})
+            self.record_fantasy_competition_result(ladder, won, drew, user_goals, opp_goals)
+            if won:
+                ladder["points"] = ladder.get("points", 0) + 3
+                ladder["streak"] = ladder.get("streak", 0) + 1
+            elif drew:
+                ladder["points"] = ladder.get("points", 0) + 1
+                ladder["streak"] = 0
+            else:
+                ladder["streak"] = 0
+            if ladder.get("played", 0) >= ladder.get("target", 6):
+                if ladder.get("points", 0) >= 10:
+                    self.grant_reward(
+                        ladder.get("reward_type", "hybrid"),
+                        reward_pack=ladder.get("reward_pack", "elite"),
+                        reward_coins=ladder.get("reward_coins", 160),
+                        title=f"Weekly Ladder {ladder.get('week', 1)}",
+                        source="Weekly Ladder",
+                    )
+                    self.add_commentary(f"Weekly Ladder {ladder.get('week', 1)} cleared")
+                else:
+                    fallback = 40 + ladder.get("points", 0) * 8
+                    self.fantasy_coins += fallback
+                    self.add_commentary(f"Weekly Ladder paid {fallback} fallback coins")
+                ladder["week"] = ladder.get("week", 1) + 1
+                ladder["points"] = 0
+                ladder["played"] = 0
+                ladder["wins"] = 0
+                ladder["draws"] = 0
+                ladder["losses"] = 0
+                ladder["goals_for"] = 0
+                ladder["goals_against"] = 0
+                ladder["streak"] = 0
         elif competition_key == "cup":
             cup = comps.get("cup", {})
             self.record_fantasy_competition_result(cup, won, drew, user_goals, opp_goals)
@@ -5098,9 +5288,18 @@ class Game:
     def active_event_pack_entry(self):
         return self.build_event_pack_entry(self.current_pack_event or {})
 
+    def average_fantasy_rating(self):
+        if not self.fantasy_roster:
+            return 65
+        sample = self.fantasy_roster[:11] if len(self.fantasy_roster) >= 11 else self.fantasy_roster
+        total = sum(card.get("rating", 65) for card in sample)
+        return int(total / max(1, len(sample)))
+
     def fantasy_competition_progress_text(self, active_key, current):
         if active_key == "division":
             return f"Tier {current.get('tier', 10)} | {current.get('points', 0)}/12 pts | Reward {current.get('reward', 120)} coins"
+        if active_key == "ladder":
+            return f"Week {current.get('week', 1)} | {current.get('points', 0)} pts in {current.get('played', 0)}/{current.get('target', 6)} matches | Streak {current.get('streak', 0)}"
         if active_key == "cup":
             return f"Round {current.get('round', 1)} | {'Alive' if current.get('alive', True) else 'Reset next match'} | Reward {self.reward_pack_label(current.get('reward_pack', 'elite'))}"
         if active_key == "weekend":
@@ -6604,6 +6803,8 @@ class Game:
             comp = comps.get(key, {})
             if key == "division":
                 reward_text = f"Reward: {comp.get('reward', 120)} coins on promotion"
+            elif key == "ladder":
+                reward_text = self.reward_summary(comp.get("reward_type", "hybrid"), comp.get("reward_pack", "elite"), comp.get("reward_coins", 160))
             elif key == "online":
                 entry = self.online_division_data.get("entry", {})
                 reward_text = f"Reward ready: {entry.get('reward_coins', 0)} coins | Tier {entry.get('division_tier', 10)}"
@@ -6624,6 +6825,9 @@ class Game:
                 entry = self.online_division_data.get("entry", {})
                 status_text = f"{entry.get('points', 0)} pts | {entry.get('wins', 0)}W-{entry.get('draws', 0)}D-{entry.get('losses', 0)}L"
                 self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
+            elif key == "ladder":
+                status_text = f"Week {comp.get('week', 1)} | {comp.get('points', 0)} pts | Streak {comp.get('streak', 0)}"
+                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
             elif key == "draft":
                 run_text = f"{comp.get('wins', 0)}W-{comp.get('losses', 0)}L | {'Active draft squad' if self.fantasy_draft_active else 'Build a fresh squad'}"
                 self.screen.blit(self.small.render(run_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
@@ -6632,6 +6836,86 @@ class Game:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (panel.right - 110, panel.y + 10))
         if end < total:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
+
+    def draw_fantasy_club_page(self):
+        self.screen.fill((12, 18, 30))
+        self.ensure_fantasy_club_defaults()
+        self.screen.blit(self.big.render("Fantasy Club Hub", True, WHITE), (34, 22))
+        self.screen.blit(self.small.render("UP/DOWN select | LEFT/RIGHT tune | S export squad | ENTER import | ESC back", True, (190, 200, 215)), (36, 56))
+
+        left = pygame.Rect(34, 96, 420, 570)
+        center = pygame.Rect(476, 96, 300, 570)
+        right = pygame.Rect(798, 96, 368, 570)
+        for panel in (left, center, right):
+            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
+            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+
+        rows = [
+            ("Badge", self.fantasy_club_badge_name()),
+            ("Primary", FANTASY_CLUB_PALETTES[self.fantasy_club_custom["primary"]][0]),
+            ("Secondary", FANTASY_CLUB_PALETTES[self.fantasy_club_custom["secondary"]][0]),
+            ("Stadium", FANTASY_STADIUM_OPTIONS[self.fantasy_club_custom["stadium"]]),
+            ("Import Code", self.fantasy_share_input[:26] or "Paste share code"),
+        ]
+        self.screen.blit(self.font.render("Club Identity", True, WHITE), (left.x + 16, left.y + 18))
+        y = left.y + 64
+        for idx, (label, value) in enumerate(rows):
+            row = pygame.Rect(left.x + 14, y, left.w - 28, 68)
+            active = idx == self.fantasy_club_cursor
+            pygame.draw.rect(self.screen, (42, 52, 72) if active else (28, 34, 48), row, 0, border_radius=14)
+            pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), row, 2, border_radius=14)
+            self.screen.blit(self.font.render(label, True, WHITE), (row.x + 14, row.y + 10))
+            color = WHITE
+            if label == "Primary":
+                color = self.fantasy_palette_color(self.fantasy_club_custom["primary"])
+            elif label == "Secondary":
+                color = self.fantasy_palette_color(self.fantasy_club_custom["secondary"])
+            self.screen.blit(self.small.render(str(value), True, color), (row.x + 14, row.y + 40))
+            y += 82
+
+        self.apply_fantasy_club_identity()
+        preview = {
+            "name": self.fantasy_team_name.strip() or "Fantasy FC",
+            "rating": max(65, self.average_fantasy_rating()),
+            "team": self.user_team or self.fantasy_team_name.strip() or "Fantasy FC",
+            "league": "Legends League",
+            "position": "ST",
+            "rarity": "Elite",
+            "promo": "Base",
+            "nation": self.fantasy_club_badge_name(),
+            "form_boost": 0,
+            "evo_level": 0,
+        }
+        self.screen.blit(self.font.render("Club Preview", True, WHITE), (center.x + 18, center.y + 18))
+        self.draw_card(center.x + 28, center.y + 60, 244, 350, preview)
+        self.screen.blit(self.small.render(f"Badge identity: {self.fantasy_club_badge_name()}", True, (190, 200, 215)), (center.x + 22, center.y + 438))
+        self.screen.blit(self.small.render(f"Stadium: {FANTASY_STADIUM_OPTIONS[self.fantasy_club_custom['stadium']]}", True, (190, 200, 215)), (center.x + 22, center.y + 468))
+        self.screen.blit(self.small.render(f"Current chemistry: {self.fantasy_chemistry_total}/33", True, WHITE), (center.x + 22, center.y + 498))
+        self.screen.blit(self.small.render(f"Starters ready: {min(11, len(self.user_starting))}/11", True, WHITE), (center.x + 22, center.y + 528))
+
+        self.screen.blit(self.font.render("Squad Sharing", True, WHITE), (right.x + 16, right.y + 18))
+        code = self.fantasy_share_input or "Press S to generate a squad code"
+        wrapped = [code[i:i + 28] for i in range(0, min(len(code), 112), 28)] or [code]
+        y = right.y + 60
+        self.screen.blit(self.small.render("Share this code with friends to mirror your lineup and club style.", True, (190, 200, 215)), (right.x + 16, y))
+        y += 42
+        share_box = pygame.Rect(right.x + 16, y, right.w - 32, 140)
+        pygame.draw.rect(self.screen, (18, 24, 34), share_box, 0, border_radius=14)
+        pygame.draw.rect(self.screen, (86, 98, 126), share_box, 2, border_radius=14)
+        line_y = share_box.y + 16
+        for line in wrapped[:4]:
+            self.screen.blit(self.small.render(line, True, WHITE), (share_box.x + 12, line_y))
+            line_y += 28
+        y = share_box.bottom + 18
+        starters = self.user_starting[:11]
+        self.screen.blit(self.small.render("Shared lineup preview", True, WHITE), (right.x + 16, y))
+        y += 30
+        for idx, entry in enumerate(starters[:8]):
+            name, _, rating = entry
+            self.screen.blit(self.small.render(f"{idx + 1}. {name[:18]}  {rating}", True, (212, 220, 232)), (right.x + 16, y))
+            y += 24
+        message = self.fantasy_share_message or "Export copies your lineup order. Import applies matching owned cards."
+        self.screen.blit(self.small.render(message[:64], True, YELLOW), (right.x + 16, right.bottom - 34))
 
     def draw_online_divisions_page(self):
         self.screen.fill((10, 16, 28))
@@ -7449,6 +7733,7 @@ class Game:
     def start_fantasy_season(self):
         if len(self.fantasy_roster) < 11:
             return False
+        self.ensure_fantasy_club_defaults()
         fantasy_name = self.fantasy_team_name.strip() or "Fantasy FC"
         self.user_team = fantasy_name
         self.game_mode = "FANTASY"
@@ -7474,6 +7759,7 @@ class Game:
             target.append((name, number, rating))
         TEAM_LINEUPS[fantasy_name] = lineup
         ROSTER_DATA[fantasy_name] = reserves[:]
+        self.apply_fantasy_club_identity()
         self.user_player_index = 9 if len(lineup) > 9 else 0
         if not self.fantasy_competitions:
             self.init_fantasy_competitions()
@@ -7496,6 +7782,7 @@ class Game:
             return None
         labels = {
             "division": "Division Match",
+            "ladder": "Weekly Ladder",
             "weekend": "Weekend Challenge",
             "theme": self.fantasy_competitions.get("theme", {}).get("name", "Themed Tournament"),
             "cup": "Knockout Cup",
@@ -9340,7 +9627,9 @@ class Game:
                 if self.state == "DEV_REGISTERED_USERS":
                     users = self.filtered_registered_users()
                     selected = self.selected_registered_user()
-                    if event.key == pygame.K_TAB:
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "MODE_SELECT"
+                    elif event.key == pygame.K_TAB:
                         self.dev_console_tab = (self.dev_console_tab + 1) % len(self.developer_tabs())
                     elif event.key == pygame.K_DOWN and users:
                         self.registered_users_index = (self.registered_users_index + 1) % len(users)
@@ -9430,8 +9719,6 @@ class Game:
                             self.admin_user_action(selected.get("username"), "repair_account")
                     elif self.dev_console_tab == 0 and event.unicode and event.unicode.isprintable() and len(self.dev_search_query) < 24:
                         self.dev_search_query += event.unicode.lower()
-                    elif event.key == pygame.K_ESCAPE:
-                        self.state = "MODE_SELECT"
                     continue
                 if self.state == "FANTASY_BUILDER":
                     if event.key == pygame.K_p:
@@ -9644,6 +9931,46 @@ class Game:
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "LEAGUE"
                     continue
+                if self.state == "FANTASY_CLUB":
+                    total = 5
+                    if event.key == pygame.K_UP:
+                        self.fantasy_club_cursor = (self.fantasy_club_cursor - 1) % total
+                    elif event.key == pygame.K_DOWN:
+                        self.fantasy_club_cursor = (self.fantasy_club_cursor + 1) % total
+                    elif event.key == pygame.K_LEFT:
+                        if self.fantasy_club_cursor == 0:
+                            self.fantasy_club_custom["badge"] = (self.fantasy_club_custom.get("badge", 0) - 1) % len(FANTASY_CLUB_BADGES)
+                        elif self.fantasy_club_cursor == 1:
+                            self.fantasy_club_custom["primary"] = (self.fantasy_club_custom.get("primary", 0) - 1) % len(FANTASY_CLUB_PALETTES)
+                        elif self.fantasy_club_cursor == 2:
+                            self.fantasy_club_custom["secondary"] = (self.fantasy_club_custom.get("secondary", 5) - 1) % len(FANTASY_CLUB_PALETTES)
+                        elif self.fantasy_club_cursor == 3:
+                            self.fantasy_club_custom["stadium"] = (self.fantasy_club_custom.get("stadium", 0) - 1) % len(FANTASY_STADIUM_OPTIONS)
+                        self.ensure_fantasy_club_defaults()
+                        self.apply_fantasy_club_identity()
+                    elif event.key == pygame.K_RIGHT:
+                        if self.fantasy_club_cursor == 0:
+                            self.fantasy_club_custom["badge"] = (self.fantasy_club_custom.get("badge", 0) + 1) % len(FANTASY_CLUB_BADGES)
+                        elif self.fantasy_club_cursor == 1:
+                            self.fantasy_club_custom["primary"] = (self.fantasy_club_custom.get("primary", 0) + 1) % len(FANTASY_CLUB_PALETTES)
+                        elif self.fantasy_club_cursor == 2:
+                            self.fantasy_club_custom["secondary"] = (self.fantasy_club_custom.get("secondary", 5) + 1) % len(FANTASY_CLUB_PALETTES)
+                        elif self.fantasy_club_cursor == 3:
+                            self.fantasy_club_custom["stadium"] = (self.fantasy_club_custom.get("stadium", 0) + 1) % len(FANTASY_STADIUM_OPTIONS)
+                        self.ensure_fantasy_club_defaults()
+                        self.apply_fantasy_club_identity()
+                    elif event.key == pygame.K_s:
+                        self.export_squad_share_code()
+                    elif event.key == pygame.K_BACKSPACE and self.fantasy_club_cursor == 4:
+                        self.fantasy_share_input = self.fantasy_share_input[:-1]
+                    elif event.key == pygame.K_RETURN and self.fantasy_club_cursor == 4:
+                        self.import_squad_share_code(self.fantasy_share_input)
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "LEAGUE"
+                    else:
+                        if self.fantasy_club_cursor == 4 and event.unicode and event.unicode.isprintable() and len(self.fantasy_share_input) < 240:
+                            self.fantasy_share_input += event.unicode
+                    continue
                 if self.state == "ONLINE_TOURNAMENTS":
                     leaderboard = self.online_tournament_data.get("leaderboard", [])
                     if event.key == pygame.K_UP and leaderboard:
@@ -9773,6 +10100,8 @@ class Game:
                         self.open_my_packs("LEAGUE")
                     elif event.key == pygame.K_e and self.game_mode == "FANTASY":
                         self.state = "FANTASY_EVOLUTIONS"
+                    elif event.key == pygame.K_h and self.game_mode == "FANTASY":
+                        self.state = "FANTASY_CLUB"
                     elif event.key == pygame.K_y:
                         self.run_youth_intake()
                     elif event.key == pygame.K_p and self.show_academy:
@@ -10928,7 +11257,7 @@ class Game:
         if self.user_team:
             self.screen.blit(self.font.render(f"Club: {self.user_team}", True, WHITE), (30, 78))
         if self.game_mode == "FANTASY":
-            top_hint = "TAB cycle | SPACE play | P/W shop | D draft | ESC modes | Q logout"
+            top_hint = "TAB cycle | SPACE play | H club/share | P/W shop | D draft | ESC modes | Q logout"
             bottom_hint = "A/J objectives | B SBCs | N collection | R market | M my packs | E evolutions | O competitions"
             if self.fantasy_active_competition == "champions":
                 bottom_hint = "A/J objectives | B SBCs | N collection | R market | M my packs | O competitions | K bracket"
@@ -10976,9 +11305,11 @@ class Game:
         pygame.draw.rect(self.screen, (60, 70, 85), (stat_x, stat_y, stat_w, stat_h), 2)
         self.screen.blit(self.font.render("Club Status", True, WHITE), (stat_x + 12, stat_y + 8))
         if self.game_mode == "FANTASY":
+            club = self.ensure_fantasy_club_defaults()
             self.screen.blit(self.font.render(f"Coins: {self.fantasy_coins}", True, WHITE), (stat_x + 12, stat_y + 44))
             self.screen.blit(self.font.render(f"Squad Size: {len(self.fantasy_roster)}", True, WHITE), (stat_x + 12, stat_y + 74))
             self.screen.blit(self.font.render(f"Chemistry: {self.fantasy_chemistry_total}/33", True, WHITE), (stat_x + 12, stat_y + 104))
+            self.screen.blit(self.small.render(f"Badge: {self.fantasy_club_badge_name()} | Stadium: {FANTASY_STADIUM_OPTIONS[club['stadium']]}", True, (190, 200, 215)), (stat_x + 12, stat_y + 132))
         else:
             self.screen.blit(self.font.render(f"Budget: £{self.user_budget}m", True, WHITE), (stat_x + 12, stat_y + 44))
             self.screen.blit(self.font.render(f"Form: {self.user_form:.2f}", True, WHITE), (stat_x + 12, stat_y + 74))
@@ -11027,14 +11358,15 @@ class Game:
         pygame.draw.rect(self.screen, (60, 70, 85), (base_x, panel_y, panel_w, panel_h), 2)
         self.screen.blit(self.font.render("Fantasy Competitions", True, WHITE), (base_x + 12, panel_y + 10))
         div = comps.get("division", {})
+        ladder = comps.get("ladder", {})
         cup = comps.get("cup", {})
         weekend = comps.get("weekend", {})
         theme = comps.get("theme", {})
         lines = [
             f"Division Ladder: Tier {div.get('tier', 10)} | {div.get('points', 0)}/12 pts | {div.get('wins', 0)} wins",
+            f"Weekly Ladder: Week {ladder.get('week', 1)} | {ladder.get('points', 0)} pts in {ladder.get('played', 0)}/{ladder.get('target', 6)}",
             f"Knockout Cup: Round {cup.get('round', 1)} | {'Alive' if cup.get('alive', True) else 'Reset next match'}",
             f"Weekend Challenge: {weekend.get('wins', 0)}/{weekend.get('target', 5)} wins in {weekend.get('played', 0)} matches",
-            f"Themed Tournament: {theme.get('name', 'Open')} | {theme.get('progress', 0)}/{theme.get('target', 3)} progress",
         ]
         y = panel_y + 54
         for line in lines:
@@ -11558,6 +11890,8 @@ class Game:
             self.draw_fantasy_evolutions_page()
         elif self.state == "FANTASY_COMPETITIONS":
             self.draw_fantasy_competitions_page()
+        elif self.state == "FANTASY_CLUB":
+            self.draw_fantasy_club_page()
         elif self.state == "FANTASY_DRAFT":
             self.draw_fantasy_draft_page()
         elif self.state == "FANTASY_CHAMPIONS_BRACKET":
