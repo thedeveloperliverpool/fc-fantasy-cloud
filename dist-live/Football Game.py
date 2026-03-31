@@ -6559,13 +6559,12 @@ class Game:
             self.screen.blit(self.small.render("More packs below", True, (180, 190, 205)), (972, 618))
 
     def draw_my_packs_page(self):
-        self.screen.fill((10, 14, 24))
-        self.screen.blit(self.big.render("My Packs", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER open | O odds | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Owned Packs: {len(self.my_packs)}", True, WHITE), (960, 28))
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_hero_header("My Packs", "Stored packs, live reveal access, and featured odds lookup.", accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=f"{len(self.my_packs)} OWNED")
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER open | O odds | ESC back", True, (196, 210, 228)), (36, 170))
         panel = pygame.Rect(40, 96, 1120, 560)
-        pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        panel = pygame.Rect(40, 212, 1120, 520)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=24)
         if not self.my_packs:
             self.screen.blit(self.font.render("No packs stored", True, WHITE), (panel.x + 24, panel.y + 28))
             self.screen.blit(self.small.render("Buy packs from the shop or earn them from competitions, SBCs, and objectives.", True, (190, 200, 215)), (panel.x + 24, panel.y + 60))
@@ -6594,15 +6593,14 @@ class Game:
 
     def draw_pack_odds_page(self):
         pack = self.get_pack_by_id(self.pack_detail_pack_id)
-        self.screen.fill((10, 14, 24))
-        self.screen.blit(self.big.render(pack["name"], True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("ENTER buy/open | ESC back", True, (190, 200, 215)), (36, 56))
-        card_panel = pygame.Rect(60, 110, 320, 500)
-        detail_panel = pygame.Rect(420, 110, 700, 500)
-        pygame.draw.rect(self.screen, (22, 28, 40), card_panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), card_panel, 2, border_radius=20)
-        pygame.draw.rect(self.screen, (22, 28, 40), detail_panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), detail_panel, 2, border_radius=20)
+        accent = self.card_theme_colors({"rating": pack.get("guaranteed", 82), "promo": "Base", "rarity": "Legend"})[1]
+        self.draw_modern_backdrop(accent, (12, 220, 190))
+        self.draw_hero_header(pack["name"], "Odds, reward bands, and walkout profile.", accent=accent, accent_two=(12, 220, 190), right_text=f"{pack['cost']}C")
+        self.screen.blit(self.small.render("ENTER buy/open | ESC back", True, (196, 210, 228)), (36, 170))
+        card_panel = pygame.Rect(60, 212, 320, 500)
+        detail_panel = pygame.Rect(420, 212, 700, 500)
+        self.draw_glass_panel(card_panel, accent=accent, radius=22)
+        self.draw_glass_panel(detail_panel, accent=(86, 170, 255), radius=22)
         self.draw_pack_visual(card_panel.x + 34, card_panel.y + 34, 250, 210, pack, selected=True)
         self.screen.blit(self.font.render(f"Cost: {pack['cost']} coins", True, WHITE), (card_panel.x + 34, card_panel.y + 276))
         self.screen.blit(self.font.render(f"Cards: {pack['count']}", True, WHITE), (card_panel.x + 34, card_panel.y + 312))
@@ -6633,9 +6631,12 @@ class Game:
             y += 34
 
     def draw_pack_summary_page(self):
-        self.screen.fill((12, 18, 30))
+        featured = max(self.last_pack, key=lambda p: (self.rarity_rank(p.get("rarity", "Bronze")), p.get("rating", 0))) if self.last_pack else {"rating": 82}
+        accent = self.card_theme_colors(featured)[1] if self.last_pack else (244, 206, 84)
+        self.draw_modern_backdrop(accent, (86, 170, 255))
+        self.draw_hero_header("Pack Reveal", "Featured pull spotlight and summary.", accent=accent, accent_two=(86, 170, 255))
         self.draw_pack_summary()
-        self.screen.blit(self.small.render("ENTER or ESC continue", True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.small.render("ENTER or ESC continue", True, (196, 210, 228)), (36, 170))
 
     def draw_fantasy_sbc_page(self):
         self.screen.fill((14, 18, 28))
@@ -6865,7 +6866,11 @@ class Game:
         if end < len(cards):
             self.screen.blit(self.small.render("More below", True, (190, 200, 215)), (grid_panel.right - 110, grid_panel.bottom - 30))
 
-        self.draw_card(detail_panel.x + 96, detail_panel.y + 20, 184, 250, selected)
+        rarity_chip = pygame.Rect(detail_panel.x + 18, detail_panel.y + 18, 118, 28)
+        pygame.draw.rect(self.screen, (18, 24, 36), rarity_chip, 0, border_radius=10)
+        pygame.draw.rect(self.screen, self.card_theme_colors(selected)[1], rarity_chip, 2, border_radius=10)
+        self.screen.blit(self.small.render(selected.get("rarity", "Base").upper(), True, WHITE), (rarity_chip.x + 12, rarity_chip.y + 7))
+        self.draw_card(detail_panel.x + 96, detail_panel.y + 54, 184, 250, selected)
         traits = ", ".join(selected.get("traits", [])) or "None"
         fav_text = "Yes" if self.is_favorite_card(selected) else "No"
         lines = [
@@ -6880,10 +6885,17 @@ class Game:
             f"Favorite: {fav_text}",
             f"Skills: {traits}",
         ]
-        y = detail_panel.y + 292
+        y = detail_panel.y + 328
         for line in lines:
             self.screen.blit(self.small.render(line[:40], True, WHITE), (detail_panel.x + 18, y))
             y += 22
+
+        meta_box = pygame.Rect(detail_panel.x + 18, detail_panel.bottom - 88, detail_panel.w - 36, 56)
+        self.draw_glass_panel(meta_box, accent=(12, 220, 190), radius=16, fill=(20, 26, 38, 210), shine=False)
+        chem_tags = self.fantasy_chemistry_breakdown.get((selected.get("name"), selected.get("number"), selected.get("rating")), [])
+        meta_text = "Chemistry Tags: " + (", ".join(chem_tags[:3]) if chem_tags else "None")
+        self.screen.blit(self.small.render(meta_text[:48], True, (214, 222, 236)), (meta_box.x + 14, meta_box.y + 12))
+        self.screen.blit(self.small.render("Broadcast card profile", True, WHITE), (meta_box.x + 14, meta_box.y + 32))
 
     def draw_fantasy_market_page(self):
         self.screen.fill((14, 18, 28))
@@ -7070,17 +7082,17 @@ class Game:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
 
     def draw_fantasy_club_page(self):
-        self.screen.fill((12, 18, 30))
+        self.draw_modern_backdrop((244, 206, 84), (12, 220, 190))
         self.ensure_fantasy_club_defaults()
-        self.screen.blit(self.big.render("Fantasy Club Hub", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN select | LEFT/RIGHT tune | S export squad | ENTER import | ESC back", True, (190, 200, 215)), (36, 56))
+        self.draw_hero_header("Club Identity", "Tune badge, colours, stadium, and squad sharing from one premium hub.", accent=(244, 206, 84), accent_two=(12, 220, 190), right_text=(self.fantasy_team_name.strip() or "Fantasy FC")[:16])
+        self.screen.blit(self.small.render("UP/DOWN select | LEFT/RIGHT tune | S export squad | ENTER import | ESC back", True, (196, 210, 228)), (36, 170))
 
-        left = pygame.Rect(34, 96, 420, 570)
-        center = pygame.Rect(476, 96, 300, 570)
-        right = pygame.Rect(798, 96, 368, 570)
-        for panel in (left, center, right):
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        left = pygame.Rect(34, 212, 420, 520)
+        center = pygame.Rect(476, 212, 300, 520)
+        right = pygame.Rect(798, 212, 368, 520)
+        self.draw_glass_panel(left, accent=(244, 206, 84), radius=24)
+        self.draw_glass_panel(center, accent=(86, 170, 255), radius=24)
+        self.draw_glass_panel(right, accent=(12, 220, 190), radius=24)
 
         rows = [
             ("Badge", self.fantasy_club_badge_name()),
@@ -7119,7 +7131,7 @@ class Game:
             "evo_level": 0,
         }
         self.screen.blit(self.font.render("Club Preview", True, WHITE), (center.x + 18, center.y + 18))
-        self.draw_card(center.x + 28, center.y + 60, 244, 350, preview)
+        self.draw_card(center.x + 28, center.y + 60, 244, 300, preview)
         self.screen.blit(self.small.render(f"Badge identity: {self.fantasy_club_badge_name()}", True, (190, 200, 215)), (center.x + 22, center.y + 438))
         self.screen.blit(self.small.render(f"Stadium: {FANTASY_STADIUM_OPTIONS[self.fantasy_club_custom['stadium']]}", True, (190, 200, 215)), (center.x + 22, center.y + 468))
         self.screen.blit(self.small.render(f"Current chemistry: {self.fantasy_chemistry_total}/33", True, WHITE), (center.x + 22, center.y + 498))
@@ -11540,8 +11552,7 @@ class Game:
         panel_w = 260
         panel_h = 120
         rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-        pygame.draw.rect(self.screen, (26, 32, 40), rect, 0)
-        pygame.draw.rect(self.screen, (60, 70, 85), rect, 2)
+        self.draw_glass_panel(rect, accent=(244, 206, 84), radius=18, fill=(18, 24, 36, 214), shine=False)
         title = f"{home} vs {away}"
         self.screen.blit(self.font.render("Probabilities", True, WHITE), (panel_x + 8, panel_y + 6))
         self.screen.blit(self.small.render(title, True, (200, 210, 220)), (panel_x + 8, panel_y + 30))
@@ -11922,8 +11933,7 @@ class Game:
         panel_y = 340
         panel_w = 520
         panel_h = 140
-        pygame.draw.rect(self.screen, (26, 32, 40), (panel_x, panel_y, panel_w, panel_h), 0)
-        pygame.draw.rect(self.screen, (60, 70, 85), (panel_x, panel_y, panel_w, panel_h), 2)
+        self.draw_glass_panel(pygame.Rect(panel_x, panel_y, panel_w, panel_h), accent=(86, 170, 255), radius=18, fill=(18, 24, 36, 214), shine=False)
         self.screen.blit(self.small.render("Live Leaders (Season)", True, WHITE), (panel_x + 8, panel_y + 8))
         stats = [
             ("Goals", "goals"),
@@ -11992,20 +12002,28 @@ class Game:
         mins = int(self.match_time // 60)
         secs = int(self.match_time % 60)
         time_str = f"{mins:02d}:{secs:02d}  H{self.half}"
-        line1 = f"{self.current_home} {self.score_h} - {self.score_a} {self.current_away}   Time {time_str}"
-        line2 = "Controls: Arrows move, P pass, K shoot, T tackle, E ask pass  |  SPACE=Kickoff  |  L=Lineups  |  R/F/G=Press/Line/Tempo"
-        self.screen.blit(self.font.render(line1, True, WHITE), (20, 10))
-        self.screen.blit(self.font.render(line2, True, WHITE), (20, 34))
+        top_bar = pygame.Rect(14, 10, WIDTH - 28, 56)
+        self.draw_glass_panel(top_bar, accent=(244, 206, 84), radius=18, fill=(10, 14, 24, 196), shine=False)
+        home_chip = pygame.Rect(28, 18, 230, 38)
+        away_chip = pygame.Rect(WIDTH - 258, 18, 230, 38)
+        self.draw_neon_chip(home_chip.x, home_chip.y, self.current_home, accent=(12, 220, 190), width=home_chip.w)
+        self.draw_neon_chip(away_chip.x, away_chip.y, self.current_away, accent=(86, 170, 255), width=away_chip.w)
+        score_text = f"{self.score_h}  -  {self.score_a}"
+        score_surface = self.title_font.render(score_text, True, WHITE)
+        self.screen.blit(score_surface, (WIDTH // 2 - score_surface.get_width() // 2, 14))
+        time_surface = self.small.render(time_str, True, (244, 206, 84))
+        self.screen.blit(time_surface, (WIDTH // 2 - time_surface.get_width() // 2, 42))
+        controls = "Arrows move | P pass | K shoot | T tackle | E ask | L lineups | R/F/G tactics"
+        self.screen.blit(self.small.render(controls, True, (210, 218, 230)), (24, 74))
 
         # tactics board (toggle with B)
         if self.show_tactics_board:
             board_w = 360
             board_h = 300
             board_x = WIDTH - board_w - 20
-            board_y = 10
-            pygame.draw.rect(self.screen, WHITE, (board_x, board_y, board_w, board_h), 0)
-            pygame.draw.rect(self.screen, BLACK, (board_x, board_y, board_w, board_h), 2)
-            title = self.font.render("Tactics Board (B to hide)", True, BLACK)
+            board_y = 96
+            self.draw_glass_panel(pygame.Rect(board_x, board_y, board_w, board_h), accent=(244, 206, 84), radius=22, fill=(18, 24, 36, 228), shine=False)
+            title = self.font.render("Tactics Board (B to hide)", True, WHITE)
             self.screen.blit(title, (board_x + 10, board_y + 8))
             tactics = [
                 (1, "4-4-2"),
@@ -12020,7 +12038,7 @@ class Game:
             y = board_y + 36
             for tid, name in tactics:
                 label = f"{tid}. {name}"
-                color = RED if self.tactic == tid else BLACK
+                color = YELLOW if self.tactic == tid else WHITE
                 self.screen.blit(self.font.render(label, True, color), (board_x + 12, y))
                 y += 24
             def level_name(v):
@@ -12032,16 +12050,18 @@ class Game:
             ]
             y += 8
             for ln in status:
-                self.screen.blit(self.small.render(ln, True, BLACK), (board_x + 12, y))
+                self.screen.blit(self.small.render(ln, True, (210, 218, 230)), (board_x + 12, y))
                 y += 18
 
         # commentary bar
-        pygame.draw.rect(self.screen, WHITE, (0, HEIGHT - COMMENTARY_BAR_H, WIDTH, COMMENTARY_BAR_H), 0)
+        commentary_rect = pygame.Rect(0, HEIGHT - COMMENTARY_BAR_H, WIDTH, COMMENTARY_BAR_H)
+        pygame.draw.rect(self.screen, (18, 22, 30), commentary_rect)
+        pygame.draw.line(self.screen, (244, 206, 84), (0, commentary_rect.y), (WIDTH, commentary_rect.y), 2)
         if self.commentary_timer > 0:
-            self.screen.blit(self.big.render(self.commentary_flash, True, BLACK), (20, HEIGHT - COMMENTARY_BAR_H + 6))
+            self.screen.blit(self.big.render(self.commentary_flash, True, WHITE), (20, HEIGHT - COMMENTARY_BAR_H + 6))
         # log (single line)
         if self.commentary:
-            self.screen.blit(self.font.render(self.commentary[-1], True, BLACK), (20, HEIGHT - 22))
+            self.screen.blit(self.font.render(self.commentary[-1], True, (214, 222, 236)), (20, HEIGHT - 22))
 
         if self.show_lineups:
             self.draw_lineups()
