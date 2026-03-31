@@ -6898,28 +6898,28 @@ class Game:
         self.screen.blit(self.small.render("Broadcast card profile", True, WHITE), (meta_box.x + 14, meta_box.y + 32))
 
     def draw_fantasy_market_page(self):
-        self.screen.fill((14, 18, 28))
-        self.screen.blit(self.big.render("Fantasy Market", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN browse | ENTER buy | R refresh | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Coins: {self.fantasy_coins}", True, WHITE), (1000, 28))
+        self.draw_modern_backdrop((12, 220, 190), (244, 206, 84))
+        self.draw_hero_header("Fantasy Market", "Premium transfer board with cleaner cards, prices, and live offer focus.", accent=(12, 220, 190), accent_two=(244, 206, 84), right_text=f"{self.fantasy_coins}C")
+        self.screen.blit(self.small.render("UP/DOWN browse | ENTER buy | R refresh | ESC back", True, (190, 200, 215)), (36, 170))
         if not self.fantasy_market_offers:
-            self.screen.blit(self.font.render("No market offers available", True, WHITE), (40, 120))
+            self.screen.blit(self.font.render("No market offers available", True, WHITE), (40, 232))
             return
         self.fantasy_market_index = max(0, min(self.fantasy_market_index, len(self.fantasy_market_offers) - 1))
         selected = self.fantasy_market_offers[self.fantasy_market_index]
-        list_panel = pygame.Rect(40, 96, 420, 580)
-        detail_panel = pygame.Rect(500, 96, 660, 580)
-        pygame.draw.rect(self.screen, (22, 28, 40), list_panel, 0, border_radius=18)
-        pygame.draw.rect(self.screen, (70, 86, 122), list_panel, 2, border_radius=18)
-        pygame.draw.rect(self.screen, (22, 28, 40), detail_panel, 0, border_radius=18)
-        pygame.draw.rect(self.screen, (70, 86, 122), detail_panel, 2, border_radius=18)
+        list_panel = pygame.Rect(40, 214, 420, 518)
+        detail_panel = pygame.Rect(500, 214, 660, 518)
+        self.draw_glass_panel(list_panel, accent=(86, 170, 255), radius=24)
+        self.draw_glass_panel(detail_panel, accent=(244, 206, 84), radius=24)
+        offers_chip = pygame.Rect(list_panel.x + 14, list_panel.y + 12, 164, 28)
+        self.draw_glass_panel(offers_chip, accent=(12, 220, 190), radius=12, fill=(16, 24, 34, 214), shine=False)
+        self.screen.blit(self.small.render(f"{len(self.fantasy_market_offers)} live offers", True, WHITE), (offers_chip.x + 12, offers_chip.y + 8))
         start = max(0, min(self.fantasy_market_index - 6, max(0, len(self.fantasy_market_offers) - 12)))
-        y = list_panel.y + 18
+        y = list_panel.y + 50
         for i in range(start, min(len(self.fantasy_market_offers), start + 12)):
             card = self.fantasy_market_offers[i]
             row = pygame.Rect(list_panel.x + 12, y, list_panel.w - 24, 38)
             if i == self.fantasy_market_index:
-                pygame.draw.rect(self.screen, (70, 82, 110), row, 0, border_radius=10)
+                self.draw_glass_panel(row, accent=YELLOW, radius=10, fill=(70, 82, 110, 228), shine=False)
             elif i % 2 == 0:
                 pygame.draw.rect(self.screen, (28, 34, 46), row, 0, border_radius=10)
             line = f"{card['name'][:18]:<18} {card.get('rarity','Base')[:8]:<8} {card['rating']:>3}  {card.get('market_price', 0)}c"
@@ -6938,31 +6938,35 @@ class Game:
             f"Price: {selected.get('market_price', 0)} coins",
             f"Skills: {traits}",
         ]
+        price_chip = pygame.Rect(detail_panel.right - 176, detail_panel.y + 16, 146, 34)
+        self.draw_glass_panel(price_chip, accent=(12, 220, 190), radius=14, fill=(16, 24, 34, 216), shine=False)
+        self.screen.blit(self.small.render(f"{selected.get('market_price', 0)} COINS", True, WHITE), (price_chip.x + 18, price_chip.y + 10))
         dy = detail_panel.y + 40
         for line in details:
             self.screen.blit(self.font.render(line[:42], True, WHITE), (detail_panel.x + 320, dy))
             dy += 42
+        footer = pygame.Rect(detail_panel.x + 18, detail_panel.bottom - 74, detail_panel.w - 36, 48)
+        self.draw_glass_panel(footer, accent=(86, 170, 255), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Live market pricing. Buy instantly if your club wallet can cover the fee.", True, (214, 222, 236)), (footer.x + 14, footer.y + 15))
 
     def draw_fantasy_evolutions_page(self):
-        self.screen.fill((14, 18, 28))
-        self.screen.blit(self.big.render("Fantasy Evolutions", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN browse | LEFT/RIGHT path | ENTER evolve | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Coins: {self.fantasy_coins}", True, WHITE), (980, 28))
+        self.draw_modern_backdrop((244, 206, 84), (12, 220, 190))
+        self.draw_hero_header("Fantasy Evolutions", "Cleaner upgrade lanes, cost gates, and progress states for every card path.", accent=(244, 206, 84), accent_two=(12, 220, 190), right_text=f"{self.fantasy_coins}C")
+        self.screen.blit(self.small.render("UP/DOWN browse | LEFT/RIGHT path | ENTER evolve | ESC back", True, (190, 200, 215)), (36, 170))
         cards = sorted(self.fantasy_roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
         if not cards:
-            self.screen.blit(self.font.render("No cards available", True, WHITE), (40, 120))
+            self.screen.blit(self.font.render("No cards available", True, WHITE), (40, 232))
             return
         self.fantasy_evolution_index = max(0, min(self.fantasy_evolution_index, len(cards) - 1))
         selected = cards[self.fantasy_evolution_index]
         paths = self.fantasy_evolution_paths(selected)
         self.fantasy_evolution_choice = max(0, min(self.fantasy_evolution_choice, len(paths) - 1))
 
-        list_panel = pygame.Rect(40, 96, 330, 580)
-        card_panel = pygame.Rect(400, 96, 310, 580)
-        path_panel = pygame.Rect(740, 96, 420, 580)
+        list_panel = pygame.Rect(40, 214, 330, 510)
+        card_panel = pygame.Rect(400, 214, 310, 510)
+        path_panel = pygame.Rect(740, 214, 420, 510)
         for panel in (list_panel, card_panel, path_panel):
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+            self.draw_glass_panel(panel, accent=(86, 170, 255) if panel != path_panel else (244, 206, 84), radius=24)
 
         start = max(0, min(self.fantasy_evolution_index - 5, max(0, len(cards) - 10)))
         y = list_panel.y + 16
@@ -6970,8 +6974,7 @@ class Game:
             card = cards[i]
             row = pygame.Rect(list_panel.x + 12, y, list_panel.w - 24, 48)
             is_selected = i == self.fantasy_evolution_index
-            pygame.draw.rect(self.screen, (42, 52, 72) if is_selected else (28, 34, 48), row, 0, border_radius=12)
-            pygame.draw.rect(self.screen, YELLOW if is_selected else (86, 98, 126), row, 2, border_radius=12)
+            self.draw_glass_panel(row, accent=YELLOW if is_selected else (86, 98, 126), radius=12, fill=(42, 52, 72, 228) if is_selected else (28, 34, 48, 214), shine=False)
             text = f"{card['name'][:14]:<14} {card['rating']:>3}  Evo {card.get('evo_level', 0)}"
             self.screen.blit(self.small.render(text, True, WHITE), (row.x + 10, row.y + 15))
             y += 54
@@ -7004,8 +7007,7 @@ class Game:
             row = pygame.Rect(path_panel.x + 14, y, path_panel.w - 28, row_h)
             is_selected = idx == self.fantasy_evolution_choice
             ready = path["ready"] and self.fantasy_coins >= path["cost"] and selected.get("evo_level", 0) < 5
-            pygame.draw.rect(self.screen, (42, 52, 72) if is_selected else (28, 34, 48), row, 0, border_radius=16)
-            pygame.draw.rect(self.screen, YELLOW if is_selected else (86, 98, 126), row, 2, border_radius=16)
+            self.draw_glass_panel(row, accent=YELLOW if is_selected else (86, 98, 126), radius=18, fill=(42, 52, 72, 228) if is_selected else (28, 34, 48, 214), shine=False)
             self.screen.blit(self.font.render(path["name"], True, WHITE), (row.x + 14, row.y + 12))
             self.screen.blit(self.small.render(f"Upgrade: +{path['delta']} OVR", True, LIGHT_GREEN), (row.x + 14, row.y + 46))
             self.screen.blit(self.small.render(f"Cost: {path['cost']} coins", True, WHITE), (row.x + 14, row.y + 70))
@@ -7929,27 +7931,27 @@ class Game:
                         pygame.draw.circle(starburst, WHITE, (sx, sy), 2)
                     self.screen.blit(starburst, (0, 0))
 
-        footer = self.small.render("Club  |  Position  |  Promo  |  Walkout Reveal", True, (178, 188, 204))
-        self.screen.blit(footer, (center_x - footer.get_width() // 2, HEIGHT - 34))
+        footer_box = pygame.Rect(center_x - 240, HEIGHT - 52, 480, 30)
+        self.draw_glass_panel(footer_box, accent=accent, radius=12, fill=(12, 16, 24, 220), shine=False)
+        footer = self.small.render("Broadcast reveal tunnel  |  Club  |  Position  |  Promo", True, (178, 188, 204))
+        self.screen.blit(footer, (footer_box.centerx - footer.get_width() // 2, footer_box.y + 8))
 
     def draw_pack_summary(self):
         if not self.last_pack:
             return
-        panel = pygame.Rect(120, 96, 960, 520)
-        pygame.draw.rect(self.screen, (18, 24, 36), panel, 0, border_radius=22)
-        pygame.draw.rect(self.screen, (70, 86, 122), panel, 3, border_radius=22)
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
         featured = max(self.last_pack, key=lambda p: (self.rarity_rank(p.get("rarity", "Bronze")), p.get("rating", 0)))
         featured_rarity = featured.get("rarity", "Bronze")
         big_hit = featured_rarity in ("Legend", "Transcendent", "Celestial", "Eternal", "Immortal", "Omega", "Icon", "GOAT")
         title = "Massive Pull" if big_hit else "Pack Summary"
         subtitle = f"Best card: {featured['name']} | {featured['rating']} OVR | {featured_rarity}"
+        self.draw_hero_header(title, subtitle[:78], accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=f"{len(self.last_pack)} CARDS")
+        panel = pygame.Rect(90, 186, 1020, 520)
+        self.draw_glass_panel(panel, accent=(244, 206, 84) if big_hit else (86, 170, 255), radius=24)
         total_ovr = sum(p.get("rating", 0) for p in self.last_pack)
         unique_rarities = len({p.get("rarity", "Bronze") for p in self.last_pack})
-        self.screen.blit(self.big.render(title, True, WHITE), (panel.x + 18, panel.y + 16))
-        self.screen.blit(self.small.render(subtitle[:82], True, (190, 200, 215)), (panel.x + 20, panel.y + 50))
         reward_chip = pygame.Rect(panel.right - 230, panel.y + 18, 190, 52)
-        pygame.draw.rect(self.screen, (30, 38, 56), reward_chip, 0, border_radius=14)
-        pygame.draw.rect(self.screen, (244, 206, 84) if big_hit else (90, 108, 144), reward_chip, 2, border_radius=14)
+        self.draw_glass_panel(reward_chip, accent=(244, 206, 84) if big_hit else (90, 108, 144), radius=14, fill=(30, 38, 56, 220), shine=False)
         self.screen.blit(self.small.render(f"Total OVR {total_ovr}", True, WHITE), (reward_chip.x + 18, reward_chip.y + 10))
         self.screen.blit(self.small.render(f"{unique_rarities} rarity bands", True, (214, 222, 236)), (reward_chip.x + 18, reward_chip.y + 28))
         start_x = panel.x + 26
@@ -7968,8 +7970,7 @@ class Game:
             self.screen.blit(self.small.render(line, True, WHITE), (panel.x + 24, y))
             y += 26
         footer = pygame.Rect(panel.x + 24, panel.bottom - 92, panel.w - 48, 54)
-        pygame.draw.rect(self.screen, (28, 34, 48), footer, 0, border_radius=14)
-        pygame.draw.rect(self.screen, (90, 108, 144), footer, 2, border_radius=14)
+        self.draw_glass_panel(footer, accent=(90, 108, 144), radius=14, fill=(28, 34, 48, 220), shine=False)
         footer_text = "Featured pull locked to walkout highlight." if big_hit else "Standard reward reveal complete."
         self.screen.blit(self.small.render(footer_text, True, (214, 222, 236)), (footer.x + 18, footer.y + 11))
         self.screen.blit(self.small.render("Open more packs from My Packs or the shop.", True, (190, 200, 215)), (footer.x + 18, footer.y + 29))
@@ -10965,25 +10966,23 @@ class Game:
         tab_name = tabs[self.dev_console_tab]
         settings = self.dev_admin_status.get("settings", {})
         metrics = self.dev_admin_status.get("metrics", {})
-        self.screen.fill((12, 16, 26))
-        self.screen.blit(self.big.render("Developer Console", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER action | ESC back", True, (190, 200, 215)), (36, 56))
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_hero_header("Developer Console", "Cleaner admin operations, economy tools, tournament control, and support views.", accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=tab_name.upper())
+        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER action | ESC back", True, (190, 200, 215)), (36, 170))
         tab_x = 34
         for idx, tab in enumerate(tabs):
-            pill = pygame.Rect(tab_x, 88, 156, 34)
+            pill = pygame.Rect(tab_x, 210, 156, 34)
             active = idx == self.dev_console_tab
-            pygame.draw.rect(self.screen, (20, 28, 40), pill, 0, border_radius=12)
-            pygame.draw.rect(self.screen, YELLOW if active else (80, 92, 122), pill, 2, border_radius=12)
+            self.draw_glass_panel(pill, accent=YELLOW if active else (80, 92, 122), radius=12, fill=(20, 28, 40, 218), shine=False)
             self.screen.blit(self.small.render(tab, True, WHITE), (pill.x + 16, pill.y + 9))
             tab_x += 168
         if not users:
-            self.screen.blit(self.font.render("No users registered", True, WHITE), (40, 150))
+            self.screen.blit(self.font.render("No users registered", True, WHITE), (40, 290))
             return
-        list_panel = pygame.Rect(34, 140, 420, 546)
-        detail_panel = pygame.Rect(486, 140, 648, 546)
+        list_panel = pygame.Rect(34, 266, 420, 468)
+        detail_panel = pygame.Rect(486, 266, 648, 468)
         for panel in (list_panel, detail_panel):
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+            self.draw_glass_panel(panel, accent=(86, 170, 255) if panel == list_panel else (244, 206, 84), radius=24)
         self.screen.blit(self.small.render(f"Search: {self.dev_search_query or '_'}", True, (214, 222, 236)), (list_panel.x + 16, list_panel.y + 14))
         start = max(0, min(self.registered_users_index - 6, max(0, len(users) - 12)))
         y = list_panel.y + 44
@@ -10991,8 +10990,7 @@ class Game:
             user = users[idx]
             row = pygame.Rect(list_panel.x + 12, y, list_panel.w - 24, 40)
             active = idx == self.registered_users_index
-            pygame.draw.rect(self.screen, (36, 44, 60), row, 0, border_radius=10)
-            pygame.draw.rect(self.screen, YELLOW if active else (86, 98, 126), row, 2, border_radius=10)
+            self.draw_glass_panel(row, accent=YELLOW if active else (86, 98, 126), radius=12, fill=(36, 44, 60, 220), shine=False)
             status = "BANNED" if user.get("is_banned") else "SUSP" if user.get("is_suspended") else "OK"
             label = f"{user.get('username', '')} {'DEV' if user.get('is_developer') else 'USER'} {status}"
             self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 12))
@@ -11038,8 +11036,7 @@ class Game:
         elif tab_name == "Economy":
             selected_card = top_cards[0] if top_cards else {}
             action_panel = pygame.Rect(detail_panel.x + 18, detail_panel.y + 274, detail_panel.w - 36, 150)
-            pygame.draw.rect(self.screen, (28, 34, 48), action_panel, 0, border_radius=14)
-            pygame.draw.rect(self.screen, (86, 98, 126), action_panel, 2, border_radius=14)
+            self.draw_glass_panel(action_panel, accent=(12, 220, 190), radius=16, fill=(28, 34, 48, 220), shine=False)
             lines = [
                 f"Target: {selected.get('username', '')}",
                 f"Coin Delta: {self.developer_coin_amounts()[self.dev_coin_delta_index]}",
@@ -11124,28 +11121,25 @@ class Game:
         cards = self.filtered_developer_card_catalog()
         selected_user = self.selected_registered_user()
         selected_card = self.selected_developer_catalog_card()
-        self.screen.fill((12, 16, 26))
-        self.screen.blit(self.big.render("Developer Card Catalog", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | ESC back", True, (190, 200, 215)), (36, 56))
+        self.draw_modern_backdrop((86, 170, 255), (12, 220, 190))
+        self.draw_hero_header("Developer Card Catalog", "Dedicated card browser with cleaner search, preview, and gifting flow.", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"{len(cards)} RESULTS")
+        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | ESC back", True, (190, 200, 215)), (36, 170))
 
-        target_panel = pygame.Rect(34, 88, 1098, 44)
-        pygame.draw.rect(self.screen, (20, 28, 40), target_panel, 0, border_radius=12)
-        pygame.draw.rect(self.screen, (80, 92, 122), target_panel, 2, border_radius=12)
+        target_panel = pygame.Rect(34, 210, 1098, 44)
+        self.draw_glass_panel(target_panel, accent=(80, 92, 122), radius=14, fill=(20, 28, 40, 218), shine=False)
         target_text = selected_user.get("username", "No target selected") if selected_user else "No target selected"
         self.screen.blit(self.small.render(f"Target User: {target_text}", True, WHITE), (target_panel.x + 14, target_panel.y + 13))
 
-        search_panel = pygame.Rect(34, 146, 1098, 54)
-        pygame.draw.rect(self.screen, (22, 28, 40), search_panel, 0, border_radius=14)
-        pygame.draw.rect(self.screen, YELLOW, search_panel, 2, border_radius=14)
+        search_panel = pygame.Rect(34, 268, 1098, 54)
+        self.draw_glass_panel(search_panel, accent=YELLOW, radius=16, fill=(22, 28, 40, 222), shine=False)
         search_text = self.dev_card_search_query or "_"
         self.screen.blit(self.small.render("Search by player, promo, or club", True, (190, 200, 215)), (search_panel.x + 16, search_panel.y + 8))
         self.screen.blit(self.font.render(search_text, True, WHITE), (search_panel.x + 16, search_panel.y + 24))
 
-        list_panel = pygame.Rect(34, 220, 440, 466)
-        preview_panel = pygame.Rect(506, 220, 626, 466)
+        list_panel = pygame.Rect(34, 342, 440, 392)
+        preview_panel = pygame.Rect(506, 342, 626, 392)
         for panel in (list_panel, preview_panel):
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+            self.draw_glass_panel(panel, accent=(86, 170, 255) if panel == list_panel else (12, 220, 190), radius=24)
 
         self.screen.blit(self.small.render(f"Catalog Results: {len(cards)}", True, WHITE), (list_panel.x + 14, list_panel.y + 12))
         if not cards:
@@ -11158,8 +11152,7 @@ class Game:
                 card = cards[idx]
                 row = pygame.Rect(list_panel.x + 10, row_y, list_panel.w - 20, 36)
                 active = idx == self.dev_card_index
-                pygame.draw.rect(self.screen, (44, 54, 74) if active else (32, 38, 54), row, 0, border_radius=8)
-                pygame.draw.rect(self.screen, YELLOW if active else (92, 104, 134), row, 2, border_radius=8)
+                self.draw_glass_panel(row, accent=YELLOW if active else (92, 104, 134), radius=10, fill=(44, 54, 74, 220) if active else (32, 38, 54, 208), shine=False)
                 label = f"{card.get('name', '')[:18]:<18} {card.get('rating', 0):>3} {card.get('promo', 'Base')[:10]}"
                 self.screen.blit(self.small.render(label, True, WHITE), (row.x + 8, row.y + 10))
                 row_y += 42
