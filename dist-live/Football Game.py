@@ -1554,6 +1554,7 @@ class Game:
         self.dev_pack_index = 0
         self.dev_card_index = 0
         self.dev_card_search_query = ""
+        self.dev_catalog_cache = []
         self.dev_announcement_input = ""
         self.profile_autosave_timer = 0.0
         self.fantasy_budget = 400
@@ -2142,9 +2143,18 @@ class Game:
         return packs or ["gold"]
 
     def developer_card_catalog(self):
-        if not self.fantasy_pool:
-            self.fantasy_pool = self.build_fantasy_pool()
-        pool = self.fantasy_pool
+        if not self.dev_catalog_cache:
+            if self.fantasy_pool:
+                source = self.fantasy_pool
+            else:
+                current_pool = self.fantasy_pool[:]
+                current_index = self.fantasy_index
+                self.build_fantasy_pool()
+                source = self.fantasy_pool[:]
+                self.fantasy_pool = current_pool
+                self.fantasy_index = current_index
+            self.dev_catalog_cache = [card.copy() for card in source if isinstance(card, dict)]
+        pool = self.dev_catalog_cache
         unique = {}
         for card in pool:
             if not isinstance(card, dict):
@@ -3268,9 +3278,36 @@ class Game:
             return
         lineup = TEAM_LINEUPS.get(self.user_team)
         if self.game_mode == "FANTASY":
+            owned_counts = {}
+            for card in self.fantasy_roster:
+                if not isinstance(card, dict):
+                    continue
+                key = (str(card.get("name") or "").strip(), int(card.get("rating", 0)))
+                if not key[0]:
+                    continue
+                owned_counts[key] = owned_counts.get(key, 0) + 1
+
+            def fantasy_entries_fit(entries):
+                remaining = dict(owned_counts)
+                for entry in entries or []:
+                    name, _, rating = normalize_entry(entry, 0, self.user_team)
+                    key = (name, int(rating))
+                    if remaining.get(key, 0) > 0:
+                        remaining[key] -= 1
+                        continue
+                    fallback = [existing for existing, count in remaining.items() if existing[0] == name and count > 0]
+                    if fallback:
+                        remaining[fallback[0]] -= 1
+                        continue
+                    return False
+                return True
+
+            roster_entries = ROSTER_DATA.get(self.user_team, [])
             needs_rebuild = (
                 not isinstance(lineup, list)
                 or len(lineup) < min(11, len(self.fantasy_roster))
+                or (self.fantasy_roster and not fantasy_entries_fit(lineup))
+                or (self.fantasy_roster and not fantasy_entries_fit(roster_entries))
             )
             if needs_rebuild and self.fantasy_roster:
                 used_numbers = set()
@@ -3668,6 +3705,7 @@ class Game:
             pool = [card for card in pool if card.get("team") not in fantasy_team_names]
         pool.sort(key=lambda p: (-p["rating"], p["name"]))
         self.fantasy_pool = pool
+        self.dev_catalog_cache = []
         self.fantasy_index = 0
 
     def init_audio(self):
