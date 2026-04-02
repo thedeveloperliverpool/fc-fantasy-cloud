@@ -1555,6 +1555,10 @@ class Game:
         self.dev_card_index = 0
         self.dev_card_search_query = ""
         self.dev_catalog_cache = []
+        self.dev_catalog_card_face = "front"
+        self.dev_catalog_flip_target = 1.0
+        self.dev_catalog_flip_progress = 1.0
+        self.dev_catalog_flip_button_rect = None
         self.player_portrait_cache = {}
         self.dev_announcement_input = ""
         self.profile_autosave_timer = 0.0
@@ -1589,6 +1593,10 @@ class Game:
         self.fantasy_collection_index = 0
         self.fantasy_collection_filter = 0
         self.fantasy_collection_sort = 0
+        self.collection_flip_target = 1.0
+        self.collection_flip_progress = 1.0
+        self.collection_card_face = "front"
+        self.collection_flip_button_rect = None
         self.fantasy_favorites = []
         self.fantasy_evolution_index = 0
         self.fantasy_evolution_choice = 0
@@ -6457,6 +6465,30 @@ class Game:
         else:
             self.draw_card_front(x, y, w, h, player)
 
+    def draw_flipping_card(self, x, y, w, h, player, progress, front_face="front"):
+        progress = max(0.0, min(1.0, progress))
+        scale = abs(math.cos(progress * math.pi))
+        draw_w = max(12, int(w * scale))
+        draw_x = x + (w - draw_w) // 2
+        face = "back" if progress < 0.5 else front_face
+        self.draw_card(draw_x, y, draw_w, h, player, face=face)
+
+    def set_collection_card_face(self, face):
+        desired = "back" if face == "back" else "front"
+        self.collection_card_face = desired
+        self.collection_flip_target = 0.0 if desired == "back" else 1.0
+
+    def toggle_collection_card_face(self):
+        self.set_collection_card_face("back" if self.collection_card_face == "front" else "front")
+
+    def set_dev_catalog_card_face(self, face):
+        desired = "back" if face == "back" else "front"
+        self.dev_catalog_card_face = desired
+        self.dev_catalog_flip_target = 0.0 if desired == "back" else 1.0
+
+    def toggle_dev_catalog_card_face(self):
+        self.set_dev_catalog_card_face("back" if self.dev_catalog_card_face == "front" else "front")
+
     def draw_squad_card(self, x, y, w, h, entry, role="", selected=False, picked=False):
         name, num, rating = entry
         card_meta = next((c for c in self.fantasy_roster if c["name"] == name and c.get("number") == num and c["rating"] == rating), None)
@@ -6928,8 +6960,9 @@ class Game:
     def draw_fantasy_collection_page(self):
         self.draw_modern_backdrop((12, 220, 190), (86, 170, 255))
         self.draw_hero_header("Fantasy Collection", "Premium card library with faster comparison and cleaner browsing.", accent=(12, 220, 190), accent_two=(86, 170, 255), right_text=f"{len(self.fantasy_roster)} OWNED")
+        self.collection_flip_button_rect = None
         record = self.active_account_record() or {}
-        controls = "ARROWS move | G filter | TAB sort | F favorite"
+        controls = "ARROWS move | G filter | TAB sort | F favorite | V flip"
         if record.get("is_developer"):
             controls += " | DEL/BKSP discard"
         controls += " | ESC back"
@@ -6979,7 +7012,11 @@ class Game:
         pygame.draw.rect(self.screen, (18, 24, 36), rarity_chip, 0, border_radius=10)
         pygame.draw.rect(self.screen, self.card_theme_colors(selected)[1], rarity_chip, 2, border_radius=10)
         self.screen.blit(self.small.render(selected.get("rarity", "Base").upper(), True, WHITE), (rarity_chip.x + 12, rarity_chip.y + 7))
-        self.draw_card(detail_panel.x + 96, detail_panel.y + 54, 184, 250, selected)
+        flip_label = "Show Back" if self.collection_card_face == "front" else "Show Front"
+        self.collection_flip_button_rect = pygame.Rect(detail_panel.right - 128, detail_panel.y + 16, 110, 30)
+        self.draw_glass_panel(self.collection_flip_button_rect, accent=(244, 206, 84), radius=12, fill=(16, 24, 34, 210), shine=False)
+        self.screen.blit(self.small.render(flip_label, True, WHITE), (self.collection_flip_button_rect.x + 14, self.collection_flip_button_rect.y + 9))
+        self.draw_flipping_card(detail_panel.x + 96, detail_panel.y + 54, 184, 250, selected, self.collection_flip_progress)
         traits = ", ".join(selected.get("traits", [])) or "None"
         fav_text = "Yes" if self.is_favorite_card(selected) else "No"
         lines = [
@@ -7987,7 +8024,8 @@ class Game:
                             border_radius=26,
                         )
                     self.screen.blit(suspense_burst, (0, 0))
-                self.draw_card(center_x - card_w / 2, card_y, card_w, card_h, player)
+                flip_progress = min(1.0, max(0.0, (norm - 0.52) / 0.18))
+                self.draw_flipping_card(int(center_x - card_w / 2), int(card_y), int(card_w), int(card_h), player, flip_progress)
 
                 ease = 1.0 - (1.0 - reveal_phase) * (1.0 - reveal_phase)
                 shown_rating = max(1, int(player["rating"] * ease))
@@ -9875,6 +9913,9 @@ class Game:
                     if self.state in ("ACCOUNT_HOME", "ACCOUNT_LOGIN", "ACCOUNT_CREATE", "ACCOUNT_DEV_LOGIN", "CLOUD_SETTINGS", "MODE_SELECT"):
                         self.reconnect_cloud()
                         continue
+                if self.state == "FANTASY_COLLECTION" and self.collection_flip_button_rect and self.collection_flip_button_rect.collidepoint(event.pos):
+                    self.toggle_collection_card_face()
+                    continue
             if event.type == pygame.KEYDOWN:
                 if self.state == "ACCOUNT_HOME":
                     options = ["Sign In", "Create Account", "Developer Sign In"]
@@ -10111,6 +10152,8 @@ class Game:
                         self.admin_user_action(selected_user.get("username"), "add_card", card=cards[self.dev_card_index])
                     elif event.key == pygame.K_g and selected_user and cards:
                         self.admin_user_action(selected_user.get("username"), "add_card", card=cards[self.dev_card_index])
+                    elif event.key == pygame.K_v and cards:
+                        self.toggle_dev_catalog_card_face()
                     elif event.unicode and event.unicode.isprintable() and len(self.dev_card_search_query) < 48:
                         self.dev_card_search_query += event.unicode.lower()
                         self.dev_card_index = 0
@@ -10272,6 +10315,8 @@ class Game:
                         cards = self.filtered_collection_cards()
                         if cards:
                             self.toggle_favorite_card(cards[self.fantasy_collection_index])
+                    elif event.key == pygame.K_v:
+                        self.toggle_collection_card_face()
                     elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE) and self.fantasy_roster:
                         cards = self.filtered_collection_cards()
                         record = self.active_account_record() or {}
@@ -12356,9 +12401,22 @@ class Game:
             self.commentary_timer -= 1 / FPS
         if self.walkout_timer > 0:
             self.walkout_timer = max(0.0, self.walkout_timer - dt)
+        if abs(self.collection_flip_progress - self.collection_flip_target) > 0.001:
+            speed = 5.5 * dt
+            if self.collection_flip_progress < self.collection_flip_target:
+                self.collection_flip_progress = min(self.collection_flip_target, self.collection_flip_progress + speed)
+            else:
+                self.collection_flip_progress = max(self.collection_flip_target, self.collection_flip_progress - speed)
+        if abs(self.dev_catalog_flip_progress - self.dev_catalog_flip_target) > 0.001:
+            speed = 5.5 * dt
+            if self.dev_catalog_flip_progress < self.dev_catalog_flip_target:
+                self.dev_catalog_flip_progress = min(self.dev_catalog_flip_target, self.dev_catalog_flip_progress + speed)
+            else:
+                self.dev_catalog_flip_progress = max(self.dev_catalog_flip_target, self.dev_catalog_flip_progress - speed)
         if self.pack_summary_timer > 0:
             self.pack_summary_timer = max(0.0, self.pack_summary_timer - dt)
         if self.state == "PACK_OPENING" and self.walkout_timer <= 0 and self.last_pack:
+            self.pack_summary_timer = 1.35
             self.state = "PACK_SUMMARY"
         if self.state == "MATCH_SCENE":
             if self.match_scene_timer > 0:
