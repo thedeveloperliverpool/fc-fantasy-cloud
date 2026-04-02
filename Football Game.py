@@ -8106,7 +8106,9 @@ class Game:
             is_featured = self.fantasy_card_key(player) == self.fantasy_card_key(featured)
             card_x = start_x + i * 182
             card_y = panel.y + 92
-            self.draw_card(card_x, card_y, 160, 250, player)
+            delay = i * 0.14
+            flip_progress = max(0.0, min(1.0, 1.0 - max(0.0, self.pack_summary_timer - delay) / 0.62))
+            self.draw_flipping_card(card_x, card_y, 160, 250, player, flip_progress)
             if is_featured:
                 pygame.draw.rect(self.screen, YELLOW, (card_x - 4, card_y - 4, 168, 258), 3, border_radius=18)
         y = panel.y + 372
@@ -9916,6 +9918,9 @@ class Game:
                 if self.state == "FANTASY_COLLECTION" and self.collection_flip_button_rect and self.collection_flip_button_rect.collidepoint(event.pos):
                     self.toggle_collection_card_face()
                     continue
+                if self.state == "DEV_CARD_CATALOG" and self.dev_catalog_flip_button_rect and self.dev_catalog_flip_button_rect.collidepoint(event.pos):
+                    self.toggle_dev_catalog_card_face()
+                    continue
             if event.type == pygame.KEYDOWN:
                 if self.state == "ACCOUNT_HOME":
                     options = ["Sign In", "Create Account", "Developer Sign In"]
@@ -11275,9 +11280,10 @@ class Game:
         cards = self.filtered_developer_card_catalog()
         selected_user = self.selected_registered_user()
         selected_card = self.selected_developer_catalog_card()
+        self.dev_catalog_flip_button_rect = None
         self.draw_modern_backdrop((86, 170, 255), (12, 220, 190))
         self.draw_hero_header("Developer Card Catalog", "Dedicated card browser with cleaner search, preview, and gifting flow.", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"{len(cards)} RESULTS")
-        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | ESC back", True, (190, 200, 215)), (36, 170))
+        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | V flip | ESC back", True, (190, 200, 215)), (36, 170))
 
         target_panel = pygame.Rect(34, 210, 1098, 44)
         self.draw_glass_panel(target_panel, accent=(80, 92, 122), radius=14, fill=(20, 28, 40, 218), shine=False)
@@ -11317,7 +11323,11 @@ class Game:
 
         self.screen.blit(self.font.render("Selected Card", True, WHITE), (preview_panel.x + 18, preview_panel.y + 14))
         if selected_card:
-            self.draw_card(preview_panel.x + 20, preview_panel.y + 48, 220, 320, selected_card)
+            flip_label = "Show Back" if self.dev_catalog_card_face == "front" else "Show Front"
+            self.dev_catalog_flip_button_rect = pygame.Rect(preview_panel.right - 128, preview_panel.y + 12, 110, 30)
+            self.draw_glass_panel(self.dev_catalog_flip_button_rect, accent=(244, 206, 84), radius=12, fill=(16, 24, 34, 210), shine=False)
+            self.screen.blit(self.small.render(flip_label, True, WHITE), (self.dev_catalog_flip_button_rect.x + 14, self.dev_catalog_flip_button_rect.y + 9))
+            self.draw_flipping_card(preview_panel.x + 20, preview_panel.y + 48, 220, 320, selected_card, self.dev_catalog_flip_progress)
             info_lines = [
                 f"Name: {selected_card.get('name', '')}",
                 f"Club: {selected_card.get('team', 'None')}",

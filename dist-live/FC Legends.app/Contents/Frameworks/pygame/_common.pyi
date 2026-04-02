@@ -1,1 +1,0 @@
-../../Resources/pygame/_common.pyi
