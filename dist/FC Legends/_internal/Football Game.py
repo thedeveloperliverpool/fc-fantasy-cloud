@@ -1555,6 +1555,7 @@ class Game:
         self.dev_card_index = 0
         self.dev_card_search_query = ""
         self.dev_catalog_cache = []
+        self.player_portrait_cache = {}
         self.dev_announcement_input = ""
         self.profile_autosave_timer = 0.0
         self.fantasy_budget = 400
@@ -6202,7 +6203,109 @@ class Game:
             points.append((center_x + math.cos(angle) * radius, center_y + math.sin(angle) * radius))
         pygame.draw.polygon(self.screen, color, points)
 
-    def draw_card(self, x, y, w, h, player):
+    def player_portrait_slug(self, player):
+        raw = player.get("name", "").strip().lower()
+        chars = [ch if ch.isalnum() else "_" for ch in raw]
+        slug = "".join(chars).strip("_")
+        while "__" in slug:
+            slug = slug.replace("__", "_")
+        return slug or "unknown_player"
+
+    def load_player_portrait(self, player):
+        slug = self.player_portrait_slug(player)
+        if slug in self.player_portrait_cache:
+            return self.player_portrait_cache[slug]
+        portrait = None
+        for ext in ("png", "jpg", "jpeg", "webp"):
+            path = os.path.join("assets", "player_cards", f"{slug}.{ext}")
+            if os.path.exists(path):
+                try:
+                    portrait = pygame.image.load(path).convert_alpha()
+                except Exception:
+                    portrait = None
+                break
+        self.player_portrait_cache[slug] = portrait
+        return portrait
+
+    def draw_card_front(self, x, y, w, h, player):
+        rating = player["rating"]
+        team = player["team"]
+        league = player.get("league", get_team_league(team))
+        tier = player.get("rarity") or self.card_tier(rating)[0]
+        base_color, accent = self.card_theme_colors(player)
+        promo = player.get("promo", "Base")
+        name = player["name"]
+        evo_level = player.get("evo_level", 0)
+
+        card = pygame.Rect(int(x), int(y), int(w), int(h))
+        shadow = pygame.Surface((w + 24, h + 26), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 86), (12, 14, w, h), 0, border_radius=24)
+        pygame.draw.rect(shadow, (*accent, 30), (8, 10, w, h), 0, border_radius=24)
+        self.screen.blit(shadow, (x - 12, y - 12))
+        pygame.draw.rect(self.screen, base_color, card, 0, border_radius=22)
+        self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, promo)
+
+        inner = pygame.Rect(x + 10, y + 10, w - 20, h - 20)
+        pygame.draw.rect(self.screen, (8, 12, 20), inner, 2, border_radius=20)
+
+        art_rect = pygame.Rect(x + 14, y + 56, w - 28, h - 134)
+        art_surface = pygame.Surface((art_rect.w, art_rect.h), pygame.SRCALPHA)
+        for iy in range(art_rect.h):
+            mix = iy / max(1, art_rect.h - 1)
+            row = self.blend_color(self.blend_color(base_color, WHITE, 0.16), self.blend_color(base_color, (10, 12, 18), 0.42), mix)
+            pygame.draw.line(art_surface, row, (0, iy), (art_rect.w, iy))
+        pygame.draw.polygon(art_surface, (*accent, 54), [(0, art_rect.h), (art_rect.w * 0.34, art_rect.h * 0.42), (art_rect.w * 0.68, art_rect.h), (0, art_rect.h)])
+        pygame.draw.polygon(art_surface, (255, 255, 255, 22), [(0, 0), (art_rect.w * 0.66, 0), (art_rect.w * 0.30, art_rect.h), (0, art_rect.h)])
+        pygame.draw.ellipse(art_surface, (*accent, 60), (art_rect.w * 0.12, art_rect.h * 0.02, art_rect.w * 0.76, art_rect.h * 0.30))
+        pygame.draw.rect(art_surface, (*accent, 110), (0, 0, art_rect.w, art_rect.h), 2, border_radius=18)
+        portrait = self.load_player_portrait(player)
+        if portrait:
+            scale = max(art_rect.w / max(1, portrait.get_width()), art_rect.h / max(1, portrait.get_height()))
+            scaled = pygame.transform.smoothscale(portrait, (max(1, int(portrait.get_width() * scale)), max(1, int(portrait.get_height() * scale))))
+            px = (art_rect.w - scaled.get_width()) // 2
+            py = art_rect.h - scaled.get_height()
+            art_surface.blit(scaled, (px, py))
+        else:
+            center_x = art_rect.w // 2
+            body_color = (236, 240, 248, 210)
+            trim = (*accent, 220)
+            pygame.draw.ellipse(art_surface, (255, 255, 255, 40), (art_rect.w * 0.18, art_rect.h * 0.12, art_rect.w * 0.64, art_rect.h * 0.72))
+            pygame.draw.circle(art_surface, body_color, (center_x, int(art_rect.h * 0.25)), max(12, int(art_rect.w * 0.11)))
+            torso = [(center_x - art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.24, art_rect.h * 0.94), (center_x - art_rect.w * 0.24, art_rect.h * 0.94)]
+            pygame.draw.polygon(art_surface, body_color, torso)
+            pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.08, art_rect.h * 0.50), (center_x - art_rect.w * 0.22, art_rect.h * 0.74), 10)
+            pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.08, art_rect.h * 0.50), (center_x + art_rect.w * 0.22, art_rect.h * 0.74), 10)
+            pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.06, art_rect.h * 0.94), (center_x - art_rect.w * 0.14, art_rect.h * 1.06), 10)
+            pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.06, art_rect.h * 0.94), (center_x + art_rect.w * 0.14, art_rect.h * 1.06), 10)
+        self.screen.blit(art_surface, art_rect.topleft)
+
+        rating_text = self.title_font.render(str(rating), True, WHITE)
+        self.screen.blit(rating_text, (x + 18, y + 18))
+        pos_text = self.font.render(player.get("position", "ST"), True, WHITE)
+        self.screen.blit(pos_text, (x + 24, y + 56))
+
+        promo_chip = pygame.Rect(x + 14, y + 14, w - 28, 24)
+        self.draw_glass_panel(promo_chip, accent=accent, radius=10, fill=(12, 16, 24, 170), shine=False)
+        promo_label = "GOAT EDITION" if tier == "GOAT" else "SIGNATURE" if promo == "Signature" else promo.upper()
+        self.screen.blit(self.micro.render(promo_label[:24], True, WHITE), (promo_chip.centerx - self.micro.size(promo_label[:24])[0] // 2, promo_chip.y + 7))
+
+        footer = pygame.Rect(x + 14, y + h - 74, w - 28, 60)
+        self.draw_glass_panel(footer, accent=accent, radius=16, fill=(10, 14, 22, 210), shine=False)
+        short_name = name if len(name) <= 16 else name[:13] + "..."
+        name_text = self.font.render(short_name.upper(), True, WHITE)
+        self.screen.blit(name_text, (footer.centerx - name_text.get_width() // 2, footer.y + 8))
+        meta = f"{team[:14]}  |  {league[:14]}"
+        meta_text = self.micro.render(meta, True, (218, 226, 238))
+        self.screen.blit(meta_text, (footer.centerx - meta_text.get_width() // 2, footer.y + 34))
+        if evo_level > 0:
+            evo_chip = pygame.Rect(x + w - 64, y + h - 106, 50, 22)
+            self.draw_glass_panel(evo_chip, accent=(176, 255, 232), radius=10, fill=(10, 18, 26, 196), shine=False)
+            self.screen.blit(self.micro.render(f"EVO {evo_level}", True, WHITE), (evo_chip.x + 8, evo_chip.y + 7))
+
+        pygame.draw.rect(self.screen, accent, card, 3, border_radius=22)
+        pygame.draw.rect(self.screen, (255, 255, 255, 28), (x + 6, y + 6, w - 12, h - 12), 1, border_radius=20)
+
+    def draw_card_back(self, x, y, w, h, player):
         name = player["name"]
         rating = player["rating"]
         team = player["team"]
@@ -6347,6 +6450,12 @@ class Game:
             self.screen.blit(self.small.render(f"+{form_boost} form", True, LIGHT_GREEN), (x + 14, y + int(h * 0.90)))
         short = name if len(name) <= 14 else name[:11] + "..."
         self.screen.blit(self.font.render(short, True, WHITE), (x + 14, y + h - 32))
+
+    def draw_card(self, x, y, w, h, player, face="front"):
+        if face == "back":
+            self.draw_card_back(x, y, w, h, player)
+        else:
+            self.draw_card_front(x, y, w, h, player)
 
     def draw_squad_card(self, x, y, w, h, entry, role="", selected=False, picked=False):
         name, num, rating = entry
