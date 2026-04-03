@@ -6224,8 +6224,9 @@ class Game:
         if slug in self.player_portrait_cache:
             return self.player_portrait_cache[slug]
         portrait = None
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         for ext in ("png", "jpg", "jpeg", "webp"):
-            path = os.path.join("assets", "player_cards", f"{slug}.{ext}")
+            path = os.path.join(base_dir, "assets", "player_cards", f"{slug}.{ext}")
             if os.path.exists(path):
                 try:
                     portrait = pygame.image.load(path).convert_alpha()
@@ -6268,10 +6269,17 @@ class Game:
         pygame.draw.rect(art_surface, (*accent, 110), (0, 0, art_rect.w, art_rect.h), 2, border_radius=18)
         portrait = self.load_player_portrait(player)
         if portrait:
-            scale = max(art_rect.w / max(1, portrait.get_width()), art_rect.h / max(1, portrait.get_height()))
-            scaled = pygame.transform.smoothscale(portrait, (max(1, int(portrait.get_width() * scale)), max(1, int(portrait.get_height() * scale))))
+            focus_scale = max((art_rect.w * 0.88) / max(1, portrait.get_width()), (art_rect.h * 0.78) / max(1, portrait.get_height()))
+            scaled = pygame.transform.smoothscale(
+                portrait,
+                (
+                    max(1, int(portrait.get_width() * focus_scale)),
+                    max(1, int(portrait.get_height() * focus_scale)),
+                ),
+            )
             px = (art_rect.w - scaled.get_width()) // 2
-            py = art_rect.h - scaled.get_height()
+            py = int(art_rect.h * 0.03)
+            py = max(min(py, art_rect.h - scaled.get_height() + 28), -10)
             art_surface.blit(scaled, (px, py))
         else:
             center_x = art_rect.w // 2
@@ -6471,6 +6479,18 @@ class Game:
         draw_w = max(12, int(w * scale))
         draw_x = x + (w - draw_w) // 2
         face = "back" if progress < 0.5 else front_face
+        if draw_w < 96:
+            accent = self.card_theme_colors(player)[1]
+            edge_rect = pygame.Rect(draw_x, y, draw_w, h)
+            glow = pygame.Surface((draw_w + 18, h + 18), pygame.SRCALPHA)
+            pygame.draw.rect(glow, (*accent, 42), (9, 9, draw_w, h), 0, border_radius=max(6, min(18, draw_w // 2)))
+            self.screen.blit(glow, (draw_x - 9, y - 9))
+            pygame.draw.rect(self.screen, (16, 20, 30), edge_rect, 0, border_radius=max(6, min(18, draw_w // 2)))
+            pygame.draw.rect(self.screen, accent, edge_rect, 2, border_radius=max(6, min(18, draw_w // 2)))
+            if draw_w >= 24:
+                stripe_x = draw_x + draw_w // 2 - 2
+                pygame.draw.rect(self.screen, (*accent, 180), (stripe_x, y + 14, 4, h - 28), 0, border_radius=3)
+            return
         self.draw_card(draw_x, y, draw_w, h, player, face=face)
 
     def set_collection_card_face(self, face):

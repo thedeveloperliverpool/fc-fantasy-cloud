@@ -15,6 +15,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 datas += [
     (str(ROOT_DIR / "Football Game.py"), "."),
     (str(ROOT_DIR / "version.json"), "."),
+    (str(ROOT_DIR / "assets" / "player_cards"), "assets/player_cards"),
 ]
 
 
