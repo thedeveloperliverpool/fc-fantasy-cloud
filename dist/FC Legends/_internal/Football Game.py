@@ -869,6 +869,113 @@ DEFAULT_LINEUP = [
     ("LS", 11),
 ]
 
+FORMATION_TEMPLATES = {
+    1: ("4-4-2 Flat", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 170, "RB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 170, "LB"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 - 150, "RM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 - 50, "CM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 + 50, "CM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 + 150, "LM"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 - 60, "ST"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 + 60, "ST"),
+    ]),
+    2: ("4-3-3 Flat", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 170, "RB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 170, "LB"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 - 100, "CM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2, "CDM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 + 100, "CM"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 - 160, "RW"),
+        (FIELD_MARGIN + 520, HEIGHT / 2, "ST"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 + 160, "LW"),
+    ]),
+    3: ("3-5-2", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 160, HEIGHT / 2 - 140, "CB"),
+        (FIELD_MARGIN + 160, HEIGHT / 2, "CB"),
+        (FIELD_MARGIN + 160, HEIGHT / 2 + 140, "CB"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 - 200, "RM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 - 80, "CM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2, "CAM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 + 80, "CM"),
+        (FIELD_MARGIN + 330, HEIGHT / 2 + 200, "LM"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 - 60, "ST"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 + 60, "ST"),
+    ]),
+    4: ("4-2-3-1 Narrow", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 170, "RB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 170, "LB"),
+        (FIELD_MARGIN + 280, HEIGHT / 2 - 90, "CDM"),
+        (FIELD_MARGIN + 280, HEIGHT / 2 + 90, "CDM"),
+        (FIELD_MARGIN + 420, HEIGHT / 2 - 140, "CAM"),
+        (FIELD_MARGIN + 420, HEIGHT / 2, "CAM"),
+        (FIELD_MARGIN + 420, HEIGHT / 2 + 140, "CAM"),
+        (FIELD_MARGIN + 540, HEIGHT / 2, "ST"),
+    ]),
+    5: ("5-3-2", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 120, HEIGHT / 2 - 190, "RWB"),
+        (FIELD_MARGIN + 120, HEIGHT / 2 - 95, "CB"),
+        (FIELD_MARGIN + 120, HEIGHT / 2, "CB"),
+        (FIELD_MARGIN + 120, HEIGHT / 2 + 95, "CB"),
+        (FIELD_MARGIN + 120, HEIGHT / 2 + 190, "LWB"),
+        (FIELD_MARGIN + 300, HEIGHT / 2 - 120, "CM"),
+        (FIELD_MARGIN + 300, HEIGHT / 2, "CM"),
+        (FIELD_MARGIN + 300, HEIGHT / 2 + 120, "CM"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 - 60, "ST"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 + 60, "ST"),
+    ]),
+    6: ("4-1-4-1", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 170, "RB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 170, "LB"),
+        (FIELD_MARGIN + 260, HEIGHT / 2, "CDM"),
+        (FIELD_MARGIN + 360, HEIGHT / 2 - 160, "RM"),
+        (FIELD_MARGIN + 360, HEIGHT / 2 - 60, "CM"),
+        (FIELD_MARGIN + 360, HEIGHT / 2 + 60, "CM"),
+        (FIELD_MARGIN + 360, HEIGHT / 2 + 160, "LM"),
+        (FIELD_MARGIN + 540, HEIGHT / 2, "ST"),
+    ]),
+    7: ("4-2-2-2", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 170, "RB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 - 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 60, "CB"),
+        (FIELD_MARGIN + 130, HEIGHT / 2 + 170, "LB"),
+        (FIELD_MARGIN + 280, HEIGHT / 2 - 60, "CDM"),
+        (FIELD_MARGIN + 280, HEIGHT / 2 + 60, "CDM"),
+        (FIELD_MARGIN + 420, HEIGHT / 2 - 120, "RAM"),
+        (FIELD_MARGIN + 420, HEIGHT / 2 + 120, "LAM"),
+        (FIELD_MARGIN + 540, HEIGHT / 2 - 60, "ST"),
+        (FIELD_MARGIN + 540, HEIGHT / 2 + 60, "ST"),
+    ]),
+    8: ("3-4-3", [
+        (FIELD_MARGIN + 40, HEIGHT / 2, "GK"),
+        (FIELD_MARGIN + 150, HEIGHT / 2 - 140, "CB"),
+        (FIELD_MARGIN + 150, HEIGHT / 2, "CB"),
+        (FIELD_MARGIN + 150, HEIGHT / 2 + 140, "CB"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 - 160, "RM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 - 50, "CM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 + 50, "CM"),
+        (FIELD_MARGIN + 320, HEIGHT / 2 + 160, "LM"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 - 120, "RW"),
+        (FIELD_MARGIN + 520, HEIGHT / 2, "ST"),
+        (FIELD_MARGIN + 520, HEIGHT / 2 + 120, "LW"),
+    ]),
+}
+
 ROSTER_DATA = {
     "Arsenal": [
         ("David Raya", 1),
@@ -1429,6 +1536,7 @@ LEGACY_LINEUPS = {
 
 TEAM_LINEUPS = LEGACY_LINEUPS
 BASE_FANTASY_LINEUPS = json.loads(json.dumps(LEGACY_LINEUPS))
+TEAM_FORMATIONS = {team: 2 for team in LEGACY_LINEUPS}
 BASE_FANTASY_ROSTERS = json.loads(json.dumps(ROSTER_DATA))
 
 
@@ -1535,6 +1643,7 @@ class Game:
         self.dev_admin_status = {"ok": False, "settings": {}, "metrics": {}}
         self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.reconnect_button_rect = None
+        self.lineup_formation_rects = {}
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
             "cloud_api_url": self.app_settings.get("cloud_api_url", "http://127.0.0.1:8080"),
@@ -2618,6 +2727,7 @@ class Game:
             "player_awards": {k: list(v) for k, v in self.player_awards.items()},
             "last_season_awards": self.last_season_awards,
             "team_lineups": TEAM_LINEUPS,
+            "team_formations": TEAM_FORMATIONS,
             "roster_data": ROSTER_DATA,
             "rating_cache": RATING_CACHE,
             "transfer_pool": self.transfer_pool,
@@ -2683,6 +2793,10 @@ class Game:
         if isinstance(team_lineups, dict):
             TEAM_LINEUPS.clear()
             TEAM_LINEUPS.update(team_lineups)
+        team_formations = data.get("team_formations")
+        if isinstance(team_formations, dict):
+            TEAM_FORMATIONS.clear()
+            TEAM_FORMATIONS.update({team: int(value) for team, value in team_formations.items()})
         roster_data = data.get("roster_data")
         if isinstance(roster_data, dict):
             ROSTER_DATA.clear()
@@ -8412,6 +8526,7 @@ class Game:
                 self.account_message = "Fantasy club save is incomplete. Reopen fantasy mode."
                 self.state = "LEAGUE"
                 return
+            self.tactic = self.get_team_formation(self.user_team)
             for objective in self.fantasy_objectives.get("daily", []):
                 objective["progress"] = 0
                 objective["claimed"] = False
@@ -8436,6 +8551,8 @@ class Game:
             return
         if self.game_mode != "FANTASY":
             self.user_budget += 10  # weekly revenue stream
+        if self.user_team:
+            self.tactic = self.get_team_formation(self.user_team)
         self.match_probabilities = None
         if self.week_index == 19 and not self.half_season_boosted:
             self.apply_midseason_boosts()
@@ -9024,136 +9141,38 @@ class Game:
             tempo = 2
         return press, line, tempo
 
+    def formation_catalog(self):
+        return [(formation_id, name) for formation_id, (name, _) in FORMATION_TEMPLATES.items()]
+
+    def get_formation_name(self, formation_id):
+        return FORMATION_TEMPLATES.get(int(formation_id or 2), FORMATION_TEMPLATES[2])[0]
+
+    def get_formation_positions(self, formation_id):
+        return [tuple(pos) for pos in FORMATION_TEMPLATES.get(int(formation_id or 2), FORMATION_TEMPLATES[2])[1]]
+
+    def get_team_formation(self, team):
+        return int(TEAM_FORMATIONS.get(team, self.tactic or 2) or 2)
+
+    def set_team_formation(self, team, formation_id):
+        formation_id = int(formation_id)
+        if formation_id not in FORMATION_TEMPLATES:
+            formation_id = 2
+        if team:
+            TEAM_FORMATIONS[team] = formation_id
+        if team == self.user_team or not team:
+            self.tactic = formation_id
+
+    def get_team_positions(self, team, side="home"):
+        positions = self.get_formation_positions(self.get_team_formation(team))
+        if side == "away":
+            return [(WIDTH - x, y, role) for x, y, role in positions]
+        return positions
+
     def get_home_positions(self):
-        center_y = HEIGHT / 2
-        if self.tactic == 1:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 130, center_y - 170, "DF"),
-                (FIELD_MARGIN + 130, center_y - 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 170, "DF"),
-                (FIELD_MARGIN + 320, center_y - 150, "MF"),
-                (FIELD_MARGIN + 320, center_y - 50, "MF"),
-                (FIELD_MARGIN + 320, center_y + 50, "MF"),
-                (FIELD_MARGIN + 320, center_y + 150, "MF"),
-                (FIELD_MARGIN + 520, center_y - 60, "FW"),
-                (FIELD_MARGIN + 520, center_y + 60, "FW"),
-            ]
-        if self.tactic == 2:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 130, center_y - 170, "DF"),
-                (FIELD_MARGIN + 130, center_y - 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 170, "DF"),
-                (FIELD_MARGIN + 330, center_y - 100, "MF"),
-                (FIELD_MARGIN + 330, center_y, "MF"),
-                (FIELD_MARGIN + 330, center_y + 100, "MF"),
-                (FIELD_MARGIN + 520, center_y - 160, "FW"),
-                (FIELD_MARGIN + 520, center_y, "FW"),
-                (FIELD_MARGIN + 520, center_y + 160, "FW"),
-            ]
-        if self.tactic == 3:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 160, center_y - 140, "DF"),
-                (FIELD_MARGIN + 160, center_y, "DF"),
-                (FIELD_MARGIN + 160, center_y + 140, "DF"),
-                (FIELD_MARGIN + 330, center_y - 200, "MF"),
-                (FIELD_MARGIN + 330, center_y - 80, "MF"),
-                (FIELD_MARGIN + 330, center_y, "MF"),
-                (FIELD_MARGIN + 330, center_y + 80, "MF"),
-                (FIELD_MARGIN + 330, center_y + 200, "MF"),
-                (FIELD_MARGIN + 520, center_y - 60, "FW"),
-                (FIELD_MARGIN + 520, center_y + 60, "FW"),
-            ]
-        if self.tactic == 4:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 130, center_y - 170, "DF"),
-                (FIELD_MARGIN + 130, center_y - 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 170, "DF"),
-                (FIELD_MARGIN + 280, center_y - 90, "MF"),
-                (FIELD_MARGIN + 280, center_y + 90, "MF"),
-                (FIELD_MARGIN + 420, center_y - 140, "MF"),
-                (FIELD_MARGIN + 420, center_y, "MF"),
-                (FIELD_MARGIN + 420, center_y + 140, "MF"),
-                (FIELD_MARGIN + 540, center_y, "FW"),
-            ]
-        if self.tactic == 5:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 120, center_y - 190, "DF"),
-                (FIELD_MARGIN + 120, center_y - 95, "DF"),
-                (FIELD_MARGIN + 120, center_y, "DF"),
-                (FIELD_MARGIN + 120, center_y + 95, "DF"),
-                (FIELD_MARGIN + 120, center_y + 190, "DF"),
-                (FIELD_MARGIN + 300, center_y - 120, "MF"),
-                (FIELD_MARGIN + 300, center_y, "MF"),
-                (FIELD_MARGIN + 300, center_y + 120, "MF"),
-                (FIELD_MARGIN + 520, center_y - 60, "FW"),
-                (FIELD_MARGIN + 520, center_y + 60, "FW"),
-            ]
-        if self.tactic == 6:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 130, center_y - 170, "DF"),
-                (FIELD_MARGIN + 130, center_y - 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 170, "DF"),
-                (FIELD_MARGIN + 260, center_y, "MF"),
-                (FIELD_MARGIN + 360, center_y - 160, "MF"),
-                (FIELD_MARGIN + 360, center_y - 60, "MF"),
-                (FIELD_MARGIN + 360, center_y + 60, "MF"),
-                (FIELD_MARGIN + 360, center_y + 160, "MF"),
-                (FIELD_MARGIN + 540, center_y, "FW"),
-            ]
-        if self.tactic == 7:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 130, center_y - 170, "DF"),
-                (FIELD_MARGIN + 130, center_y - 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 60, "DF"),
-                (FIELD_MARGIN + 130, center_y + 170, "DF"),
-                (FIELD_MARGIN + 280, center_y - 60, "MF"),
-                (FIELD_MARGIN + 280, center_y + 60, "MF"),
-                (FIELD_MARGIN + 420, center_y - 120, "FW"),
-                (FIELD_MARGIN + 420, center_y + 120, "FW"),
-                (FIELD_MARGIN + 540, center_y - 60, "FW"),
-                (FIELD_MARGIN + 540, center_y + 60, "FW"),
-            ]
-        if self.tactic == 8:
-            return [
-                (FIELD_MARGIN + 40, center_y, "GK"),
-                (FIELD_MARGIN + 150, center_y - 140, "DF"),
-                (FIELD_MARGIN + 150, center_y, "DF"),
-                (FIELD_MARGIN + 150, center_y + 140, "DF"),
-                (FIELD_MARGIN + 320, center_y - 160, "MF"),
-                (FIELD_MARGIN + 320, center_y - 50, "MF"),
-                (FIELD_MARGIN + 320, center_y + 50, "MF"),
-                (FIELD_MARGIN + 320, center_y + 160, "MF"),
-                (FIELD_MARGIN + 520, center_y - 120, "FW"),
-                (FIELD_MARGIN + 520, center_y, "FW"),
-                (FIELD_MARGIN + 520, center_y + 120, "FW"),
-            ]
-        return [
-            (FIELD_MARGIN + 40, center_y, "GK"),
-            (FIELD_MARGIN + 160, center_y - 140, "DF"),
-            (FIELD_MARGIN + 160, center_y, "DF"),
-            (FIELD_MARGIN + 160, center_y + 140, "DF"),
-            (FIELD_MARGIN + 330, center_y - 200, "MF"),
-            (FIELD_MARGIN + 330, center_y - 80, "MF"),
-            (FIELD_MARGIN + 330, center_y, "MF"),
-            (FIELD_MARGIN + 330, center_y + 80, "MF"),
-            (FIELD_MARGIN + 330, center_y + 200, "MF"),
-            (FIELD_MARGIN + 520, center_y - 60, "FW"),
-            (FIELD_MARGIN + 520, center_y + 60, "FW"),
-        ]
+        return self.get_formation_positions(self.tactic)
 
     def get_away_positions(self):
-        return [(WIDTH - x, y, role) for x, y, role in self.get_home_positions()]
+        return [(WIDTH - x, y, role) for x, y, role in self.get_formation_positions(self.tactic)]
 
     def reset_positions(self, kickoff=False):
         self.home = []
@@ -9168,7 +9187,10 @@ class Game:
             elif self.current_away == self.user_team:
                 away_names = self.user_starting
 
-        for i, (x, y, role) in enumerate(self.get_home_positions()):
+        home_positions = self.get_team_positions(self.current_home, "home")
+        away_positions = self.get_team_positions(self.current_away, "away")
+
+        for i, (x, y, role) in enumerate(home_positions):
             name, num, rating = normalize_entry(home_names[i] if i < len(home_names) else (f"H{i+1}", i + 1), i, self.current_home)
             spd = player_speed_from_rating(rating)
             if self.user_team and self.user_is_home:
@@ -9185,19 +9207,6 @@ class Game:
                 player.rating = player.rating + chem
             self.home.append(player)
 
-        away_positions = [
-            (WIDTH - FIELD_MARGIN - 40, center_y, "GK"),
-            (WIDTH - FIELD_MARGIN - 130, center_y - 170, "DF"),
-            (WIDTH - FIELD_MARGIN - 130, center_y - 60, "DF"),
-            (WIDTH - FIELD_MARGIN - 130, center_y + 60, "DF"),
-            (WIDTH - FIELD_MARGIN - 130, center_y + 170, "DF"),
-            (WIDTH - FIELD_MARGIN - 320, center_y - 150, "MF"),
-            (WIDTH - FIELD_MARGIN - 320, center_y - 50, "MF"),
-            (WIDTH - FIELD_MARGIN - 320, center_y + 50, "MF"),
-            (WIDTH - FIELD_MARGIN - 320, center_y + 150, "MF"),
-            (WIDTH - FIELD_MARGIN - 520, center_y - 60, "FW"),
-            (WIDTH - FIELD_MARGIN - 520, center_y + 60, "FW"),
-        ]
         for i, (x, y, role) in enumerate(away_positions):
             name, num, rating = normalize_entry(away_names[i] if i < len(away_names) else (f"A{i+1}", i + 1), i, self.current_away)
             spd = player_speed_from_rating(rating)
@@ -9248,15 +9257,18 @@ class Game:
             self.ball.y = HEIGHT / 2
 
     def apply_tactic(self):
+        target_team = self.user_team if self.user_team else (self.current_home if self.user_is_home else self.current_away)
+        self.set_team_formation(target_team, self.tactic)
         if self.user_is_home:
-            positions = self.get_home_positions()
+            positions = self.get_team_positions(self.current_home, "home")
             team = self.home
         else:
-            positions = self.get_away_positions()
+            positions = self.get_team_positions(self.current_away, "away")
             team = self.away
         for p, (x, y, role) in zip(team, positions):
             p.home_x = x
             p.home_y = y
+            p.role = role
 
     def closest_players(self, players, x, y, count):
         ranked = sorted(players, key=lambda p: (p.x - x) ** 2 + (p.y - y) ** 2)
@@ -10569,6 +10581,12 @@ class Game:
                         self.state = "FANTASY_OBJECTIVES"
                     elif event.key == pygame.K_n and self.game_mode == "FANTASY":
                         self.state = "FANTASY_COLLECTION"
+                    elif event.key == pygame.K_l and self.game_mode == "FANTASY":
+                        self.build_user_squad()
+                        self.lineup_col = 0
+                        self.lineup_idx = 0
+                        self.lineup_pick = None
+                        self.state = "LINEUP"
                     elif event.key == pygame.K_d and self.game_mode == "FANTASY":
                         self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                     elif event.key == pygame.K_r and self.game_mode == "FANTASY":
@@ -10632,6 +10650,10 @@ class Game:
                         if self.academy:
                             self.academy_index = min(len(self.academy) - 1, self.academy_index + 1)
                 elif self.state == "LINEUP":
+                    if event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
+                        formation_id = int(event.unicode)
+                        self.set_team_formation(self.user_team, formation_id)
+                        self.message = f"Formation set to {self.get_formation_name(formation_id)}"
                     if event.key == pygame.K_h:
                         self.home_kit_index = (self.home_kit_index + 1) % 3
                     elif event.key == pygame.K_j:
@@ -10678,6 +10700,11 @@ class Game:
                         if self.pending_fixture:
                             self.start_match()
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP":
+                    for formation_id, rect in self.lineup_formation_rects.items():
+                        if rect.collidepoint(event.pos):
+                            self.set_team_formation(self.user_team, formation_id)
+                            self.message = f"Formation set to {self.get_formation_name(formation_id)}"
+                            break
                     for key, rect in self.lineup_rects.items():
                         if rect.collidepoint(event.pos):
                             self.dragging_lineup = key
@@ -11511,18 +11538,40 @@ class Game:
             return start, start + max_visible
 
         self.lineup_rects = {}
+        self.lineup_formation_rects = {}
         subtitle = self.user_team or "No club selected"
         if self.pending_fixture:
             home, away = self.pending_fixture
             subtitle = f"{home} vs {away}"
-        self.draw_hero_header("Squad Broadcast", subtitle, accent=(90, 220, 130), accent_two=(86, 170, 255), right_text=self.user_team or "NO CLUB")
+        formation_id = self.get_team_formation(self.user_team)
+        formation_name = self.get_formation_name(formation_id)
+        self.draw_hero_header("Squad Broadcast", subtitle, accent=(90, 220, 130), accent_two=(86, 170, 255), right_text=formation_name.upper())
         if self.pending_fixture:
             self.draw_kit_picker(930, 28, home, away)
 
-        left_panel = pygame.Rect(20, 172, 220, 522)
-        pitch_rect = pygame.Rect(255, 172, 670, 522)
-        right_panel = pygame.Rect(940, 172, 240, 522)
-        bench_panel = pygame.Rect(255, 706, 925, 94)
+        formation_panel = pygame.Rect(20, 154, 1160, 118)
+        left_panel = pygame.Rect(20, 286, 228, 450)
+        pitch_rect = pygame.Rect(262, 286, 660, 450)
+        right_panel = pygame.Rect(936, 286, 244, 450)
+        bench_panel = pygame.Rect(262, 748, 918, 82)
+
+        self.draw_glass_panel(formation_panel, accent=(244, 206, 84), radius=24, fill=(18, 24, 36, 214), shine=False)
+        self.screen.blit(self.font.render("Formations", True, WHITE), (formation_panel.x + 16, formation_panel.y + 12))
+        self.screen.blit(self.small.render("Click a tile or press 1-8 to change shape. Cards move to the new slots instantly.", True, (205, 215, 228)), (formation_panel.x + 16, formation_panel.y + 38))
+        tile_w = 132
+        tile_h = 54
+        tile_gap = 12
+        for idx, (fid, fname) in enumerate(self.formation_catalog()):
+            col = idx % 4
+            row = idx // 4
+            tile = pygame.Rect(formation_panel.x + 16 + col * (tile_w + tile_gap), formation_panel.y + 58 + row * (tile_h + 8), tile_w, tile_h)
+            self.lineup_formation_rects[fid] = tile
+            active = fid == formation_id
+            fill = (36, 78, 52, 228) if active else (26, 32, 44, 228)
+            accent = (90, 220, 130) if active else (86, 170, 255)
+            self.draw_glass_panel(tile, accent=accent, radius=16, fill=fill, shine=False)
+            self.screen.blit(self.small.render(str(fid), True, (244, 206, 84)), (tile.x + 10, tile.y + 8))
+            self.screen.blit(self.small.render(fname[:16], True, WHITE), (tile.x + 10, tile.y + 28))
 
         self.draw_glass_panel(left_panel, accent=(86, 170, 255), radius=22)
         pygame.draw.rect(self.screen, (24, 78, 48), pitch_rect, 0, border_radius=22)
@@ -11538,13 +11587,13 @@ class Game:
         pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.left + 18, pitch_rect.centery - 60, 50, 120), 2)
         pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.right - 68, pitch_rect.centery - 60, 50, 120), 2)
 
-        self.screen.blit(self.small.render("Starter XI", True, WHITE), (left_panel.x + 12, left_panel.y + 10))
+        self.screen.blit(self.small.render("Selected Player", True, WHITE), (left_panel.x + 12, left_panel.y + 10))
         if self.game_mode == "FANTASY":
             self.screen.blit(self.small.render(f"Team Chem {self.fantasy_chemistry_total}/33", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 26))
         self.screen.blit(self.small.render("Bench", True, WHITE), (bench_panel.x + 12, bench_panel.y + 10))
         self.screen.blit(self.small.render("Reserves", True, WHITE), (right_panel.x + 12, right_panel.y + 10))
 
-        positions = self.get_home_positions()
+        positions = self.get_team_positions(self.user_team, "home")
         role_map = [p[2] for p in positions]
         field_left = FIELD_MARGIN
         field_width = WIDTH - 2 * FIELD_MARGIN
@@ -11700,7 +11749,7 @@ class Game:
             self.lineup_rects[(2, i)] = row_rect
             y += reserve_line_h
 
-        self.screen.blit(self.small.render("Drag or ENTER to swap | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
+        self.screen.blit(self.small.render("Drag or ENTER to swap | 1-8 formation | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
         if self.game_mode == "FANTASY":
             self.screen.blit(self.small.render("Links: club/nation/league | green strong | gold medium | red weak", True, (190, 200, 210)), (430, HEIGHT - 28))
 
@@ -11842,6 +11891,7 @@ class Game:
         self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
         record = self.active_account_record() or {}
         club = self.ensure_fantasy_club_defaults()
+        self.build_user_squad()
         name_text = (self.fantasy_team_name or self.user_team or "Fantasy FC").strip()[:18]
         display_name = str(record.get("display_name") or self.active_account or "Manager")[:16]
         source_label = "Cloud" if self.account_storage_mode == "CLOUD" else "Local Mirror"
@@ -11863,6 +11913,21 @@ class Game:
         active_title = menu_lookup.get(active_key, ("Division Match", ""))[0]
         current = self.fantasy_competitions.get(active_key, {})
         progress = self.fantasy_competition_progress_text(active_key, current)
+        starters = list(self.user_starting[:11])
+        top_player = None
+        if self.fantasy_roster:
+            top_player = max(
+                self.fantasy_roster,
+                key=lambda p: (
+                    int(p.get("rating", 0)),
+                    self.get_player_stat(p.get("name", ""), "goals"),
+                    self.get_player_stat(p.get("name", ""), "assists"),
+                ),
+            )
+        lineup_ready = len(starters) >= 11
+        avg_rating = int(round(sum(card.get("rating", 60) for card in self.fantasy_roster[:11]) / max(1, min(11, len(self.fantasy_roster) or 1))))
+        chem_accent = self.fantasy_palette_color(club["primary"])
+        club_accent = self.fantasy_palette_color(club["secondary"])
 
         top_bar = pygame.Rect(26, 16, 1148, 64)
         self.draw_glass_panel(top_bar, accent=(244, 206, 84), radius=22, fill=(14, 18, 28, 210))
@@ -11904,7 +11969,7 @@ class Game:
             self.screen.blit(self.small.render(str(value), True, (244, 206, 84)), (tile.x + 18, tile.y + 70))
             tile_y += 116
 
-        hero = pygame.Rect(138, 98, 484, 470)
+        hero = pygame.Rect(138, 98, 516, 454)
         self.draw_glass_panel(hero, accent=(86, 170, 255), radius=28, fill=(12, 16, 26, 182))
         hero_glow = pygame.Surface((hero.w, hero.h), pygame.SRCALPHA)
         pygame.draw.circle(hero_glow, (255, 220, 120, 70), (170, 210), 180)
@@ -11914,14 +11979,36 @@ class Game:
         self.screen.blit(hero_glow, (hero.x, hero.y))
         self.screen.blit(self.title_font.render("ULTIMATE", True, WHITE), (hero.x + 28, hero.y + 28))
         self.screen.blit(self.title_font.render("FANTASY CLUB", True, WHITE), (hero.x + 28, hero.y + 62))
-        self.screen.blit(self.small.render("Original broadcast-inspired presentation for your club hub.", True, (210, 220, 236)), (hero.x + 30, hero.y + 102))
-        plate = pygame.Rect(hero.x + 30, hero.bottom - 124, hero.w - 60, 90)
-        self.draw_glass_panel(plate, accent=self.fantasy_palette_color(club["primary"]), radius=20, fill=(18, 24, 36, 216), shine=False)
-        self.screen.blit(self.font.render(name_text, True, WHITE), (plate.x + 18, plate.y + 14))
-        self.screen.blit(self.small.render(f"Chemistry {self.fantasy_chemistry_total}/33 | Squad {len(self.fantasy_roster)}", True, (220, 228, 236)), (plate.x + 18, plate.y + 44))
-        self.screen.blit(self.small.render(f"Badge {self.fantasy_club_badge_name()} | Stadium {FANTASY_STADIUM_OPTIONS[club['stadium']]}", True, (220, 228, 236)), (plate.x + 18, plate.y + 64))
+        self.screen.blit(self.small.render("Clear squad hub for lineup, packs, market, and matchday prep.", True, (210, 220, 236)), (hero.x + 30, hero.y + 102))
 
-        featured = pygame.Rect(652, 98, 492, 242)
+        lineup_panel = pygame.Rect(hero.x + 24, hero.y + 140, hero.w - 48, 196)
+        self.draw_glass_panel(lineup_panel, accent=chem_accent, radius=22, fill=(18, 24, 36, 214), shine=False)
+        self.screen.blit(self.font.render("Starting XI", True, WHITE), (lineup_panel.x + 18, lineup_panel.y + 14))
+        self.screen.blit(self.small.render("L open lineup | SPACE play next match", True, (210, 220, 236)), (lineup_panel.x + 18, lineup_panel.y + 42))
+        if lineup_ready:
+            preview_cards = starters[:4]
+            card_w = 92
+            card_h = 118
+            for idx, entry in enumerate(preview_cards):
+                role = DEFAULT_LINEUP[idx][0] if idx < len(DEFAULT_LINEUP) else "XI"
+                px = lineup_panel.x + 18 + idx * (card_w + 12)
+                py = lineup_panel.y + 68
+                self.draw_squad_card(px, py, card_w, card_h, entry, role=role)
+            list_x = lineup_panel.x + 18
+            list_y = lineup_panel.y + 194
+            next_names = [entry[0] for entry in starters[4:8]]
+            line = " | ".join(name[:10] for name in next_names) if next_names else "Bench and reserves available in lineup view"
+            self.screen.blit(self.small.render(line[:54], True, (210, 220, 236)), (list_x, list_y - 16))
+        else:
+            self.screen.blit(self.font.render("Build at least 11 players to unlock the match lineup.", True, WHITE), (lineup_panel.x + 18, lineup_panel.y + 98))
+            self.screen.blit(self.small.render("Open packs or market, then press L to arrange the squad.", True, (210, 220, 236)), (lineup_panel.x + 18, lineup_panel.y + 132))
+
+        plate = pygame.Rect(hero.x + 24, hero.bottom - 92, hero.w - 48, 58)
+        self.draw_glass_panel(plate, accent=chem_accent, radius=18, fill=(18, 24, 36, 216), shine=False)
+        plate_text = f"{name_text}  |  Chem {self.fantasy_chemistry_total}/33  |  Squad {len(self.fantasy_roster)}  |  {FANTASY_STADIUM_OPTIONS[club['stadium']]}"
+        self.screen.blit(self.small.render(plate_text[:72], True, (228, 234, 242)), (plate.x + 16, plate.y + 18))
+
+        featured = pygame.Rect(674, 98, 470, 224)
         self.draw_glass_panel(featured, accent=event_colors[1], radius=24, fill=(*event_colors[0], 218))
         self.screen.blit(self.title_font.render(event_name[:18].upper(), True, WHITE), (featured.x + 22, featured.y + 18))
         self.screen.blit(self.small.render(event_sub[:62], True, (232, 234, 240)), (featured.x + 24, featured.y + 62))
@@ -11939,33 +12026,47 @@ class Game:
             color = WHITE if idx == 1 else (110, 116, 132)
             pygame.draw.circle(self.screen, color, (dots_x + idx * 18, featured.bottom - 24), 5)
 
-        club_tile = pygame.Rect(652, 366, 232, 136)
-        self.draw_glass_panel(club_tile, accent=(210, 210, 210), radius=22, fill=(110, 116, 126, 206))
+        club_tile = pygame.Rect(674, 346, 250, 196)
+        self.draw_glass_panel(club_tile, accent=club_accent, radius=22, fill=(24, 30, 44, 212))
         self.screen.blit(self.title_font.render("CLUB", True, WHITE), (club_tile.x + 18, club_tile.y + 12))
-        ovr_box = pygame.Rect(club_tile.x + 18, club_tile.y + 56, 70, 62)
-        pygame.draw.rect(self.screen, (92, 98, 116), ovr_box, 0, border_radius=14)
-        pygame.draw.rect(self.screen, (225, 230, 236), ovr_box, 2, border_radius=14)
-        avg_rating = int(round(sum(card.get("rating", 60) for card in self.fantasy_roster[:11]) / max(1, min(11, len(self.fantasy_roster) or 1))))
-        self.screen.blit(self.small.render("OVR", True, WHITE), (ovr_box.x + 18, ovr_box.y + 8))
-        self.screen.blit(self.big.render(str(avg_rating), True, WHITE), (ovr_box.x + 16, ovr_box.y + 24))
-        crest = pygame.Rect(club_tile.right - 96, club_tile.y + 50, 60, 68)
+        crest = pygame.Rect(club_tile.x + 18, club_tile.y + 54, 68, 76)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["primary"]), crest, 0, border_radius=18)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["secondary"]), crest, 3, border_radius=18)
-        self.screen.blit(self.small.render(self.fantasy_club_badge_name()[:3].upper(), True, WHITE), (crest.x + 10, crest.y + 26))
+        self.screen.blit(self.small.render(self.fantasy_club_badge_name()[:3].upper(), True, WHITE), (crest.x + 12, crest.y + 28))
+        self.screen.blit(self.small.render(f"OVR {avg_rating}", True, WHITE), (club_tile.x + 106, club_tile.y + 60))
+        self.screen.blit(self.small.render(f"Top card {top_player.get('rating', 0) if top_player else 0}", True, (220, 228, 236)), (club_tile.x + 106, club_tile.y + 84))
+        self.screen.blit(self.small.render(f"Badge {self.fantasy_club_badge_name()}", True, (220, 228, 236)), (club_tile.x + 18, club_tile.y + 146))
+        self.screen.blit(self.small.render(f"Stadium {FANTASY_STADIUM_OPTIONS[club['stadium']]}"[:34], True, (220, 228, 236)), (club_tile.x + 18, club_tile.y + 168))
 
-        play_tile = pygame.Rect(904, 366, 240, 136)
+        top_tile = pygame.Rect(944, 346, 200, 196)
+        self.draw_glass_panel(top_tile, accent=(244, 206, 84), radius=22, fill=(28, 24, 20, 212))
+        self.screen.blit(self.title_font.render("STAR", True, WHITE), (top_tile.x + 18, top_tile.y + 12))
+        if top_player:
+            preview_card = dict(top_player)
+            preview_card.setdefault("league", get_team_league(preview_card.get("team", "")))
+            self.draw_card(top_tile.x + 16, top_tile.y + 48, 92, 126, preview_card, face="front")
+            self.screen.blit(self.small.render(top_player["name"][:16], True, WHITE), (top_tile.x + 116, top_tile.y + 62))
+            self.screen.blit(self.small.render(f"{top_player.get('rating', 0)} OVR  {top_player.get('position', 'ST')}", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 86))
+            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'goals')} goals", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 110))
+            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'assists')} assists", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 132))
+        else:
+            self.screen.blit(self.small.render("Open packs to reveal your first star.", True, (220, 228, 236)), (top_tile.x + 18, top_tile.y + 88))
+
+        play_tile = pygame.Rect(674, 564, 470, 108)
         self.draw_glass_panel(play_tile, accent=(244, 206, 84), radius=22, fill=(174, 152, 82, 196))
         self.screen.blit(self.title_font.render("PLAY", True, WHITE), (play_tile.x + 18, play_tile.y + 12))
-        self.screen.blit(self.small.render(active_title[:24], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 58))
-        self.screen.blit(self.small.render(progress[:34], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 82))
-        pygame.draw.polygon(self.screen, (255, 246, 210), [(play_tile.right - 78, play_tile.y + 42), (play_tile.right - 36, play_tile.centery), (play_tile.right - 78, play_tile.bottom - 42)])
+        self.screen.blit(self.small.render(active_title[:42], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 48))
+        helper = "SPACE match  |  L lineup  |  H club/share  |  O competitions"
+        self.screen.blit(self.small.render(helper, True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 70))
+        self.screen.blit(self.small.render(progress[:52], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 88))
+        pygame.draw.polygon(self.screen, (255, 246, 210), [(play_tile.right - 86, play_tile.y + 28), (play_tile.right - 34, play_tile.centery), (play_tile.right - 86, play_tile.bottom - 28)])
 
         bottom_nav = pygame.Rect(0, HEIGHT - 72, WIDTH, 72)
         pygame.draw.rect(self.screen, (44, 48, 56), bottom_nav)
         pygame.draw.line(self.screen, (160, 166, 176), (0, bottom_nav.y), (WIDTH, bottom_nav.y), 2)
         nav_items = [
             ("A/J", "QUESTS"),
-            ("O", "PLAY"),
+            ("L", "LINEUP"),
             ("R", "MARKET"),
             ("B", "EXCHANGE"),
             ("P/M", "STORE"),
@@ -11975,14 +12076,14 @@ class Game:
             x = idx * seg_w
             if idx > 0:
                 pygame.draw.line(self.screen, (88, 92, 102), (x, bottom_nav.y + 10), (x, bottom_nav.bottom - 10), 1)
-            active = label == "PLAY" or (label == "STORE" and self.show_pack_shop)
+            active = label == "LINEUP" or (label == "STORE" and self.show_pack_shop)
             color = (244, 246, 250) if active else (170, 176, 186)
             accent = (52, 244, 116) if label == "STORE" else (244, 206, 84) if active else (110, 116, 126)
             pygame.draw.circle(self.screen, accent, (x + 32, bottom_nav.y + 36), 10)
             self.screen.blit(self.font.render(label, True, color), (x + 54, bottom_nav.y + 24))
             self.screen.blit(self.micro.render(hotkey, True, (206, 214, 224)), (x + 54, bottom_nav.y + 48))
 
-        status = "TAB cycle | SPACE play | H club/share | P/W shop | D draft | N collection | R market | ESC modes"
+        status = "SPACE play | L lineup | H club/share | P/W shop | D draft | N collection | R market | O comps | ESC modes"
         if record.get("is_developer"):
             status += " | U console"
         self.screen.blit(self.small.render(status, True, (204, 214, 228)), (28, HEIGHT - 94))
@@ -12203,14 +12304,8 @@ class Game:
             title = self.font.render("Tactics Board (B to hide)", True, WHITE)
             self.screen.blit(title, (board_x + 10, board_y + 8))
             tactics = [
-                (1, "4-4-2"),
-                (2, "4-3-3"),
-                (3, "3-5-2"),
-                (4, "4-2-3-1"),
-                (5, "5-3-2"),
-                (6, "4-1-4-1"),
-                (7, "4-2-2-2"),
-                (8, "3-4-3"),
+                (formation_id, self.get_formation_name(formation_id))
+                for formation_id, _ in self.formation_catalog()
             ]
             y = board_y + 36
             for tid, name in tactics:
@@ -12358,36 +12453,65 @@ class Game:
             elif self.current_away == self.user_team:
                 away_lineup = self.user_starting
 
-        panel_w = 620
-        panel_h = 392
+        panel_w = 1040
+        panel_h = 560
         panel_x = (WIDTH - panel_w) / 2
         panel_y = (HEIGHT - COMMENTARY_BAR_H - panel_h) / 2
         shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 132))
         self.screen.blit(shade, (0, 0))
-        self.draw_glass_panel(pygame.Rect(panel_x, panel_y, panel_w, panel_h), accent=(86, 170, 255), radius=24, fill=(18, 24, 36, 232))
+        panel = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        self.draw_glass_panel(panel, accent=(86, 170, 255), radius=24, fill=(18, 24, 36, 232))
         title = self.title_font.render("Lineups", True, WHITE)
         self.screen.blit(title, (panel_x + 18, panel_y + 14))
         self.screen.blit(self.small.render("L or ESC to close", True, (196, 210, 228)), (panel_x + panel_w - 124, panel_y + 24))
+        self.screen.blit(self.small.render("Selected formations and starting XI cards", True, (196, 210, 228)), (panel_x + 22, panel_y + 58))
 
-        col_mid = panel_x + panel_w / 2
-        self.draw_neon_chip(panel_x + 18, panel_y + 66, self.current_home, accent=(12, 220, 190), width=252)
-        self.draw_neon_chip(col_mid + 18, panel_y + 66, self.current_away, accent=(86, 170, 255), width=252)
+        left_pitch = pygame.Rect(panel_x + 20, panel_y + 96, 474, 408)
+        right_pitch = pygame.Rect(panel_x + 546, panel_y + 96, 474, 408)
 
-        y = panel_y + 112
-        for i in range(11):
-            h_entry = home_lineup[i] if i < len(home_lineup) else (f"H{i+1}", i + 1)
-            a_entry = away_lineup[i] if i < len(away_lineup) else (f"A{i+1}", i + 1)
-            h_name, h_num = lineup_name_number(h_entry, i)
-            a_name, a_num = lineup_name_number(a_entry, i)
-            h_text = f"{h_num:>2}  {h_name}"
-            a_text = f"{a_num:>2}  {a_name}"
-            if i % 2 == 0:
-                band = pygame.Rect(panel_x + 14, y - 3, panel_w - 28, 24)
-                pygame.draw.rect(self.screen, (255, 255, 255, 10), band, 0, border_radius=8)
-            self.screen.blit(self.small.render(h_text, True, WHITE), (panel_x + 22, y))
-            self.screen.blit(self.small.render(a_text, True, WHITE), (col_mid + 22, y))
-            y += 24
+        def draw_pitch(rect, accent):
+            pygame.draw.rect(self.screen, (24, 78, 48), rect, 0, border_radius=24)
+            pygame.draw.rect(self.screen, (220, 225, 230), rect, 2, border_radius=24)
+            for stripe in range(8):
+                stripe_y = rect.y + stripe * (rect.h // 8)
+                color = (20, 66, 38) if stripe % 2 == 0 else (18, 60, 34)
+                pygame.draw.rect(self.screen, color, (rect.x + 2, stripe_y, rect.w - 4, rect.h // 8))
+            pygame.draw.line(self.screen, (235, 235, 235), (rect.centerx, rect.y + 18), (rect.centerx, rect.bottom - 18), 2)
+            pygame.draw.circle(self.screen, (235, 235, 235), rect.center, 50, 2)
+            pygame.draw.rect(self.screen, (235, 235, 235), (rect.x + 18, rect.centery - 92, 86, 184), 2)
+            pygame.draw.rect(self.screen, (235, 235, 235), (rect.right - 104, rect.centery - 92, 86, 184), 2)
+            pygame.draw.rect(self.screen, (235, 235, 235), (rect.x + 18, rect.centery - 44, 38, 88), 2)
+            pygame.draw.rect(self.screen, (235, 235, 235), (rect.right - 56, rect.centery - 44, 38, 88), 2)
+            pygame.draw.rect(self.screen, accent, rect, 2, border_radius=24)
+
+        draw_pitch(left_pitch, (12, 220, 190))
+        draw_pitch(right_pitch, (86, 170, 255))
+        self.draw_neon_chip(left_pitch.x, panel_y + 70, self.current_home, accent=(12, 220, 190), width=220)
+        self.draw_neon_chip(right_pitch.x, panel_y + 70, self.current_away, accent=(86, 170, 255), width=220)
+
+        home_form = self.get_team_formation(self.current_home)
+        away_form = self.get_team_formation(self.current_away)
+        self.screen.blit(self.small.render(self.get_formation_name(home_form), True, (220, 228, 236)), (left_pitch.x + 238, panel_y + 80))
+        self.screen.blit(self.small.render(self.get_formation_name(away_form), True, (220, 228, 236)), (right_pitch.x + 238, panel_y + 80))
+
+        field_left = FIELD_MARGIN
+        field_width = WIDTH - 2 * FIELD_MARGIN
+        field_height = HEIGHT - 2 * FIELD_MARGIN
+
+        def draw_team_lineup(rect, lineup, positions, mirror=False):
+            card_w = 74
+            card_h = 94
+            for idx, entry in enumerate(lineup[:11]):
+                px, py, role = positions[idx]
+                rel_x = (px - field_left) / field_width
+                rel_y = (py - FIELD_MARGIN) / field_height
+                card_x = rect.x + rel_x * rect.w - card_w / 2
+                card_y = rect.y + rel_y * rect.h - card_h / 2
+                self.draw_squad_card(card_x, card_y, card_w, card_h, normalize_entry(entry, idx, self.current_home if not mirror else self.current_away), role=role)
+
+        draw_team_lineup(left_pitch, home_lineup, self.get_team_positions(self.current_home, "home"))
+        draw_team_lineup(right_pitch, away_lineup, self.get_team_positions(self.current_away, "away"), mirror=True)
 
     def resolve_collisions(self):
         players = self.home + self.away
