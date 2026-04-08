@@ -1644,6 +1644,7 @@ class Game:
         self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.reconnect_button_rect = None
         self.lineup_formation_rects = {}
+        self.lineup_tactics_index = 0
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
             "cloud_api_url": self.app_settings.get("cloud_api_url", "http://127.0.0.1:8080"),
@@ -6208,61 +6209,114 @@ class Game:
             int(a[2] + (b[2] - a[2]) * t),
         )
 
-    def draw_modern_backdrop(self, accent=(86, 170, 255), accent_two=(12, 220, 190)):
-        self.screen.fill((7, 11, 20))
+    def draw_modern_backdrop(self, accent=(196, 255, 86), accent_two=(244, 206, 84)):
+        self.screen.fill((8, 10, 15))
         gradient = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        top = (18, 22, 30)
+        bottom = (8, 10, 15)
         for y in range(HEIGHT):
             mix = y / max(1, HEIGHT - 1)
-            row = self.blend_color((11, 16, 30), (7, 11, 20), mix)
+            row = self.blend_color(top, bottom, mix)
             pygame.draw.line(gradient, row, (0, y), (WIDTH, y))
         self.screen.blit(gradient, (0, 0))
-        glow = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        pygame.draw.ellipse(glow, (*accent, 56), (-120, -90, 520, 280))
-        pygame.draw.ellipse(glow, (*accent_two, 38), (WIDTH - 460, -70, 420, 240))
-        pygame.draw.ellipse(glow, (255, 255, 255, 20), (WIDTH * 0.18, HEIGHT * 0.68, 360, 180))
-        self.screen.blit(glow, (0, 0))
-        for stripe in range(8):
-            alpha = 18 if stripe % 2 == 0 else 10
-            pygame.draw.rect(self.screen, (26, 42, 64, alpha), (0, 96 + stripe * 86, WIDTH, 44))
-        for x in range(0, WIDTH, 80):
-            pygame.draw.line(self.screen, (18, 26, 42), (x, 0), (x, HEIGHT), 1)
-        for y in range(0, HEIGHT, 80):
-            pygame.draw.line(self.screen, (18, 26, 42), (0, y), (WIDTH, y), 1)
 
-    def draw_glass_panel(self, rect, accent=(86, 170, 255), radius=22, fill=(18, 24, 36, 208), shine=True):
+        haze = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        pygame.draw.ellipse(haze, (*accent, 16), (-80, -40, 420, 180))
+        pygame.draw.ellipse(haze, (*accent_two, 20), (WIDTH - 360, -20, 320, 160))
+        pygame.draw.ellipse(haze, (90, 160, 255, 16), (WIDTH * 0.42, HEIGHT * 0.08, 360, 150))
+        self.screen.blit(haze, (0, 0))
+
+        bands = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        for idx in range(5):
+            band_y = 112 + idx * 110
+            pygame.draw.rect(bands, (24, 30, 38, 38 if idx % 2 == 0 else 20), (0, band_y, WIDTH, 28))
+        for x in range(-HEIGHT, WIDTH + HEIGHT, 160):
+            pygame.draw.line(bands, (36, 42, 52, 24), (x, 0), (x + HEIGHT, HEIGHT), 2)
+        for y in range(0, HEIGHT, 56):
+            pygame.draw.line(bands, (22, 28, 36, 20), (0, y), (WIDTH, y), 1)
+        self.screen.blit(bands, (0, 0))
+
+        vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(vignette, (0, 0, 0, 70), (0, 0, WIDTH, HEIGHT), border_radius=0)
+        pygame.draw.rect(vignette, (0, 0, 0, 0), (36, 36, WIDTH - 72, HEIGHT - 72), border_radius=42)
+        self.screen.blit(vignette, (0, 0))
+
+    def draw_glass_panel(self, rect, accent=(196, 255, 86), radius=22, fill=(18, 24, 36, 208), shine=True):
         panel = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
         pygame.draw.rect(panel, fill, (0, 0, rect.w, rect.h), 0, border_radius=radius)
         if shine:
-            pygame.draw.polygon(panel, (255, 255, 255, 22), [(0, 0), (rect.w * 0.52, 0), (rect.w * 0.28, rect.h), (0, rect.h)])
-            pygame.draw.ellipse(panel, (*accent, 30), (-20, -12, rect.w * 0.75, rect.h * 0.46))
-        pygame.draw.rect(panel, (*accent, 86), (0, 0, rect.w, rect.h), 2, border_radius=radius)
-        pygame.draw.rect(panel, (255, 255, 255, 18), (8, 8, rect.w - 16, rect.h - 16), 1, border_radius=max(8, radius - 6))
+            pygame.draw.rect(panel, (255, 255, 255, 10), (0, 0, rect.w, max(18, rect.h * 0.16)), 0, border_radius=radius)
+            pygame.draw.ellipse(panel, (*accent, 14), (-10, -8, rect.w * 0.52, rect.h * 0.24))
+        pygame.draw.rect(panel, (255, 255, 255, 8), (2, 2, rect.w - 4, rect.h - 4), 1, border_radius=max(8, radius - 2))
+        pygame.draw.rect(panel, (*accent, 86), (0, 0, rect.w, 4), 0, border_radius=radius)
+        pygame.draw.rect(panel, (0, 0, 0, 70), (0, rect.h - 14, rect.w, 14), 0, border_radius=radius)
+        pygame.draw.rect(panel, (*accent, 56), (0, 0, rect.w, rect.h), 1, border_radius=radius)
         self.screen.blit(panel, rect.topleft)
         return rect
 
-    def draw_neon_chip(self, x, y, text, accent=(86, 170, 255), width=None):
+    def draw_neon_chip(self, x, y, text, accent=(196, 255, 86), width=None):
         padding = 12
         label = self.micro.render(text, True, WHITE)
         chip_w = width or (label.get_width() + padding * 2)
         chip = pygame.Rect(x, y, chip_w, 28)
-        pygame.draw.rect(self.screen, (15, 20, 30), chip, 0, border_radius=10)
-        pygame.draw.rect(self.screen, accent, chip, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (14, 18, 24), chip, 0, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255, 12), chip, 1, border_radius=10)
+        pygame.draw.rect(self.screen, accent, (chip.x, chip.y, chip.w, 3), 0, border_radius=10)
         self.screen.blit(label, (chip.x + (chip.w - label.get_width()) // 2, chip.y + 8))
         return chip
 
-    def draw_hero_header(self, title, subtitle="", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=None):
+    def draw_hero_header(self, title, subtitle="", accent=(196, 255, 86), accent_two=(244, 206, 84), right_text=None):
         hero = pygame.Rect(34, 24, 1098, 136)
-        self.draw_glass_panel(hero, accent=accent, radius=28, fill=(16, 22, 36, 216))
+        self.draw_glass_panel(hero, accent=accent, radius=28, fill=(15, 19, 26, 230), shine=False)
+        hero_overlay = pygame.Surface((hero.w, hero.h), pygame.SRCALPHA)
+        pygame.draw.rect(hero_overlay, (*accent, 58), (0, 0, hero.w, 5), 0, border_radius=8)
+        pygame.draw.ellipse(hero_overlay, (*accent_two, 20), (hero.w - 260, -24, 240, 126))
+        pygame.draw.polygon(hero_overlay, (255, 255, 255, 12), [(0, 0), (hero.w * 0.34, 0), (hero.w * 0.18, hero.h), (0, hero.h)])
+        self.screen.blit(hero_overlay, hero.topleft)
         self.screen.blit(self.title_font.render(title, True, WHITE), (54, 42))
         if subtitle:
             self.screen.blit(self.small.render(subtitle, True, (206, 216, 232)), (56, 94))
         if right_text:
-            badge = self.draw_neon_chip(hero.right - 206, hero.y + 20, right_text, accent=accent, width=170)
-            glow = pygame.Surface((badge.w + 26, badge.h + 26), pygame.SRCALPHA)
-            pygame.draw.ellipse(glow, (*accent_two, 42), (0, 0, glow.get_width(), glow.get_height()))
-            self.screen.blit(glow, (badge.x - 13, badge.y - 13))
             self.draw_neon_chip(hero.right - 206, hero.y + 20, right_text, accent=accent, width=170)
         return hero
+
+    def draw_fc_top_bar(self, left_title, left_subtitle="", counters=None, accent=(244, 206, 84)):
+        bar = pygame.Rect(24, 14, WIDTH - 48, 60)
+        self.draw_glass_panel(bar, accent=accent, radius=22, fill=(12, 16, 24, 228), shine=False)
+        self.screen.blit(self.font.render(left_title[:26], True, WHITE), (bar.x + 18, bar.y + 10))
+        if left_subtitle:
+            self.screen.blit(self.small.render(left_subtitle[:48], True, (206, 216, 232)), (bar.x + 18, bar.y + 34))
+        counters = counters or []
+        cx = bar.right - 24
+        for color, value in reversed(counters):
+            value_surface = self.font.render(str(value), True, WHITE)
+            icon_x = cx - value_surface.get_width() - 30
+            pygame.draw.circle(self.screen, color, (icon_x, bar.y + 30), 10)
+            self.screen.blit(value_surface, (icon_x + 16, bar.y + 18))
+            cx = icon_x - 32
+        return bar
+
+    def draw_fc_bottom_nav(self, items, active_index=0, y=None):
+        nav_h = 72
+        nav_y = HEIGHT - nav_h if y is None else y
+        nav = pygame.Rect(0, nav_y, WIDTH, nav_h)
+        pygame.draw.rect(self.screen, (22, 26, 32), nav)
+        pygame.draw.line(self.screen, (70, 78, 88), (0, nav.y), (WIDTH, nav.y), 1)
+        seg_w = WIDTH // max(1, len(items))
+        for idx, item in enumerate(items):
+            hotkey, label = item
+            x = idx * seg_w
+            if idx > 0:
+                pygame.draw.line(self.screen, (48, 54, 62), (x, nav.y + 12), (x, nav.bottom - 12), 1)
+            active = idx == active_index
+            text_color = WHITE if active else (170, 176, 186)
+            dot_color = (196, 255, 86) if active else (108, 114, 126)
+            if active:
+                pygame.draw.rect(self.screen, dot_color, (x + 22, nav.y + 6, seg_w - 44, 4), 0, border_radius=3)
+            pygame.draw.circle(self.screen, dot_color, (x + 34, nav.y + 36), 8)
+            self.screen.blit(self.font.render(label, True, text_color), (x + 56, nav.y + 22))
+            self.screen.blit(self.micro.render(hotkey, True, (206, 214, 224)), (x + 56, nav.y + 46))
+        return nav
 
     def draw_card_art_layers(self, rect, base_color, accent, rarity="Gold", promo="Base"):
         x, y, w, h = rect
@@ -6276,12 +6330,18 @@ class Game:
         self.screen.blit(bg, (x, y))
 
         gloss = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-        pygame.draw.polygon(gloss, (255, 255, 255, 26), [(0, 0), (w * 0.62, 0), (w * 0.28, h), (0, h)])
-        pygame.draw.ellipse(gloss, (*accent, 26), (w * 0.12, h * 0.08, w * 0.76, h * 0.20))
+        pygame.draw.polygon(gloss, (255, 255, 255, 20), [(0, 0), (w * 0.52, 0), (w * 0.24, h), (0, h)])
+        pygame.draw.polygon(gloss, (*accent, 26), [(w * 0.72, 0), (w, 0), (w, h * 0.56), (w * 0.44, h * 0.18)])
+        pygame.draw.ellipse(gloss, (*accent, 18), (w * 0.16, h * 0.04, w * 0.68, h * 0.16))
+        for idx in range(6):
+            band_y = int(h * (0.16 + idx * 0.12))
+            pygame.draw.line(gloss, (255, 255, 255, 10), (0, band_y), (w, band_y - int(h * 0.04)), 2)
         self.screen.blit(gloss, (x, y))
 
         edge = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-        pygame.draw.rect(edge, (*accent, 46), (8, 8, w - 16, h - 16), 1, border_radius=16)
+        pygame.draw.rect(edge, (255, 255, 255, 12), (6, 6, w - 12, h - 12), 1, border_radius=16)
+        pygame.draw.rect(edge, (*accent, 58), (0, 0, w, 4), 0, border_radius=12)
+        pygame.draw.rect(edge, (*accent, 36), (8, 8, w - 16, h - 16), 1, border_radius=16)
         self.screen.blit(edge, (x, y))
         if rarity == "GOAT":
             shine = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
@@ -6370,6 +6430,7 @@ class Game:
 
         inner = pygame.Rect(x + 10, y + 10, w - 20, h - 20)
         pygame.draw.rect(self.screen, (8, 12, 20), inner, 2, border_radius=20)
+        pygame.draw.rect(self.screen, (255, 255, 255, 10), (x + 14, y + 14, w - 28, h - 28), 1, border_radius=18)
 
         art_rect = pygame.Rect(x + 14, y + 56, w - 28, h - 134)
         art_surface = pygame.Surface((art_rect.w, art_rect.h), pygame.SRCALPHA)
@@ -6377,9 +6438,10 @@ class Game:
             mix = iy / max(1, art_rect.h - 1)
             row = self.blend_color(self.blend_color(base_color, WHITE, 0.16), self.blend_color(base_color, (10, 12, 18), 0.42), mix)
             pygame.draw.line(art_surface, row, (0, iy), (art_rect.w, iy))
-        pygame.draw.polygon(art_surface, (*accent, 54), [(0, art_rect.h), (art_rect.w * 0.34, art_rect.h * 0.42), (art_rect.w * 0.68, art_rect.h), (0, art_rect.h)])
-        pygame.draw.polygon(art_surface, (255, 255, 255, 22), [(0, 0), (art_rect.w * 0.66, 0), (art_rect.w * 0.30, art_rect.h), (0, art_rect.h)])
-        pygame.draw.ellipse(art_surface, (*accent, 60), (art_rect.w * 0.12, art_rect.h * 0.02, art_rect.w * 0.76, art_rect.h * 0.30))
+        pygame.draw.polygon(art_surface, (*accent, 44), [(0, art_rect.h), (art_rect.w * 0.28, art_rect.h * 0.44), (art_rect.w * 0.56, art_rect.h), (0, art_rect.h)])
+        pygame.draw.polygon(art_surface, (255, 255, 255, 18), [(0, 0), (art_rect.w * 0.56, 0), (art_rect.w * 0.24, art_rect.h), (0, art_rect.h)])
+        pygame.draw.polygon(art_surface, (*accent, 34), [(art_rect.w * 0.70, 0), (art_rect.w, 0), (art_rect.w, art_rect.h * 0.58), (art_rect.w * 0.42, art_rect.h * 0.18)])
+        pygame.draw.ellipse(art_surface, (*accent, 42), (art_rect.w * 0.16, art_rect.h * 0.01, art_rect.w * 0.68, art_rect.h * 0.18))
         pygame.draw.rect(art_surface, (*accent, 110), (0, 0, art_rect.w, art_rect.h), 2, border_radius=18)
         portrait = self.load_player_portrait(player)
         if portrait:
@@ -6409,15 +6471,18 @@ class Game:
             pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.06, art_rect.h * 0.94), (center_x + art_rect.w * 0.14, art_rect.h * 1.06), 10)
         self.screen.blit(art_surface, art_rect.topleft)
 
-        rating_text = self.title_font.render(str(rating), True, WHITE)
-        self.screen.blit(rating_text, (x + 18, y + 18))
-        pos_text = self.font.render(player.get("position", "ST"), True, WHITE)
-        self.screen.blit(pos_text, (x + 24, y + 56))
-
         promo_chip = pygame.Rect(x + 14, y + 14, w - 28, 24)
-        self.draw_glass_panel(promo_chip, accent=accent, radius=10, fill=(12, 16, 24, 170), shine=False)
+        self.draw_glass_panel(promo_chip, accent=accent, radius=10, fill=(12, 16, 24, 182), shine=False)
         promo_label = "GOAT EDITION" if tier == "GOAT" else "SIGNATURE" if promo == "Signature" else promo.upper()
         self.screen.blit(self.micro.render(promo_label[:24], True, WHITE), (promo_chip.centerx - self.micro.size(promo_label[:24])[0] // 2, promo_chip.y + 7))
+
+        rating_plate = pygame.Rect(x + 16, y + 42, 66, 66)
+        pygame.draw.rect(self.screen, (10, 14, 20), rating_plate, 0, border_radius=16)
+        pygame.draw.rect(self.screen, accent, rating_plate, 2, border_radius=16)
+        rating_text = self.title_font.render(str(rating), True, WHITE)
+        self.screen.blit(rating_text, (rating_plate.x + 10, rating_plate.y + 4))
+        pos_text = self.small.render(player.get("position", "ST"), True, WHITE)
+        self.screen.blit(pos_text, (rating_plate.x + 14, rating_plate.bottom - 18))
 
         footer = pygame.Rect(x + 14, y + h - 74, w - 28, 60)
         self.draw_glass_panel(footer, accent=accent, radius=16, fill=(10, 14, 22, 210), shine=False)
@@ -6434,6 +6499,53 @@ class Game:
 
         pygame.draw.rect(self.screen, accent, card, 3, border_radius=22)
         pygame.draw.rect(self.screen, (255, 255, 255, 28), (x + 6, y + 6, w - 12, h - 12), 1, border_radius=20)
+
+    def draw_compact_card(self, x, y, w, h, player, face="front"):
+        rating = player["rating"]
+        team = player["team"]
+        league = player.get("league", get_team_league(team))
+        tier = player.get("rarity") or self.card_tier(rating)[0]
+        base_color, accent = self.card_theme_colors(player)
+        card = pygame.Rect(int(x), int(y), int(w), int(h))
+        shadow = pygame.Surface((w + 12, h + 12), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 70), (6, 6, w, h), 0, border_radius=16)
+        self.screen.blit(shadow, (x - 6, y - 6))
+        pygame.draw.rect(self.screen, base_color, card, 0, border_radius=16)
+        self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, player.get("promo", "Base"))
+        pygame.draw.rect(self.screen, accent, card, 2, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 255, 255, 24), (x + 4, y + 4, w - 8, h - 8), 1, border_radius=14)
+
+        portrait_rect = pygame.Rect(x + 8, y + 28, w - 16, max(28, h - 66))
+        if face == "front":
+            portrait = self.load_player_portrait(player)
+            if portrait:
+                scale = max((portrait_rect.w * 0.92) / max(1, portrait.get_width()), (portrait_rect.h * 0.80) / max(1, portrait.get_height()))
+                scaled = pygame.transform.smoothscale(
+                    portrait,
+                    (
+                        max(1, int(portrait.get_width() * scale)),
+                        max(1, int(portrait.get_height() * scale)),
+                    ),
+                )
+                px = portrait_rect.x + (portrait_rect.w - scaled.get_width()) // 2
+                py = portrait_rect.y + max(-4, min(4, portrait_rect.h - scaled.get_height()))
+                self.screen.blit(scaled, (px, py))
+            else:
+                pygame.draw.ellipse(self.screen, (255, 255, 255, 28), portrait_rect)
+        else:
+            back_inner = pygame.Rect(x + 10, y + 28, w - 20, h - 44)
+            pygame.draw.rect(self.screen, (18, 22, 34), back_inner, 0, border_radius=12)
+            pygame.draw.rect(self.screen, accent, back_inner, 2, border_radius=12)
+            pygame.draw.line(self.screen, accent, (back_inner.centerx, back_inner.y + 8), (back_inner.centerx, back_inner.bottom - 8), 2)
+
+        rating_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], max(18, min(28, int(h * 0.20))), bold=True)
+        pos_font = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], max(11, min(15, int(h * 0.10))), bold=True)
+        name_font = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], max(10, min(14, int(h * 0.09))), bold=True)
+        self.screen.blit(rating_font.render(str(rating), True, WHITE), (x + 10, y + 8))
+        self.screen.blit(pos_font.render(player.get("position", "ST"), True, WHITE), (x + 12, y + 28))
+        short = player["name"] if len(player["name"]) <= 14 else player["name"][:11] + "..."
+        name_text = name_font.render(short.upper(), True, WHITE)
+        self.screen.blit(name_text, (x + (w - name_text.get_width()) // 2, y + h - 22))
 
     def draw_card_back(self, x, y, w, h, player):
         name = player["name"]
@@ -6548,6 +6660,8 @@ class Game:
         pygame.draw.rect(self.screen, (12, 16, 26), rating_plate, 0, border_radius=12)
         pygame.draw.rect(self.screen, accent, rating_plate, 2, border_radius=12)
         self.screen.blit(self.big.render(str(rating), True, WHITE), (x + 24, y + 68))
+        detail_plate = pygame.Rect(x + 12, y + int(h * 0.46), w - 24, int(h * 0.40))
+        self.draw_glass_panel(detail_plate, accent=accent, radius=18, fill=(10, 14, 22, 182), shine=False)
         self.screen.blit(self.small.render(team, True, (220, 228, 236)), (x + 16, y + int(h * 0.48)))
         self.screen.blit(self.small.render(league[:18], True, (200, 210, 220)), (x + 16, y + int(h * 0.54)))
         pos_chip = pygame.Rect(x + 14, y + int(h * 0.58), 54, 26)
@@ -6582,6 +6696,9 @@ class Game:
         self.screen.blit(self.font.render(short, True, WHITE), (x + 14, y + h - 32))
 
     def draw_card(self, x, y, w, h, player, face="front"):
+        if w < 140 or h < 190:
+            self.draw_compact_card(x, y, w, h, player, face=face)
+            return
         if face == "back":
             self.draw_card_back(x, y, w, h, player)
         else:
@@ -6748,31 +6865,36 @@ class Game:
         rarity = band if band not in ("mixed", "promo", "ultimate") else "Legend" if band == "ultimate" else "Gold"
         base_color, accent = self.card_theme_colors({"rating": pack.get("guaranteed", 80), "promo": "Base", "rarity": rarity})
         frame = pygame.Rect(int(x), int(y), int(w), int(h))
-        pygame.draw.rect(self.screen, base_color, frame, 0, border_radius=18)
+        pygame.draw.rect(self.screen, self.blend_color(base_color, (12, 14, 20), 0.48), frame, 0, border_radius=18)
         self.draw_card_art_layers((x, y, w, h), base_color, accent, rarity, "Base")
         pygame.draw.rect(self.screen, accent, frame, 4 if selected else 2, border_radius=18)
         if selected:
-            pygame.draw.rect(self.screen, YELLOW, frame.inflate(8, 8), 3, border_radius=22)
+            pygame.draw.rect(self.screen, (196, 255, 86), frame.inflate(8, 8), 3, border_radius=22)
         shine = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-        pygame.draw.polygon(shine, (255, 255, 255, 40), [(0, 0), (w * 0.55, 0), (w * 0.2, h), (0, h)])
-        pygame.draw.polygon(shine, (*accent, 42), [(w * 0.62, 0), (w, 0), (w, h * 0.65), (w * 0.42, h * 0.25)])
+        pygame.draw.polygon(shine, (255, 255, 255, 24), [(0, 0), (w * 0.50, 0), (w * 0.20, h), (0, h)])
+        pygame.draw.polygon(shine, (*accent, 38), [(w * 0.72, 0), (w, 0), (w, h * 0.72), (w * 0.48, h * 0.20)])
+        pygame.draw.rect(shine, (255, 255, 255, 18), (16, 18, w - 32, h - 36), 1, border_radius=14)
         self.screen.blit(shine, (x, y))
-        pygame.draw.rect(self.screen, (255, 255, 255, 24), (x + 14, y + 14, w - 28, 34), 0, border_radius=10)
-        badge = pygame.Rect(x + 18, y + 56, 82, 48)
-        pygame.draw.rect(self.screen, (12, 16, 26), badge, 0, border_radius=12)
-        pygame.draw.rect(self.screen, accent, badge, 2, border_radius=12)
+        top_strip = pygame.Rect(x + 14, y + 14, w - 28, 26)
+        pygame.draw.rect(self.screen, (10, 14, 20), top_strip, 0, border_radius=8)
+        pygame.draw.rect(self.screen, accent, (top_strip.x, top_strip.y, top_strip.w, 3), 0, border_radius=8)
+        badge = pygame.Rect(x + 18, y + 54, 90, 54)
+        pygame.draw.rect(self.screen, (10, 14, 20), badge, 0, border_radius=14)
+        pygame.draw.rect(self.screen, accent, badge, 2, border_radius=14)
         title = pack["name"] if len(pack["name"]) <= 14 else pack["name"][:13]
-        self.screen.blit(self.small.render(title, True, WHITE), (x + 16, y + 18))
-        self.screen.blit(self.big.render(str(pack["cost"]), True, WHITE), (x + 28, y + 62))
-        self.screen.blit(self.small.render("COINS", True, accent), (x + 28, y + 94))
-        band_chip = pygame.Rect(x + 18, y + 120, w - 36, 28)
-        pygame.draw.rect(self.screen, (12, 16, 26, 190), band_chip, 0, border_radius=10)
-        self.screen.blit(self.font.render(band.upper(), True, WHITE), (x + 24, y + 126))
+        self.screen.blit(self.small.render(title, True, WHITE), (x + 18, y + 20))
+        self.screen.blit(self.big.render(str(pack["cost"]), True, WHITE), (x + 30, y + 60))
+        self.screen.blit(self.small.render("COINS", True, accent), (x + 30, y + 94))
+        band_chip = pygame.Rect(x + 18, y + 122, w - 36, 28)
+        pygame.draw.rect(self.screen, (12, 16, 24), band_chip, 0, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255, 10), band_chip, 1, border_radius=10)
+        self.screen.blit(self.small.render(f"{band.upper()} LANE", True, WHITE), (x + 26, y + 128))
         self.screen.blit(self.small.render(f"{pack['count']} cards", True, (220, 228, 236)), (x + 18, y + h - 44))
         self.screen.blit(self.small.render(f"{pack['guaranteed']}+ OVR", True, (220, 228, 236)), (x + 18, y + h - 22))
 
     def draw_pack_shop_page(self):
         self.draw_modern_backdrop((86, 170, 255), (12, 220, 190))
+        self.draw_fc_top_bar("Store", "Featured packs and odds", counters=[((244, 206, 84), self.fantasy_coins), ((12, 220, 190), len(self.my_packs))], accent=(86, 170, 255))
         self.draw_hero_header("Fantasy Pack Shop", "Broadcast-style store with live event packs and premium pull lanes.", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"{self.fantasy_coins}C")
         self.screen.blit(self.small.render("LEFT/RIGHT move | UP/DOWN row scroll | ENTER buy | O odds | M my packs | E refresh event | ESC back", True, (196, 210, 228)), (36, 170))
 
@@ -6798,11 +6920,11 @@ class Game:
             return
         self.pack_shop_index = max(0, min(self.pack_shop_index, len(packs) - 1))
         cols = 4
-        card_w = 230
-        card_h = 190
-        gap_x = 28
-        gap_y = 26
-        start_x = 70
+        card_w = 218
+        card_h = 182
+        gap_x = 20
+        gap_y = 20
+        start_x = 66
         start_y = 312
         visible_rows = 2
         selected_row = self.pack_shop_index // cols
@@ -6819,7 +6941,7 @@ class Game:
             self.draw_pack_visual(px, py, card_w, card_h, pack, i == self.pack_shop_index)
 
         selected = packs[self.pack_shop_index]
-        info = pygame.Rect(70, 646, 1060, 108)
+        info = pygame.Rect(60, 636, 1080, 108)
         self.draw_glass_panel(info, accent=(86, 170, 255), radius=18)
         self.screen.blit(self.font.render(selected["name"], True, WHITE), (info.x + 18, info.y + 14))
         detail = f"{selected['count']} cards | {selected['guaranteed']}+ OVR | {selected['cost']} coins"
@@ -6832,12 +6954,13 @@ class Game:
             self.screen.blit(self.small.render("More packs above", True, (180, 190, 205)), (972, 284))
         if row_end < max_row + 1:
             self.screen.blit(self.small.render("More packs below", True, (180, 190, 205)), (972, 618))
+        self.draw_fc_bottom_nav([("N", "COLLECTION"), ("L", "LINEUP"), ("R", "MARKET"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=3)
 
     def draw_my_packs_page(self):
         self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_fc_top_bar("My Packs", "Stored pack inventory", counters=[((244, 206, 84), len(self.my_packs))], accent=(244, 206, 84))
         self.draw_hero_header("My Packs", "Stored packs, live reveal access, and featured odds lookup.", accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=f"{len(self.my_packs)} OWNED")
         self.screen.blit(self.small.render("UP/DOWN select | ENTER open | O odds | ESC back", True, (196, 210, 228)), (36, 170))
-        panel = pygame.Rect(40, 96, 1120, 560)
         panel = pygame.Rect(40, 212, 1120, 520)
         self.draw_glass_panel(panel, accent=(244, 206, 84), radius=24)
         if not self.my_packs:
@@ -6865,11 +6988,13 @@ class Game:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (panel.right - 110, panel.y + 10))
         if start + visible < len(self.my_packs):
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
+        self.draw_fc_bottom_nav([("ENTER", "OPEN"), ("O", "ODDS"), ("P/W", "SHOP"), ("ESC", "BACK")], active_index=0)
 
     def draw_pack_odds_page(self):
         pack = self.get_pack_by_id(self.pack_detail_pack_id)
         accent = self.card_theme_colors({"rating": pack.get("guaranteed", 82), "promo": "Base", "rarity": "Legend"})[1]
         self.draw_modern_backdrop(accent, (12, 220, 190))
+        self.draw_fc_top_bar(pack["name"][:18], "Pack details and odds", counters=[(accent, pack['cost'])], accent=accent)
         self.draw_hero_header(pack["name"], "Odds, reward bands, and walkout profile.", accent=accent, accent_two=(12, 220, 190), right_text=f"{pack['cost']}C")
         self.screen.blit(self.small.render("ENTER buy/open | ESC back", True, (196, 210, 228)), (36, 170))
         card_panel = pygame.Rect(60, 212, 320, 500)
@@ -6904,39 +7029,41 @@ class Game:
         for line in walkout_lines:
             self.screen.blit(self.font.render(line, True, (190, 200, 215)), (detail_panel.x + 20, y))
             y += 34
+        self.draw_fc_bottom_nav([("ENTER", "BUY"), ("ESC", "BACK")], active_index=0)
 
     def draw_pack_summary_page(self):
         featured = max(self.last_pack, key=lambda p: (self.rarity_rank(p.get("rarity", "Bronze")), p.get("rating", 0))) if self.last_pack else {"rating": 82}
         accent = self.card_theme_colors(featured)[1] if self.last_pack else (244, 206, 84)
         self.draw_modern_backdrop(accent, (86, 170, 255))
+        self.draw_fc_top_bar("Pack Reveal", "Summary", accent=accent)
         self.draw_hero_header("Pack Reveal", "Featured pull spotlight and summary.", accent=accent, accent_two=(86, 170, 255))
         self.draw_pack_summary()
         self.screen.blit(self.small.render("ENTER or ESC continue", True, (196, 210, 228)), (36, 170))
+        self.draw_fc_bottom_nav([("ENTER", "CONTINUE"), ("ESC", "BACK")], active_index=0)
 
     def draw_fantasy_sbc_page(self):
-        self.screen.fill((14, 18, 28))
-        self.screen.blit(self.big.render("Fantasy SBC Hub", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER open challenge | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Spare Cards: {len(self.available_sbc_cards())}", True, WHITE), (930, 28))
-        panel = pygame.Rect(40, 96, 1120, 560)
-        pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        self.draw_modern_backdrop((244, 206, 84), (52, 244, 116))
+        spare_cards = len(self.available_sbc_cards())
+        self.draw_fc_top_bar("Exchanges", "Squad building challenges", counters=[((244, 206, 84), spare_cards)], accent=(244, 206, 84))
+        self.draw_hero_header("Fantasy SBC Hub", "Cleaner challenge list, clearer rewards, and readable status lanes.", accent=(244, 206, 84), accent_two=(52, 244, 116), right_text=f"{spare_cards} SPARE")
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER open challenge | ESC back", True, (196, 210, 228)), (36, 170))
+        panel = pygame.Rect(40, 212, 1120, 520)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=24)
         sbcs = self.fantasy_sbc_catalog()
-        row_h = 110
-        row_gap = 16
+        row_h = 96
+        row_gap = 14
         visible_rows = 4
         total = len(sbcs)
         start = 0
         if total > visible_rows:
             start = max(0, min(self.fantasy_sbc_index - visible_rows + 1, total - visible_rows))
         end = min(total, start + visible_rows)
-        row_y = panel.y + 24
+        row_y = panel.y + 20
         for i in range(start, end):
             sbc = sbcs[i]
-            row = pygame.Rect(panel.x + 18, row_y, panel.w - 36, 110)
-            bg = (42, 52, 72) if i == self.fantasy_sbc_index else (28, 34, 48)
-            pygame.draw.rect(self.screen, bg, row, 0, border_radius=16)
-            pygame.draw.rect(self.screen, YELLOW if i == self.fantasy_sbc_index else (86, 98, 126), row, 2, border_radius=16)
+            row = pygame.Rect(panel.x + 18, row_y, panel.w - 36, row_h)
+            active = i == self.fantasy_sbc_index
+            self.draw_glass_panel(row, accent=YELLOW if active else (86, 98, 126), radius=18, fill=(42, 52, 72, 228) if active else (24, 30, 44, 216), shine=False)
             req = ", ".join(f"{count}x {rarity}" for rarity, count in sbc["requirements"])
             if sbc.get("reward_type") == "pack":
                 reward = f"{sbc['reward_pack'].title()} Pack"
@@ -6946,28 +7073,29 @@ class Game:
                 reward = f"{sbc.get('reward_coins', 0)} Coins"
             status = "Ready" if self.can_complete_sbc(sbc) else "Missing cards"
             self.screen.blit(self.font.render(sbc["name"], True, WHITE), (row.x + 16, row.y + 14))
-            self.screen.blit(self.small.render(f"Submit: {req}", True, (212, 220, 232)), (row.x + 16, row.y + 48))
-            self.screen.blit(self.small.render(f"Reward: {reward}", True, LIGHT_GREEN), (row.x + 16, row.y + 74))
-            self.screen.blit(self.small.render(status, True, YELLOW if status == "Ready" else (220, 170, 170)), (row.right - 120, row.y + 44))
+            self.screen.blit(self.small.render(f"Submit: {req}"[:86], True, (212, 220, 232)), (row.x + 16, row.y + 46))
+            self.screen.blit(self.small.render(f"Reward: {reward}", True, LIGHT_GREEN), (row.x + 16, row.y + 68))
+            self.screen.blit(self.small.render(status, True, YELLOW if status == "Ready" else (220, 170, 170)), (row.right - 124, row.y + 36))
             row_y += row_h + row_gap
         if start > 0:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (panel.right - 110, panel.y + 10))
         if end < total:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
+        self.draw_fc_bottom_nav([("A/J", "QUESTS"), ("B", "EXCHANGE"), ("R", "MARKET"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=1)
 
     def draw_fantasy_sbc_build_page(self):
-        self.screen.fill((12, 18, 30))
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
         self.lineup_rects = {}
         sbc = self.fantasy_sbc_catalog()[self.fantasy_sbc_active]
-        self.screen.blit(self.big.render(sbc["name"], True, WHITE), (30, 20))
-        self.screen.blit(self.small.render("TAB cycle | ENTER move/remove | SPACE submit | ESC back", True, (190, 200, 215)), (30, 54))
+        self.draw_fc_top_bar("SBC Build", sbc["name"][:28], accent=(244, 206, 84))
+        self.draw_hero_header(sbc["name"], "Build the challenge with clearer slots and source lists.", accent=(244, 206, 84), accent_two=(86, 170, 255))
+        self.screen.blit(self.small.render("TAB cycle | ENTER move/remove | SPACE submit | ESC back", True, (196, 210, 228)), (36, 170))
 
-        top_panel = pygame.Rect(30, 90, 1140, 170)
-        bench_panel = pygame.Rect(30, 280, 1140, 170)
-        reserve_panel = pygame.Rect(30, 470, 1140, 200)
+        top_panel = pygame.Rect(30, 212, 1140, 154)
+        bench_panel = pygame.Rect(30, 386, 1140, 154)
+        reserve_panel = pygame.Rect(30, 560, 1140, 170)
         for panel in (top_panel, bench_panel, reserve_panel):
-            pygame.draw.rect(self.screen, (20, 26, 38), panel, 0, border_radius=18)
-            pygame.draw.rect(self.screen, (45, 60, 90), panel, 2, border_radius=18)
+            self.draw_glass_panel(panel, accent=(86, 170, 255) if panel != top_panel else (244, 206, 84), radius=20, fill=(20, 26, 38, 214), shine=False)
 
         req_text = ", ".join(f"{count}x {rarity}" for rarity, count in sbc.get("requirements", []))
         if sbc.get("reward_type") == "pack":
@@ -6983,12 +7111,12 @@ class Game:
         self.screen.blit(self.small.render(status, True, YELLOW if self.sbc_build_requirements_met() else (220, 170, 170)), (top_panel.right - 180, top_panel.y + 18))
 
         slot_w = 92
-        slot_h = 112
-        gap = 12
+        slot_h = 104
+        gap = 10
         start_x = top_panel.x + 16
         for i, entry in enumerate(self.fantasy_sbc_slots):
             x = start_x + i * (slot_w + gap)
-            y = top_panel.y + 88
+            y = top_panel.y + 42
             slot_rect = pygame.Rect(x, y, slot_w, slot_h)
             selected = self.fantasy_sbc_col == 0 and i == self.fantasy_sbc_idx
             pygame.draw.rect(self.screen, (32, 40, 56), slot_rect, 0, border_radius=14)
@@ -7010,7 +7138,7 @@ class Game:
         for i, entry in enumerate(bench_slice):
             actual_idx = bench_start + i
             x = bench_panel.x + 16 + i * 108
-            y = bench_panel.y + 44
+            y = bench_panel.y + 34
             selected = self.fantasy_sbc_col == 1 and actual_idx == self.fantasy_sbc_idx
             self.draw_squad_card(x, y, 92, 112, entry, role="SUB", selected=selected)
         if bench_start > 0:
@@ -7033,28 +7161,27 @@ class Game:
             row = i // cols
             col = i % cols
             x = reserve_panel.x + 16 + col * 108
-            y = reserve_panel.y + 44 + row * 126
+            y = reserve_panel.y + 34 + row * 112
             selected = self.fantasy_sbc_col == 2 and actual_idx == self.fantasy_sbc_idx
             self.draw_squad_card(x, y, 92, 112, entry, role="RES", selected=selected)
         if reserve_start > 0:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (reserve_panel.right - 180, reserve_panel.y + 14))
         if reserve_start + reserve_visible < len(reserve_entries):
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (reserve_panel.right - 88, reserve_panel.y + 14))
+        self.draw_fc_bottom_nav([("TAB", "LISTS"), ("ENTER", "MOVE"), ("SPACE", "SUBMIT"), ("ESC", "BACK")], active_index=2)
 
     def draw_fantasy_objectives_page(self):
-        self.screen.fill((14, 18, 28))
-        self.screen.blit(self.big.render("Fantasy Objectives", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER claim reward | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Season XP: {self.fantasy_season_xp}", True, WHITE), (940, 28))
+        self.draw_modern_backdrop((52, 244, 116), (244, 206, 84))
+        self.draw_fc_top_bar("Objectives", "Daily, weekly, milestone rewards", counters=[((52, 244, 116), self.fantasy_season_xp)], accent=(52, 244, 116))
+        self.draw_hero_header("Fantasy Objectives", "Cleaner objective tracking and reward claim lanes.", accent=(52, 244, 116), accent_two=(244, 206, 84), right_text=f"{self.fantasy_season_xp} XP")
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER claim reward | ESC back", True, (196, 210, 228)), (36, 170))
 
         sections = [("Daily", "daily"), ("Weekly", "weekly"), ("Milestones", "milestones")]
-        selected_key, selected_offset = "daily", self.fantasy_objective_index
         running = 0
-        base_y = 96
+        base_y = 212
         for title, key in sections:
-            panel = pygame.Rect(40, base_y, 1120, 150)
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=18)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=18)
+            panel = pygame.Rect(40, base_y, 1120, 142)
+            self.draw_glass_panel(panel, accent=(52, 244, 116) if key == "daily" else (244, 206, 84) if key == "weekly" else (86, 170, 255), radius=20, fill=(22, 28, 40, 214), shine=False)
             self.screen.blit(self.font.render(title, True, WHITE), (panel.x + 14, panel.y + 10))
             group = self.fantasy_objectives.get(key, [])
             y = panel.y + 44
@@ -7072,14 +7199,14 @@ class Game:
                     complete = progress >= target
                 reward = f"{obj.get('pack_id', 'gold').title()} Pack" if obj.get("reward_type") == "pack" else f"{obj.get('reward', 0)} coins"
                 status = "Claimed" if obj.get("claimed") else "Ready" if complete else "In Progress"
-                self.screen.blit(self.small.render(f"{obj['label']}  [{prog_text}]  Reward: {reward}  {status}", True, color), (panel.x + 16, y))
-                y += 30
+                text = f"{obj['label']}  [{prog_text}]  Reward: {reward}  {status}"
+                self.screen.blit(self.small.render(text[:140], True, color), (panel.x + 16, y))
+                y += 28
             running += len(group)
-            base_y += 170
+            base_y += 160
 
-        track_panel = pygame.Rect(40, 620, 1120, 70)
-        pygame.draw.rect(self.screen, (22, 28, 40), track_panel, 0, border_radius=16)
-        pygame.draw.rect(self.screen, (70, 86, 122), track_panel, 2, border_radius=16)
+        track_panel = pygame.Rect(40, 700, 1120, 70)
+        self.draw_glass_panel(track_panel, accent=(86, 170, 255), radius=18, fill=(22, 28, 40, 214), shine=False)
         self.screen.blit(self.small.render("Season Track", True, WHITE), (track_panel.x + 14, track_panel.y + 8))
         for tier in range(1, 6):
             tier_x = track_panel.x + 22 + (tier - 1) * 210
@@ -7090,9 +7217,11 @@ class Game:
             pygame.draw.rect(self.screen, color, (tier_x, track_panel.y + 30, 180, 18), 0, border_radius=8)
             label = f"T{tier} {'Claimed' if claimed else 'Ready' if active else f'{needed} XP'}"
             self.screen.blit(self.small.render(label, True, WHITE), (tier_x, track_panel.y + 50))
+        self.draw_fc_bottom_nav([("A/J", "QUESTS"), ("B", "EXCHANGE"), ("R", "MARKET"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=0)
 
     def draw_fantasy_collection_page(self):
         self.draw_modern_backdrop((12, 220, 190), (86, 170, 255))
+        self.draw_fc_top_bar("Collection", "Browse owned cards", counters=[((12, 220, 190), len(self.fantasy_roster))], accent=(12, 220, 190))
         self.draw_hero_header("Fantasy Collection", "Premium card library with faster comparison and cleaner browsing.", accent=(12, 220, 190), accent_two=(86, 170, 255), right_text=f"{len(self.fantasy_roster)} OWNED")
         self.collection_flip_button_rect = None
         record = self.active_account_record() or {}
@@ -7119,10 +7248,10 @@ class Game:
         self.screen.blit(self.small.render(f"{len(cards)} shown / {len(self.fantasy_roster)} owned", True, (210, 220, 235)), (grid_panel.right - 170, 186))
 
         cols = 4
-        card_w = 154
-        card_h = 188
-        gap_x = 14
-        gap_y = 14
+        card_w = 148
+        card_h = 180
+        gap_x = 12
+        gap_y = 12
         visible_rows = 2
         row = self.fantasy_collection_index // cols
         max_row = max(0, math.ceil(len(cards) / cols) - visible_rows)
@@ -7172,6 +7301,7 @@ class Game:
 
         meta_box = pygame.Rect(detail_panel.x + 18, detail_panel.bottom - 88, detail_panel.w - 36, 56)
         self.draw_glass_panel(meta_box, accent=(12, 220, 190), radius=16, fill=(20, 26, 38, 210), shine=False)
+        self.draw_fc_bottom_nav([("G", "FILTER"), ("TAB", "SORT"), ("V", "FLIP"), ("ESC", "BACK")], active_index=0)
         chem_tags = self.fantasy_chemistry_breakdown.get((selected.get("name"), selected.get("number"), selected.get("rating")), [])
         meta_text = "Chemistry Tags: " + (", ".join(chem_tags[:3]) if chem_tags else "None")
         self.screen.blit(self.small.render(meta_text[:48], True, (214, 222, 236)), (meta_box.x + 14, meta_box.y + 12))
@@ -7179,6 +7309,7 @@ class Game:
 
     def draw_fantasy_market_page(self):
         self.draw_modern_backdrop((12, 220, 190), (244, 206, 84))
+        self.draw_fc_top_bar("Market", "Live player offers", counters=[((244, 206, 84), self.fantasy_coins)], accent=(12, 220, 190))
         self.draw_hero_header("Fantasy Market", "Premium transfer board with cleaner cards, prices, and live offer focus.", accent=(12, 220, 190), accent_two=(244, 206, 84), right_text=f"{self.fantasy_coins}C")
         self.screen.blit(self.small.render("UP/DOWN browse | ENTER buy | R refresh | ESC back", True, (190, 200, 215)), (36, 170))
         if not self.fantasy_market_offers:
@@ -7228,6 +7359,7 @@ class Game:
         footer = pygame.Rect(detail_panel.x + 18, detail_panel.bottom - 74, detail_panel.w - 36, 48)
         self.draw_glass_panel(footer, accent=(86, 170, 255), radius=16, fill=(20, 28, 40, 216), shine=False)
         self.screen.blit(self.small.render("Live market pricing. Buy instantly if your club wallet can cover the fee.", True, (214, 222, 236)), (footer.x + 14, footer.y + 15))
+        self.draw_fc_bottom_nav([("L", "LINEUP"), ("R", "MARKET"), ("B", "EXCHANGE"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=1)
 
     def draw_fantasy_evolutions_page(self):
         self.draw_modern_backdrop((244, 206, 84), (12, 220, 190))
@@ -7303,16 +7435,16 @@ class Game:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (path_panel.right - 110, path_panel.bottom - 24))
 
     def draw_fantasy_competitions_page(self):
-        self.screen.fill((14, 18, 28))
-        self.screen.blit(self.big.render("Fantasy Competitions", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("UP/DOWN select | ENTER choose | D open draft | ESC back", True, (190, 200, 215)), (36, 56))
-        panel = pygame.Rect(40, 96, 1120, 560)
-        pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_fc_top_bar("Competitions", "Choose your active fantasy mode", accent=(244, 206, 84))
+        self.draw_hero_header("Fantasy Competitions", "Event lanes, ladders, knockout modes, and clearer reward reading.", accent=(244, 206, 84), accent_two=(86, 170, 255))
+        self.screen.blit(self.small.render("UP/DOWN select | ENTER choose | D open draft | ESC back", True, (196, 210, 228)), (36, 170))
+        panel = pygame.Rect(40, 212, 1120, 520)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=24)
         menu = self.fantasy_competition_menu()
         comps = self.fantasy_competitions or {}
-        row_h = 112
-        row_gap = 16
+        row_h = 96
+        row_gap = 14
         visible_rows = 4
         total = len(menu)
         start = 0
@@ -7322,10 +7454,10 @@ class Game:
         row_y = panel.y + 26
         for i in range(start, end):
             key, title, desc = menu[i]
-            row = pygame.Rect(panel.x + 18, row_y, panel.w - 36, 112)
-            bg = (42, 52, 72) if i == self.fantasy_competition_index else (28, 34, 48)
-            pygame.draw.rect(self.screen, bg, row, 0, border_radius=16)
-            pygame.draw.rect(self.screen, YELLOW if key == self.fantasy_active_competition else (86, 98, 126), row, 2, border_radius=16)
+            row = pygame.Rect(panel.x + 18, row_y, panel.w - 36, row_h)
+            active = i == self.fantasy_competition_index
+            equipped = key == self.fantasy_active_competition
+            self.draw_glass_panel(row, accent=YELLOW if equipped else (86, 98, 126), radius=18, fill=(42, 52, 72, 228) if active else (24, 30, 44, 216), shine=False)
             comp = comps.get(key, {})
             if key == "division":
                 reward_text = f"Reward: {comp.get('reward', 120)} coins on promotion"
@@ -7346,26 +7478,28 @@ class Game:
                 reward_text = "Reward: Featured special player"
             self.screen.blit(self.font.render(title, True, WHITE), (row.x + 16, row.y + 14))
             self.screen.blit(self.small.render(desc, True, (212, 220, 232)), (row.x + 16, row.y + 46))
-            self.screen.blit(self.small.render(reward_text, True, LIGHT_GREEN), (row.x + 16, row.y + 74))
+            self.screen.blit(self.small.render(reward_text[:100], True, LIGHT_GREEN), (row.x + 16, row.y + 70))
             if key == "online":
                 entry = self.online_division_data.get("entry", {})
                 status_text = f"{entry.get('points', 0)} pts | {entry.get('wins', 0)}W-{entry.get('draws', 0)}D-{entry.get('losses', 0)}L"
-                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
+                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
             elif key == "ladder":
                 status_text = f"Week {comp.get('week', 1)} | {comp.get('points', 0)} pts | Streak {comp.get('streak', 0)}"
-                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
+                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
             elif key == "draft":
                 run_text = f"{comp.get('wins', 0)}W-{comp.get('losses', 0)}L | {'Active draft squad' if self.fantasy_draft_active else 'Build a fresh squad'}"
-                self.screen.blit(self.small.render(run_text, True, (190, 200, 215)), (row.x + 16, row.y + 92))
+                self.screen.blit(self.small.render(run_text[:96], True, (190, 200, 215)), (row.x + 16, row.y + 86))
             row_y += row_h + row_gap
         if start > 0:
             self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (panel.right - 110, panel.y + 10))
         if end < total:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
+        self.draw_fc_bottom_nav([("O", "COMPETE"), ("D", "DRAFT"), ("L", "LINEUP"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=0)
 
     def draw_fantasy_club_page(self):
         self.draw_modern_backdrop((244, 206, 84), (12, 220, 190))
         self.ensure_fantasy_club_defaults()
+        self.draw_fc_top_bar("Club", "Identity and sharing", accent=(244, 206, 84))
         self.draw_hero_header("Club Identity", "Tune badge, colours, stadium, and squad sharing from one premium hub.", accent=(244, 206, 84), accent_two=(12, 220, 190), right_text=(self.fantasy_team_name.strip() or "Fantasy FC")[:16])
         self.screen.blit(self.small.render("UP/DOWN select | LEFT/RIGHT tune | S export squad | ENTER import | ESC back", True, (196, 210, 228)), (36, 170))
 
@@ -7442,21 +7576,22 @@ class Game:
             y += 24
         message = self.fantasy_share_message or "Export copies your lineup order. Import applies matching owned cards."
         self.screen.blit(self.small.render(message[:64], True, YELLOW), (right.x + 16, right.bottom - 34))
+        self.draw_fc_bottom_nav([("H", "CLUB"), ("L", "LINEUP"), ("N", "COLLECTION"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=0)
 
     def draw_online_divisions_page(self):
-        self.screen.fill((10, 16, 28))
-        self.screen.blit(self.big.render("Online Divisions", True, WHITE), (34, 22))
+        self.draw_modern_backdrop((86, 170, 255), (52, 244, 116))
+        self.draw_fc_top_bar("Online Divisions", "Async division progress", accent=(86, 170, 255))
+        self.draw_hero_header("Online Divisions", "Division progress, squad submission, and leaderboard tracking.", accent=(86, 170, 255), accent_two=(52, 244, 116))
         hint = "S submit squad | SPACE play async match | C claim reward | R refresh | UP/DOWN leaderboard | ESC back"
-        self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (36, 56))
+        self.screen.blit(self.small.render(hint, True, (196, 210, 228)), (36, 170))
 
         entry = self.online_division_data.get("entry", {})
         leaderboard = self.online_division_data.get("leaderboard", [])
 
-        left = pygame.Rect(34, 96, 470, 590)
-        right = pygame.Rect(528, 96, 638, 590)
+        left = pygame.Rect(34, 212, 470, 520)
+        right = pygame.Rect(528, 212, 638, 520)
         for panel in (left, right):
-            pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-            pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+            self.draw_glass_panel(panel, accent=(86, 170, 255) if panel == left else (52, 244, 116), radius=22, fill=(22, 28, 40, 214), shine=False)
 
         self.screen.blit(self.font.render("Your Division Entry", True, WHITE), (left.x + 18, left.y + 18))
         info_lines = [
@@ -7507,19 +7642,20 @@ class Game:
 
         if self.online_division_message:
             self.screen.blit(self.small.render(self.online_division_message[:120], True, YELLOW), (36, HEIGHT - 28))
+        self.draw_fc_bottom_nav([("S", "SUBMIT"), ("SPACE", "PLAY"), ("C", "CLAIM"), ("ESC", "BACK")], active_index=1)
 
     def draw_online_tournament_page(self):
-        self.screen.fill((10, 16, 28))
-        self.screen.blit(self.big.render("Online Tournament", True, WHITE), (34, 22))
-        hint = "SPACE play match | B submit squad | C claim reward | R refresh | UP/DOWN leaderboard | ESC back"
-        self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (36, 56))
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_fc_top_bar("Tournament", "Online competition status", accent=(244, 206, 84))
+        self.draw_hero_header("Online Tournament", "Cleaner tournament status, reward queue, and leaderboard snapshot.", accent=(244, 206, 84), accent_two=(86, 170, 255))
+        hint = "SPACE play | B submit squad | C claim reward | R refresh | UP/DOWN leaderboard | ESC back"
+        self.screen.blit(self.small.render(hint, True, (196, 210, 228)), (36, 170))
 
         entry = self.online_tournament_data.get("entry", {})
         leaderboard = self.online_tournament_data.get("leaderboard", [])
 
-        panel = pygame.Rect(34, 96, 470, 574)
-        pygame.draw.rect(self.screen, (22, 28, 40), panel, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), panel, 2, border_radius=20)
+        panel = pygame.Rect(34, 212, 470, 520)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=22)
         self.screen.blit(self.font.render("Your Tournament Entry", True, WHITE), (panel.x + 18, panel.y + 18))
         lines = [
             f"Round: {entry.get('round', 1)}",
@@ -7549,16 +7685,17 @@ class Game:
 
         if self.online_tournament_message:
             self.screen.blit(self.small.render(self.online_tournament_message[:120], True, YELLOW), (36, HEIGHT - 28))
+        self.draw_fc_bottom_nav([("SPACE", "PLAY"), ("B", "SUBMIT"), ("C", "CLAIM"), ("ESC", "BACK")], active_index=0)
 
     def draw_fantasy_draft_page(self):
-        self.screen.fill((10, 14, 24))
-        self.screen.blit(self.big.render("Fantasy Draft", True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("LEFT/RIGHT choose | ENTER draft player | ESC back", True, (190, 200, 215)), (36, 56))
-        self.screen.blit(self.font.render(f"Round {min(self.fantasy_draft_round + 1, 15)}/15", True, WHITE), (970, 28))
+        round_label = f"Round {min(self.fantasy_draft_round + 1, 15)}/15"
+        self.draw_modern_backdrop((86, 170, 255), (52, 244, 116))
+        self.draw_fc_top_bar("Draft", "Build a temporary event squad", counters=[((86, 170, 255), round_label)], accent=(86, 170, 255))
+        self.draw_hero_header("Fantasy Draft", "Three-card draft lane with cleaner pick spacing and readable summaries.", accent=(86, 170, 255), accent_two=(52, 244, 116), right_text=round_label)
+        self.screen.blit(self.small.render("LEFT/RIGHT choose | ENTER draft player | ESC back", True, (196, 210, 228)), (36, 170))
 
-        info = pygame.Rect(40, 96, 1120, 160)
-        pygame.draw.rect(self.screen, (22, 28, 40), info, 0, border_radius=18)
-        pygame.draw.rect(self.screen, (70, 86, 122), info, 2, border_radius=18)
+        info = pygame.Rect(40, 212, 1120, 138)
+        self.draw_glass_panel(info, accent=(86, 170, 255), radius=20, fill=(22, 28, 40, 216), shine=False)
         self.screen.blit(self.font.render("Drafted So Far", True, WHITE), (info.x + 16, info.y + 14))
         recent = ", ".join(card["name"] for card in self.fantasy_draft_roster[-8:]) or "No picks yet"
         self.screen.blit(self.small.render(recent[:140], True, (212, 220, 232)), (info.x + 16, info.y + 46))
@@ -7571,27 +7708,31 @@ class Game:
             self.screen.blit(self.font.render("No draft options available", True, WHITE), (60, 320))
             return
 
+        pick_panel = pygame.Rect(40, 374, 1120, 344)
+        self.draw_glass_panel(pick_panel, accent=(52, 244, 116), radius=24)
+        self.screen.blit(self.font.render("Choose One", True, WHITE), (pick_panel.x + 18, pick_panel.y + 14))
         for i, card in enumerate(self.fantasy_draft_options):
-            x = 92 + i * 356
-            y = 292
-            self.draw_card(x, y, 240, 330, card)
+            x = 96 + i * 348
+            y = 414
+            self.draw_card(x, y, 220, 304, card)
             if i == self.fantasy_draft_index:
-                pygame.draw.rect(self.screen, YELLOW, (x - 6, y - 6, 252, 342), 3, border_radius=18)
+                pygame.draw.rect(self.screen, YELLOW, (x - 6, y - 6, 232, 316), 3, border_radius=18)
             meta_line = f"{card.get('league', get_team_league(card.get('team', '')))} | {card.get('position', 'ST')}"
-            self.screen.blit(self.small.render(meta_line[:38], True, (214, 222, 236)), (x + 18, y + 340))
+            self.screen.blit(self.small.render(meta_line[:34], True, (214, 222, 236)), (x + 14, y + 310))
+        self.draw_fc_bottom_nav([("LEFT/RIGHT", "BROWSE"), ("ENTER", "PICK"), ("ESC", "BACK")], active_index=1)
 
     def draw_fantasy_champions_bracket_page(self):
-        self.screen.fill((8, 14, 30))
-        self.screen.blit(self.big.render("Champions Clash Bracket", True, WHITE), (30, 18))
-        self.screen.blit(self.small.render("ESC/K back | Full knockout bracket for the current Champions run", True, (196, 206, 220)), (32, 54))
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_fc_top_bar("Champions", "Knockout bracket", accent=(244, 206, 84))
+        self.draw_hero_header("Champions Clash Bracket", "Readable knockout overview with cleaner match boxes and progression lines.", accent=(244, 206, 84), accent_two=(86, 170, 255))
+        self.screen.blit(self.small.render("ESC/K back | Full knockout bracket for the current Champions run", True, (196, 206, 220)), (32, 170))
 
         if self.fantasy_active_competition != "champions":
             self.screen.blit(self.font.render("Bracket available only while Champions Clash is active", True, WHITE), (40, 120))
             return
 
-        panel = pygame.Rect(24, 86, WIDTH - 48, HEIGHT - 120)
-        pygame.draw.rect(self.screen, (16, 24, 44), panel, 0, border_radius=24)
-        pygame.draw.rect(self.screen, (80, 106, 166), panel, 2, border_radius=24)
+        panel = pygame.Rect(24, 212, WIDTH - 48, HEIGHT - 300)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=24, fill=(16, 24, 44, 218), shine=False)
 
         champs = self.fantasy_competitions.get("champions", {})
         pairings = champs.get("pairings", [[], [], [], []])
@@ -7605,7 +7746,7 @@ class Game:
         self.screen.blit(self.small.render(reward_text, True, LIGHT_GREEN), (panel.x + 24, panel.y + 50))
 
         center_x = panel.centerx
-        title_y = panel.y + 94
+        title_y = panel.y + 68
         round_titles = [
             ("Round of 16", panel.x + 64),
             ("Quarter Final", panel.x + 252),
@@ -7632,9 +7773,9 @@ class Game:
         }
 
         def draw_match_box(x, y, pair, winner, highlight=False):
-            box = pygame.Rect(x, y, 134, 54)
-            top = pygame.Rect(box.x, box.y, box.w, 24)
-            bottom = pygame.Rect(box.x, box.y + 28, box.w, 24)
+            box = pygame.Rect(x, y, 142, 58)
+            top = pygame.Rect(box.x, box.y, box.w, 26)
+            bottom = pygame.Rect(box.x, box.y + 30, box.w, 26)
             border = YELLOW if highlight else (90, 108, 144)
             top_color = (64, 154, 118) if winner == pair[0] else (34, 42, 60)
             bottom_color = (64, 154, 118) if winner == pair[1] else (34, 42, 60)
@@ -7642,8 +7783,8 @@ class Game:
             pygame.draw.rect(self.screen, bottom_color, bottom, 0, border_radius=10)
             pygame.draw.rect(self.screen, border, top, 2, border_radius=10)
             pygame.draw.rect(self.screen, border, bottom, 2, border_radius=10)
-            self.screen.blit(self.small.render(pair[0][:15], True, WHITE), (top.x + 8, top.y + 4))
-            self.screen.blit(self.small.render(pair[1][:15], True, WHITE), (bottom.x + 8, bottom.y + 4))
+            self.screen.blit(self.micro.render(pair[0][:16], True, WHITE), (top.x + 8, top.y + 6))
+            self.screen.blit(self.micro.render(pair[1][:16], True, WHITE), (bottom.x + 8, bottom.y + 6))
             return box
 
         def draw_round(round_idx, x_positions, y_map, reverse=False):
@@ -7703,31 +7844,34 @@ class Game:
 
         final_pairings = pairings[3] if len(pairings) > 3 else []
         final_winners = winners[3] if len(winners) > 3 else []
-        final_box = pygame.Rect(center_x - 92, panel.y + 244, 184, 76)
+        final_box = pygame.Rect(center_x - 98, panel.y + 224, 196, 82)
         pygame.draw.rect(self.screen, (30, 40, 64), final_box, 0, border_radius=16)
         pygame.draw.rect(self.screen, YELLOW if active_round >= 3 else (110, 126, 166), final_box, 2, border_radius=16)
         self.screen.blit(self.font.render("FINAL", True, WHITE), (final_box.x + 54, final_box.y - 32))
         if final_pairings:
             final_pair = final_pairings[0]
             final_winner = final_winners[0] if final_winners else None
-            self.screen.blit(self.small.render(final_pair[0][:18], True, LIGHT_GREEN if final_winner == final_pair[0] else WHITE), (final_box.x + 14, final_box.y + 16))
-            self.screen.blit(self.small.render(final_pair[1][:18], True, LIGHT_GREEN if final_winner == final_pair[1] else WHITE), (final_box.x + 14, final_box.y + 42))
+            self.screen.blit(self.micro.render(final_pair[0][:20], True, LIGHT_GREEN if final_winner == final_pair[0] else WHITE), (final_box.x + 14, final_box.y + 20))
+            self.screen.blit(self.micro.render(final_pair[1][:20], True, LIGHT_GREEN if final_winner == final_pair[1] else WHITE), (final_box.x + 14, final_box.y + 48))
 
         if left_sf and final_pairings:
             pygame.draw.line(self.screen, (108, 130, 188), (left_sf[0].right, left_sf[0].centery), (final_box.x, final_box.centery), 3)
         if right_sf and final_pairings:
             pygame.draw.line(self.screen, (108, 130, 188), (right_sf[0].x, right_sf[0].centery), (final_box.right, final_box.centery), 3)
 
-        champion_box = pygame.Rect(center_x - 78, panel.bottom - 128, 156, 68)
+        champion_box = pygame.Rect(center_x - 90, panel.bottom - 96, 180, 62)
         pygame.draw.rect(self.screen, (24, 34, 56), champion_box, 0, border_radius=18)
         pygame.draw.rect(self.screen, LIGHT_GREEN if champion else YELLOW, champion_box, 2, border_radius=18)
-        self.screen.blit(self.small.render("Champion", True, (214, 222, 236)), (champion_box.x + 44, champion_box.y + 10))
-        self.screen.blit(self.small.render((champion or "TBD")[:18], True, WHITE), (champion_box.x + 16, champion_box.y + 36))
+        self.screen.blit(self.small.render("Champion", True, (214, 222, 236)), (champion_box.x + 56, champion_box.y + 10))
+        self.screen.blit(self.small.render((champion or "TBD")[:20], True, WHITE), (champion_box.x + 16, champion_box.y + 34))
+        self.draw_fc_bottom_nav([("O", "COMPETE"), ("K", "BRACKET"), ("ESC", "BACK")], active_index=1)
 
     def draw_fantasy_player_pick_page(self):
-        self.screen.fill((12, 18, 30))
-        self.screen.blit(self.big.render(self.fantasy_player_pick_title, True, WHITE), (34, 22))
-        self.screen.blit(self.small.render("LEFT/RIGHT select | ENTER claim", True, (190, 200, 215)), (36, 56))
+        title = self.fantasy_player_pick_title or "Player Pick"
+        self.draw_modern_backdrop((86, 170, 255), (244, 206, 84))
+        self.draw_fc_top_bar("Player Pick", "Choose one reward", accent=(86, 170, 255))
+        self.draw_hero_header(title, "Cleaner player pick lane with better spacing and larger card focus.", accent=(86, 170, 255), accent_two=(244, 206, 84))
+        self.screen.blit(self.small.render("LEFT/RIGHT select | ENTER claim", True, (196, 210, 228)), (36, 170))
         if not self.fantasy_player_pick_options:
             self.screen.blit(self.font.render("No options available", True, WHITE), (40, 120))
             return
@@ -7740,10 +7884,12 @@ class Game:
             start = max(0, min(self.fantasy_player_pick_index - 1, total - max_visible))
             end = start + max_visible
         visible = self.fantasy_player_pick_options[start:end]
-        y = 160
-        card_w = 260
-        card_h = 360
-        gap = 70
+        card_panel = pygame.Rect(40, 212, 1120, 520)
+        self.draw_glass_panel(card_panel, accent=(86, 170, 255), radius=24)
+        y = 300
+        card_w = 232
+        card_h = 322
+        gap = 56
         total_width = len(visible) * card_w + max(0, len(visible) - 1) * gap
         start_x = (WIDTH - total_width) // 2
         for offset, card in enumerate(visible):
@@ -7752,10 +7898,13 @@ class Game:
             self.draw_card(x, y, card_w, card_h, card)
             if i == self.fantasy_player_pick_index:
                 pygame.draw.rect(self.screen, YELLOW, (x - 6, y - 6, card_w + 12, card_h + 12), 3, border_radius=18)
+            tag = f"{card.get('rating', 0)} OVR  {card.get('position', 'ST')}"
+            self.screen.blit(self.small.render(tag, True, (214, 222, 236)), (x + 14, y + card_h + 12))
         if start > 0:
             self.screen.blit(self.small.render("< More", True, (190, 200, 215)), (80, y + card_h // 2))
         if end < total:
             self.screen.blit(self.small.render("More >", True, (190, 200, 215)), (WIDTH - 150, y + card_h // 2))
+        self.draw_fc_bottom_nav([("LEFT/RIGHT", "BROWSE"), ("ENTER", "CLAIM")], active_index=1)
 
     def apply_fantasy_player_traits(self, player):
         if not player:
@@ -10650,10 +10799,6 @@ class Game:
                         if self.academy:
                             self.academy_index = min(len(self.academy) - 1, self.academy_index + 1)
                 elif self.state == "LINEUP":
-                    if event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
-                        formation_id = int(event.unicode)
-                        self.set_team_formation(self.user_team, formation_id)
-                        self.message = f"Formation set to {self.get_formation_name(formation_id)}"
                     if event.key == pygame.K_h:
                         self.home_kit_index = (self.home_kit_index + 1) % 3
                     elif event.key == pygame.K_j:
@@ -10678,6 +10823,11 @@ class Game:
                         self.lineup_col = (self.lineup_col + 1) % 3
                         max_idx = len(self.get_lineup_list(self.lineup_col)) - 1
                         self.lineup_idx = max(0, min(self.lineup_idx, max_idx))
+                    elif event.key == pygame.K_t:
+                        current_formation = self.get_team_formation(self.user_team)
+                        catalog = self.formation_catalog()
+                        self.lineup_tactics_index = next((idx for idx, (fid, _) in enumerate(catalog) if fid == current_formation), 0)
+                        self.state = "LINEUP_TACTICS"
                     elif event.key == pygame.K_UP:
                         self.lineup_idx = max(0, self.lineup_idx - 1)
                     elif event.key == pygame.K_DOWN:
@@ -10699,16 +10849,42 @@ class Game:
                     elif event.key == pygame.K_SPACE:
                         if self.pending_fixture:
                             self.start_match()
+                elif self.state == "LINEUP_TACTICS":
+                    catalog = self.formation_catalog()
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "LINEUP"
+                    elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
+                        formation_id = int(event.unicode)
+                        self.set_team_formation(self.user_team, formation_id)
+                        self.lineup_tactics_index = next((idx for idx, (fid, _) in enumerate(catalog) if fid == formation_id), 0)
+                        self.message = f"Formation set to {self.get_formation_name(formation_id)}"
+                        self.state = "LINEUP"
+                    elif event.key == pygame.K_LEFT:
+                        self.lineup_tactics_index = max(0, self.lineup_tactics_index - 1)
+                    elif event.key == pygame.K_RIGHT:
+                        self.lineup_tactics_index = min(len(catalog) - 1, self.lineup_tactics_index + 1)
+                    elif event.key == pygame.K_UP:
+                        self.lineup_tactics_index = max(0, self.lineup_tactics_index - 2)
+                    elif event.key == pygame.K_DOWN:
+                        self.lineup_tactics_index = min(len(catalog) - 1, self.lineup_tactics_index + 2)
+                    elif event.key == pygame.K_RETURN and catalog:
+                        formation_id = catalog[self.lineup_tactics_index][0]
+                        self.set_team_formation(self.user_team, formation_id)
+                        self.message = f"Formation set to {self.get_formation_name(formation_id)}"
+                        self.state = "LINEUP"
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP":
-                    for formation_id, rect in self.lineup_formation_rects.items():
-                        if rect.collidepoint(event.pos):
-                            self.set_team_formation(self.user_team, formation_id)
-                            self.message = f"Formation set to {self.get_formation_name(formation_id)}"
-                            break
                     for key, rect in self.lineup_rects.items():
                         if rect.collidepoint(event.pos):
                             self.dragging_lineup = key
                             self.lineup_pick = key
+                            break
+                elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP_TACTICS":
+                    for formation_id, rect in self.lineup_formation_rects.items():
+                        if rect.collidepoint(event.pos):
+                            self.set_team_formation(self.user_team, formation_id)
+                            self.lineup_tactics_index = next((idx for idx, (fid, _) in enumerate(self.formation_catalog()) if fid == formation_id), 0)
+                            self.message = f"Formation set to {self.get_formation_name(formation_id)}"
+                            self.state = "LINEUP"
                             break
                 elif event.type == pygame.MOUSEBUTTONUP and self.state == "LINEUP" and self.dragging_lineup:
                     for key, rect in self.lineup_rects.items():
@@ -10978,6 +11154,7 @@ class Game:
         else:
             storage_label = "Cloud"
         storage_accent = (244, 206, 84) if self.account_storage_mode == "LOCAL" else (92, 176, 255)
+        self.draw_fc_top_bar("FC Legends", f"{storage_label} account access", counters=[((244, 206, 84), self.app_version)])
         hero = self.draw_hero_header("FC Legends Profiles", "Sleek cloud-linked identities for career and fantasy progression.", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"V {self.app_version}")
         self.screen.blit(self.small.render("Create an account, sign in, or use developer sign in.", True, (190, 200, 215)), (56, 126))
         announcement = self.cloud_runtime_config.get("announcement", "")
@@ -11018,6 +11195,7 @@ class Game:
         update_text = "Auto updates on" if self.app_version_info.get("manifest_url") else "Auto updates off"
         self.screen.blit(self.small.render(f"Use UP/DOWN and ENTER | C cloud settings | - reconnect | Storage {storage_label}", True, (190, 200, 215)), (54, 646))
         self.screen.blit(self.small.render(f"Installed {self.app_version} | {update_text}", True, (150, 210, 255)), (700, 646))
+        self.draw_fc_bottom_nav([("ENTER", "SIGN IN"), ("DOWN", "CREATE"), ("DEV", "CONSOLE")], active_index=self.account_menu_index, y=HEIGHT - 72)
 
     def draw_account_form(self):
         self.draw_modern_backdrop((86, 170, 255), (244, 206, 84))
@@ -11027,6 +11205,7 @@ class Game:
             "ACCOUNT_CREATE": "Create Account",
             "ACCOUNT_DEV_LOGIN": "Developer Sign In",
         }
+        self.draw_fc_top_bar("Account Access", self.cloud_status_label or "Cloud ready")
         self.draw_hero_header(titles.get(self.state, "Account"), "Broadcast-ready authentication with adaptive cloud fallback.", accent=(86, 170, 255), accent_two=(244, 206, 84))
         self.screen.blit(self.small.render("UP/DOWN move | ENTER submit | - reconnect | ESC back", True, (190, 200, 215)), (54, 126))
         self.draw_reconnect_button(1032, 78)
@@ -11080,11 +11259,14 @@ class Game:
             sy += 34
         if self.account_message:
             self.screen.blit(self.font.render(self.account_message, True, YELLOW), (60, y + 10))
+        self.draw_fc_bottom_nav([("ESC", "BACK"), ("ENTER", "SUBMIT"), ("-", "RECONNECT")], active_index=1, y=HEIGHT - 72)
 
     def draw_mode_select(self):
         self.draw_modern_backdrop((86, 170, 255), (12, 220, 190))
         self.reconnect_button_rect = None
         record = self.active_account_record() or {}
+        counters = [((244, 206, 84), "CLOUD" if self.account_storage_mode == "CLOUD" else "LOCAL")]
+        self.draw_fc_top_bar(record.get('display_name', self.active_account or 'Guest')[:20], self.cloud_status_label, counters=counters)
         self.draw_hero_header("Choose Game Mode", f"Signed in as {record.get('display_name', self.active_account or 'Guest')}", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"V {self.app_version}")
         self.draw_reconnect_button(1032, 86)
         if record.get("is_developer"):
@@ -11128,22 +11310,18 @@ class Game:
             hint += " | U developer console"
         hint += " | C cloud settings | ESC log out"
         self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (42, HEIGHT - 44))
+        self.draw_fc_bottom_nav([("UP", "CAREER"), ("DOWN", "FANTASY"), ("C", "CLOUD"), ("ESC", "LOG OUT")], active_index=self.mode_select_index, y=HEIGHT - 72)
 
     def draw_fantasy_team_name_page(self):
-        self.screen.fill((12, 16, 26))
-        header = pygame.Rect(34, 24, 1098, 124)
-        pygame.draw.rect(self.screen, (20, 28, 44), header, 0, border_radius=24)
-        pygame.draw.rect(self.screen, (80, 112, 166), header, 2, border_radius=24)
-        self.screen.blit(self.big.render("Name Your Fantasy Club", True, WHITE), (52, 42))
-        self.screen.blit(self.small.render("Type your team name and press ENTER to open the starter pack.", True, (190, 200, 215)), (54, 84))
+        self.draw_modern_backdrop((244, 206, 84), (52, 244, 116))
+        self.draw_fc_top_bar("Fantasy Setup", "Create your club identity", accent=(244, 206, 84))
+        self.draw_hero_header("Name Your Fantasy Club", "Pick the club name first, then open the starter pack.", accent=(244, 206, 84), accent_two=(52, 244, 116))
         panel = pygame.Rect(60, 150, 640, 96)
-        pygame.draw.rect(self.screen, (28, 34, 48), panel, 0, border_radius=18)
-        pygame.draw.rect(self.screen, YELLOW, panel, 3, border_radius=18)
+        self.draw_glass_panel(panel, accent=YELLOW, radius=18, fill=(28, 34, 48, 222), shine=False)
         shown = self.fantasy_team_name or "_"
         self.screen.blit(self.font.render(shown, True, WHITE), (panel.x + 22, panel.y + 34))
         side = pygame.Rect(760, 180, 320, 210)
-        pygame.draw.rect(self.screen, (22, 28, 40), side, 0, border_radius=20)
-        pygame.draw.rect(self.screen, (70, 86, 122), side, 2, border_radius=20)
+        self.draw_glass_panel(side, accent=(86, 170, 255), radius=20, fill=(22, 28, 40, 214), shine=False)
         self.screen.blit(self.font.render("Account Bonus", True, WHITE), (side.x + 18, side.y + 18))
         coins = DEVELOPER_FANTASY_COINS if (self.active_account_record() or {}).get("is_developer") else DEFAULT_FANTASY_COINS
         hidden_text = "Hidden packs unlocked" if (self.active_account_record() or {}).get("is_developer") else "Hidden packs locked"
@@ -11164,6 +11342,7 @@ class Game:
         for line in info:
             self.screen.blit(self.small.render(line, True, (210, 218, 230)), (64, y))
             y += 34
+        self.draw_fc_bottom_nav([("TYPE", "NAME"), ("ENTER", "CONFIRM")], active_index=1)
 
     def draw_registered_users_page(self):
         users = self.filtered_registered_users()
@@ -11545,33 +11724,15 @@ class Game:
             subtitle = f"{home} vs {away}"
         formation_id = self.get_team_formation(self.user_team)
         formation_name = self.get_formation_name(formation_id)
+        self.draw_fc_top_bar(self.user_team or "Squad", subtitle, counters=[((90, 220, 130), formation_name)], accent=(90, 220, 130))
         self.draw_hero_header("Squad Broadcast", subtitle, accent=(90, 220, 130), accent_two=(86, 170, 255), right_text=formation_name.upper())
         if self.pending_fixture:
             self.draw_kit_picker(930, 28, home, away)
 
-        formation_panel = pygame.Rect(20, 154, 1160, 118)
-        left_panel = pygame.Rect(20, 286, 228, 450)
-        pitch_rect = pygame.Rect(262, 286, 660, 450)
-        right_panel = pygame.Rect(936, 286, 244, 450)
-        bench_panel = pygame.Rect(262, 748, 918, 82)
-
-        self.draw_glass_panel(formation_panel, accent=(244, 206, 84), radius=24, fill=(18, 24, 36, 214), shine=False)
-        self.screen.blit(self.font.render("Formations", True, WHITE), (formation_panel.x + 16, formation_panel.y + 12))
-        self.screen.blit(self.small.render("Click a tile or press 1-8 to change shape. Cards move to the new slots instantly.", True, (205, 215, 228)), (formation_panel.x + 16, formation_panel.y + 38))
-        tile_w = 132
-        tile_h = 54
-        tile_gap = 12
-        for idx, (fid, fname) in enumerate(self.formation_catalog()):
-            col = idx % 4
-            row = idx // 4
-            tile = pygame.Rect(formation_panel.x + 16 + col * (tile_w + tile_gap), formation_panel.y + 58 + row * (tile_h + 8), tile_w, tile_h)
-            self.lineup_formation_rects[fid] = tile
-            active = fid == formation_id
-            fill = (36, 78, 52, 228) if active else (26, 32, 44, 228)
-            accent = (90, 220, 130) if active else (86, 170, 255)
-            self.draw_glass_panel(tile, accent=accent, radius=16, fill=fill, shine=False)
-            self.screen.blit(self.small.render(str(fid), True, (244, 206, 84)), (tile.x + 10, tile.y + 8))
-            self.screen.blit(self.small.render(fname[:16], True, WHITE), (tile.x + 10, tile.y + 28))
+        left_panel = pygame.Rect(20, 154, 238, 548)
+        pitch_rect = pygame.Rect(272, 154, 638, 548)
+        right_panel = pygame.Rect(924, 154, 256, 548)
+        bench_panel = pygame.Rect(272, 714, 908, 116)
 
         self.draw_glass_panel(left_panel, accent=(86, 170, 255), radius=22)
         pygame.draw.rect(self.screen, (24, 78, 48), pitch_rect, 0, border_radius=22)
@@ -11590,6 +11751,9 @@ class Game:
         self.screen.blit(self.small.render("Selected Player", True, WHITE), (left_panel.x + 12, left_panel.y + 10))
         if self.game_mode == "FANTASY":
             self.screen.blit(self.small.render(f"Team Chem {self.fantasy_chemistry_total}/33", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 26))
+        self.draw_neon_chip(left_panel.x + 12, left_panel.y + 52, "Tactics", accent=(244, 206, 84), width=100)
+        self.screen.blit(self.small.render(f"T open tactics page", True, (220, 228, 236)), (left_panel.x + 18, left_panel.y + 82))
+        self.screen.blit(self.small.render(f"Current shape: {formation_name}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 112))
         self.screen.blit(self.small.render("Bench", True, WHITE), (bench_panel.x + 12, bench_panel.y + 10))
         self.screen.blit(self.small.render("Reserves", True, WHITE), (right_panel.x + 12, right_panel.y + 10))
 
@@ -11655,24 +11819,24 @@ class Game:
             traits = card_meta.get("traits", []) if card_meta else []
             evo_level = card_meta.get("evo_level", 0) if card_meta else 0
             chemistry = self.fantasy_chemistry_map.get((name, num, rating), 0) if self.game_mode == "FANTASY" else 0
-            self.screen.blit(self.font.render(f"{name}", True, WHITE), (left_panel.x + 12, left_panel.y + 44))
-            self.screen.blit(self.small.render(f"#{num}  OVR {rating}", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 68))
-            self.screen.blit(self.small.render(f"Rarity: {rarity}  Promo: {promo}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 88))
-            self.screen.blit(self.small.render(f"League: {league}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 106))
-            self.screen.blit(self.small.render(f"Preferred Pos: {preferred_position}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 124))
+            self.screen.blit(self.font.render(f"{name}", True, WHITE), (left_panel.x + 12, left_panel.y + 150))
+            self.screen.blit(self.small.render(f"#{num}  OVR {rating}", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 174))
+            self.screen.blit(self.small.render(f"Rarity: {rarity}  Promo: {promo}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 194))
+            self.screen.blit(self.small.render(f"League: {league}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 212))
+            self.screen.blit(self.small.render(f"Preferred Pos: {preferred_position}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 230))
             if self.game_mode == "FANTASY":
                 evo_text = f"Evolution: Level {evo_level}" if evo_level > 0 else "Evolution: None"
-                self.screen.blit(self.small.render(f"Chemistry: {chemistry}/3", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 142))
-                self.screen.blit(self.small.render(evo_text, True, (170, 235, 210) if evo_level > 0 else (220, 228, 236)), (left_panel.x + 12, left_panel.y + 160))
+                self.screen.blit(self.small.render(f"Chemistry: {chemistry}/3", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 248))
+                self.screen.blit(self.small.render(evo_text, True, (170, 235, 210) if evo_level > 0 else (220, 228, 236)), (left_panel.x + 12, left_panel.y + 266))
                 chem_tags = " ".join(self.fantasy_chemistry_breakdown.get((name, num, rating), [])) or "None"
-                self.screen.blit(self.small.render(f"Chem Tags: {chem_tags[:20]}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 178))
+                self.screen.blit(self.small.render(f"Chem Tags: {chem_tags[:20]}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 284))
             effective = rating + chemistry
             pace = int(80 * (effective / 100))
             pass_pct = int(70 * (effective / 100))
             shoot = int(70 * (effective / 100))
             tackle = int(65 * (effective / 100))
             bars = [("PAC", pace), ("PAS", pass_pct), ("SHO", shoot), ("TAC", tackle)]
-            y = left_panel.y + (212 if self.game_mode == "FANTASY" else 160)
+            y = left_panel.y + (318 if self.game_mode == "FANTASY" else 260)
             for label, value in bars:
                 self.screen.blit(self.small.render(label, True, WHITE), (left_panel.x + 12, y))
                 pygame.draw.rect(self.screen, (40, 48, 62), (left_panel.x + 52, y + 2, 120, 8), 0, border_radius=4)
@@ -11749,9 +11913,97 @@ class Game:
             self.lineup_rects[(2, i)] = row_rect
             y += reserve_line_h
 
-        self.screen.blit(self.small.render("Drag or ENTER to swap | 1-8 formation | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
+        self.screen.blit(self.small.render("Drag or ENTER to swap | T tactics | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
         if self.game_mode == "FANTASY":
             self.screen.blit(self.small.render("Links: club/nation/league | green strong | gold medium | red weak", True, (190, 200, 210)), (430, HEIGHT - 28))
+        self.draw_fc_bottom_nav([("T", "TACTICS"), ("TAB", "SWAP"), ("SPACE", "PLAY"), ("ESC", "BACK")], active_index=1)
+
+    def draw_lineup_tactics_page(self):
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        subtitle = self.user_team or "No club selected"
+        if self.pending_fixture:
+            home, away = self.pending_fixture
+            subtitle = f"{home} vs {away}"
+        formation_id = self.get_team_formation(self.user_team)
+        formation_name = self.get_formation_name(formation_id)
+        self.draw_fc_top_bar(self.user_team or "Tactics", subtitle, counters=[((244, 206, 84), formation_name)], accent=(244, 206, 84))
+        self.draw_hero_header("Tactics Board", subtitle, accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=formation_name.upper())
+
+        self.lineup_formation_rects = {}
+        left_panel = pygame.Rect(24, 154, 420, 676)
+        pitch_rect = pygame.Rect(462, 154, 468, 676)
+        right_panel = pygame.Rect(948, 154, 232, 676)
+        self.draw_glass_panel(left_panel, accent=(244, 206, 84), radius=24)
+        self.draw_glass_panel(right_panel, accent=(86, 170, 255), radius=24)
+        pygame.draw.rect(self.screen, (24, 78, 48), pitch_rect, 0, border_radius=24)
+        pygame.draw.rect(self.screen, (220, 225, 230), pitch_rect, 2, border_radius=24)
+
+        self.screen.blit(self.font.render("Formations", True, WHITE), (left_panel.x + 18, left_panel.y + 16))
+        self.screen.blit(self.small.render("Choose a shape here. The lineup page stays focused on cards and swaps.", True, (205, 215, 228)), (left_panel.x + 18, left_panel.y + 48))
+
+        catalog = self.formation_catalog()
+        tile_w = 182
+        tile_h = 94
+        tile_gap_x = 18
+        tile_gap_y = 16
+        grid_x = left_panel.x + 18
+        grid_y = left_panel.y + 88
+        for idx, (fid, fname) in enumerate(catalog):
+            col = idx % 2
+            row = idx // 2
+            tile = pygame.Rect(grid_x + col * (tile_w + tile_gap_x), grid_y + row * (tile_h + tile_gap_y), tile_w, tile_h)
+            self.lineup_formation_rects[fid] = tile
+            active = fid == formation_id
+            highlighted = idx == self.lineup_tactics_index
+            fill = (42, 76, 52, 232) if active else (26, 32, 44, 226)
+            accent = (90, 220, 130) if active else (86, 170, 255)
+            self.draw_glass_panel(tile, accent=accent, radius=18, fill=fill, shine=False)
+            if highlighted:
+                pygame.draw.rect(self.screen, (244, 206, 84), tile.inflate(6, 6), 2, border_radius=20)
+            self.screen.blit(self.big.render(fname, True, WHITE), (tile.x + 14, tile.y + 18))
+            self.screen.blit(self.small.render(f"Press {fid} or ENTER", True, (205, 215, 228)), (tile.x + 14, tile.y + 58))
+
+        self.screen.blit(self.small.render("Arrow keys move | ENTER apply | ESC back", True, (205, 215, 228)), (left_panel.x + 18, left_panel.bottom - 34))
+
+        for stripe in range(8):
+            stripe_y = pitch_rect.y + stripe * (pitch_rect.h // 8)
+            color = (20, 66, 38) if stripe % 2 == 0 else (18, 60, 34)
+            pygame.draw.rect(self.screen, color, (pitch_rect.x + 2, stripe_y, pitch_rect.w - 4, pitch_rect.h // 8))
+        pygame.draw.line(self.screen, (235, 235, 235), (pitch_rect.centerx, pitch_rect.top + 18), (pitch_rect.centerx, pitch_rect.bottom - 18), 2)
+        pygame.draw.circle(self.screen, (235, 235, 235), pitch_rect.center, 56, 2)
+        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.left + 18, pitch_rect.centery - 108, 96, 216), 2)
+        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.right - 114, pitch_rect.centery - 108, 96, 216), 2)
+        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.left + 18, pitch_rect.centery - 52, 40, 104), 2)
+        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.right - 58, pitch_rect.centery - 52, 40, 104), 2)
+
+        field_left = FIELD_MARGIN
+        field_width = WIDTH - 2 * FIELD_MARGIN
+        field_height = HEIGHT - 2 * FIELD_MARGIN
+        positions = self.get_team_positions(self.user_team, "home")
+        for idx, entry in enumerate(self.user_starting[:11]):
+            px, py, role = positions[idx]
+            rel_x = (px - field_left) / field_width
+            rel_y = (py - FIELD_MARGIN) / field_height
+            card_x = pitch_rect.x + rel_x * pitch_rect.w - 38
+            card_y = pitch_rect.y + rel_y * pitch_rect.h - 48
+            self.draw_squad_card(card_x, card_y, 76, 96, entry, role=role)
+
+        self.screen.blit(self.font.render("Shape Preview", True, WHITE), (right_panel.x + 16, right_panel.y + 16))
+        self.screen.blit(self.small.render("What changes", True, (220, 228, 236)), (right_panel.x + 16, right_panel.y + 54))
+        notes = [
+            "Player slots reposition instantly.",
+            "Your saved formation carries into match kickoff.",
+            "Lineup swaps stay on the main squad page.",
+            "Use this page only for tactical shape.",
+        ]
+        note_y = right_panel.y + 86
+        for note in notes:
+            self.screen.blit(self.small.render(note, True, WHITE), (right_panel.x + 16, note_y))
+            note_y += 28
+        self.draw_neon_chip(right_panel.x + 16, right_panel.y + 230, "Active Shape", accent=(90, 220, 130), width=140)
+        self.screen.blit(self.big.render(formation_name, True, WHITE), (right_panel.x + 16, right_panel.y + 272))
+        self.screen.blit(self.small.render("Click a tile or confirm with ENTER.", True, (205, 215, 228)), (right_panel.x + 16, right_panel.y + 318))
+        self.draw_fc_bottom_nav([("ARROWS", "BROWSE"), ("ENTER", "APPLY"), ("ESC", "BACK")], active_index=1)
 
     def draw_kit_picker(self, x, y, home, away):
         home_kits = get_team_kits(home)
@@ -11888,7 +12140,7 @@ class Game:
         if self.transfer_window and self.game_mode != "FANTASY":
             self.draw_transfer_window()
     def draw_fantasy_home_fc_style(self):
-        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_modern_backdrop((196, 255, 86), (244, 206, 84))
         record = self.active_account_record() or {}
         club = self.ensure_fantasy_club_defaults()
         self.build_user_squad()
@@ -11928,162 +12180,108 @@ class Game:
         avg_rating = int(round(sum(card.get("rating", 60) for card in self.fantasy_roster[:11]) / max(1, min(11, len(self.fantasy_roster) or 1))))
         chem_accent = self.fantasy_palette_color(club["primary"])
         club_accent = self.fantasy_palette_color(club["secondary"])
+        next_names = [entry[0] for entry in starters[:3]]
 
-        top_bar = pygame.Rect(26, 16, 1148, 64)
-        self.draw_glass_panel(top_bar, accent=(244, 206, 84), radius=22, fill=(14, 18, 28, 210))
+        self.draw_fc_top_bar(display_name, f"{name_text} | {source_label}", counters=[((244, 206, 84), self.fantasy_coins), ((255, 80, 110), max(0, self.event_evo_tokens)), ((196, 255, 86), len(self.my_packs))], accent=(196, 255, 86))
         badge_box = pygame.Rect(40, 24, 42, 42)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["primary"]), badge_box, 0, border_radius=12)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["secondary"]), badge_box, 2, border_radius=12)
         badge_text = self.fantasy_club_badge_name()[:2].upper()
         self.screen.blit(self.small.render(badge_text, True, WHITE), (badge_box.x + 10, badge_box.y + 12))
-        self.screen.blit(self.font.render(display_name, True, WHITE), (96, 24))
-        self.screen.blit(self.small.render(f"{name_text} | {source_label}", True, (206, 216, 232)), (96, 50))
 
-        currencies = [
-            ((244, 206, 84), str(self.fantasy_coins)),
-            ((255, 80, 110), str(max(0, self.event_evo_tokens))),
-            ((12, 220, 190), str(len(self.my_packs))),
-        ]
-        cx = 710
-        for color, value in currencies:
-            pygame.draw.circle(self.screen, color, (cx, 48), 12)
-            self.screen.blit(self.font.render(value, True, WHITE), (cx + 22, 36))
-            plus = pygame.Rect(cx + 70, 31, 24, 24)
-            pygame.draw.rect(self.screen, (245, 245, 245), plus, 0, border_radius=12)
-            self.screen.blit(self.small.render("+", True, (18, 20, 26)), (plus.x + 8, plus.y + 4))
-            cx += 132
-
-        left_rail = pygame.Rect(34, 136, 82, 412)
-        self.draw_glass_panel(left_rail, accent=(244, 206, 84), radius=24, fill=(15, 20, 32, 160))
-        quick_tiles = [
-            ("Q", "OBJECTIVES", daily_ready + weekly_ready),
-            ("B", "SBC", sbc_ready),
-            ("N", "COLLECTION", len(self.fantasy_roster)),
-        ]
-        tile_y = 156
-        for hotkey, label, value in quick_tiles:
-            tile = pygame.Rect(48, tile_y, 54, 98)
-            self.draw_glass_panel(tile, accent=(244, 206, 84), radius=18, fill=(22, 28, 44, 214), shine=False)
-            self.screen.blit(self.font.render(hotkey, True, WHITE), (tile.x + 18, tile.y + 14))
-            self.screen.blit(self.micro.render(label[:8], True, (220, 228, 236)), (tile.x + 6, tile.y + 50))
-            self.screen.blit(self.small.render(str(value), True, (244, 206, 84)), (tile.x + 18, tile.y + 70))
-            tile_y += 116
-
-        hero = pygame.Rect(138, 98, 516, 454)
-        self.draw_glass_panel(hero, accent=(86, 170, 255), radius=28, fill=(12, 16, 26, 182))
+        hero = pygame.Rect(36, 98, 636, 286)
+        self.draw_glass_panel(hero, accent=(196, 255, 86), radius=28, fill=(12, 16, 24, 214))
         hero_glow = pygame.Surface((hero.w, hero.h), pygame.SRCALPHA)
-        pygame.draw.circle(hero_glow, (255, 220, 120, 70), (170, 210), 180)
-        pygame.draw.circle(hero_glow, (86, 170, 255, 56), (350, 120), 160)
-        for step in range(8):
-            pygame.draw.line(hero_glow, (255, 255, 255, max(10, 34 - step * 3)), (56 + step * 28, hero.h - 110 - step * 12), (hero.w - 58 - step * 16, 120 + step * 8), 2)
-        self.screen.blit(hero_glow, (hero.x, hero.y))
-        self.screen.blit(self.title_font.render("ULTIMATE", True, WHITE), (hero.x + 28, hero.y + 28))
-        self.screen.blit(self.title_font.render("FANTASY CLUB", True, WHITE), (hero.x + 28, hero.y + 62))
-        self.screen.blit(self.small.render("Clear squad hub for lineup, packs, market, and matchday prep.", True, (210, 220, 236)), (hero.x + 30, hero.y + 102))
+        pygame.draw.ellipse(hero_glow, (196, 255, 86, 34), (24, 14, 260, 150))
+        pygame.draw.ellipse(hero_glow, (244, 206, 84, 24), (hero.w - 260, 34, 220, 130))
+        for step in range(6):
+            band_y = 92 + step * 30
+            pygame.draw.line(hero_glow, (255, 255, 255, max(8, 20 - step * 2)), (28, band_y), (hero.w - 44, band_y - 24), 2)
+        self.screen.blit(hero_glow, hero.topleft)
+        self.screen.blit(self.title_font.render("PLAY", True, WHITE), (hero.x + 28, hero.y + 24))
+        self.screen.blit(self.title_font.render(active_title[:26].upper(), True, WHITE), (hero.x + 28, hero.y + 60))
+        self.screen.blit(self.small.render(progress[:72], True, (214, 224, 236)), (hero.x + 30, hero.y + 106))
+        self.screen.blit(self.small.render("SPACE start match  |  O competitions", True, (214, 224, 236)), (hero.x + 30, hero.y + 134))
+        stat_strip = pygame.Rect(hero.x + 26, hero.bottom - 74, 354, 50)
+        self.draw_glass_panel(stat_strip, accent=(196, 255, 86), radius=14, fill=(18, 24, 34, 210), shine=False)
+        self.screen.blit(self.small.render(f"OVR {avg_rating}  |  Chem {self.fantasy_chemistry_total}/33  |  Squad {len(self.fantasy_roster)}", True, WHITE), (stat_strip.x + 16, stat_strip.y + 16))
+        play_button = pygame.Rect(hero.right - 182, hero.bottom - 84, 146, 60)
+        self.draw_glass_panel(play_button, accent=(196, 255, 86), radius=18, fill=(44, 60, 26, 228), shine=False)
+        self.screen.blit(self.font.render("PLAY", True, WHITE), (play_button.x + 42, play_button.y + 12))
+        pygame.draw.polygon(self.screen, WHITE, [(play_button.right - 34, play_button.y + 16), (play_button.right - 14, play_button.centery), (play_button.right - 34, play_button.bottom - 16)])
 
-        lineup_panel = pygame.Rect(hero.x + 24, hero.y + 140, hero.w - 48, 196)
-        self.draw_glass_panel(lineup_panel, accent=chem_accent, radius=22, fill=(18, 24, 36, 214), shine=False)
-        self.screen.blit(self.font.render("Starting XI", True, WHITE), (lineup_panel.x + 18, lineup_panel.y + 14))
-        self.screen.blit(self.small.render("L open lineup | SPACE play next match", True, (210, 220, 236)), (lineup_panel.x + 18, lineup_panel.y + 42))
-        if lineup_ready:
-            preview_cards = starters[:4]
-            card_w = 92
-            card_h = 118
-            for idx, entry in enumerate(preview_cards):
-                role = DEFAULT_LINEUP[idx][0] if idx < len(DEFAULT_LINEUP) else "XI"
-                px = lineup_panel.x + 18 + idx * (card_w + 12)
-                py = lineup_panel.y + 68
-                self.draw_squad_card(px, py, card_w, card_h, entry, role=role)
-            list_x = lineup_panel.x + 18
-            list_y = lineup_panel.y + 194
-            next_names = [entry[0] for entry in starters[4:8]]
-            line = " | ".join(name[:10] for name in next_names) if next_names else "Bench and reserves available in lineup view"
-            self.screen.blit(self.small.render(line[:54], True, (210, 220, 236)), (list_x, list_y - 16))
-        else:
-            self.screen.blit(self.font.render("Build at least 11 players to unlock the match lineup.", True, WHITE), (lineup_panel.x + 18, lineup_panel.y + 98))
-            self.screen.blit(self.small.render("Open packs or market, then press L to arrange the squad.", True, (210, 220, 236)), (lineup_panel.x + 18, lineup_panel.y + 132))
-
-        plate = pygame.Rect(hero.x + 24, hero.bottom - 92, hero.w - 48, 58)
-        self.draw_glass_panel(plate, accent=chem_accent, radius=18, fill=(18, 24, 36, 216), shine=False)
-        plate_text = f"{name_text}  |  Chem {self.fantasy_chemistry_total}/33  |  Squad {len(self.fantasy_roster)}  |  {FANTASY_STADIUM_OPTIONS[club['stadium']]}"
-        self.screen.blit(self.small.render(plate_text[:72], True, (228, 234, 242)), (plate.x + 16, plate.y + 18))
-
-        featured = pygame.Rect(674, 98, 470, 224)
+        featured = pygame.Rect(692, 98, 452, 286)
         self.draw_glass_panel(featured, accent=event_colors[1], radius=24, fill=(*event_colors[0], 218))
         self.screen.blit(self.title_font.render(event_name[:18].upper(), True, WHITE), (featured.x + 22, featured.y + 18))
         self.screen.blit(self.small.render(event_sub[:62], True, (232, 234, 240)), (featured.x + 24, featured.y + 62))
-        card_y = featured.y + 96
+        self.screen.blit(self.small.render("P/W store  |  D draft  |  Event rewards live now", True, (232, 234, 240)), (featured.x + 24, featured.y + 88))
+        card_y = featured.y + 118
         for idx in range(3):
-            card_rect = pygame.Rect(featured.x + 28 + idx * 148, card_y, 118, 128)
+            card_rect = pygame.Rect(featured.x + 24 + idx * 136, card_y, 108, 108)
             self.draw_glass_panel(card_rect, accent=event_colors[1], radius=18, fill=(24, 20, 18, 206))
             inner = pygame.Rect(card_rect.x + 14, card_rect.y + 16, card_rect.w - 28, card_rect.h - 32)
             pygame.draw.rect(self.screen, (255, 248, 220, 36), inner, 0, border_radius=14)
             pygame.draw.polygon(self.screen, (255, 236, 172), [(inner.centerx, inner.y + 12), (inner.right - 18, inner.centery), (inner.centerx, inner.bottom - 12), (inner.x + 18, inner.centery)], 2)
             if idx == 1:
                 pygame.draw.line(self.screen, WHITE, (inner.x + 16, inner.y + 16), (inner.right - 14, inner.bottom - 16), 4)
-        dots_x = featured.right - 126
-        for idx in range(6):
-            color = WHITE if idx == 1 else (110, 116, 132)
-            pygame.draw.circle(self.screen, color, (dots_x + idx * 18, featured.bottom - 24), 5)
+        self.screen.blit(self.small.render(f"Live now  |  Event evo {self.event_evo_tokens}  |  Packs {len(self.my_packs)}", True, (232, 234, 240)), (featured.x + 24, featured.bottom - 28))
 
-        club_tile = pygame.Rect(674, 346, 250, 196)
+        club_tile = pygame.Rect(36, 404, 350, 206)
         self.draw_glass_panel(club_tile, accent=club_accent, radius=22, fill=(24, 30, 44, 212))
-        self.screen.blit(self.title_font.render("CLUB", True, WHITE), (club_tile.x + 18, club_tile.y + 12))
-        crest = pygame.Rect(club_tile.x + 18, club_tile.y + 54, 68, 76)
+        self.screen.blit(self.title_font.render("MY TEAM", True, WHITE), (club_tile.x + 18, club_tile.y + 12))
+        self.screen.blit(self.small.render(name_text.upper(), True, (220, 228, 236)), (club_tile.x + 20, club_tile.y + 50))
+        crest = pygame.Rect(club_tile.x + 18, club_tile.y + 82, 68, 76)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["primary"]), crest, 0, border_radius=18)
         pygame.draw.rect(self.screen, self.fantasy_palette_color(club["secondary"]), crest, 3, border_radius=18)
         self.screen.blit(self.small.render(self.fantasy_club_badge_name()[:3].upper(), True, WHITE), (crest.x + 12, crest.y + 28))
-        self.screen.blit(self.small.render(f"OVR {avg_rating}", True, WHITE), (club_tile.x + 106, club_tile.y + 60))
-        self.screen.blit(self.small.render(f"Top card {top_player.get('rating', 0) if top_player else 0}", True, (220, 228, 236)), (club_tile.x + 106, club_tile.y + 84))
-        self.screen.blit(self.small.render(f"Badge {self.fantasy_club_badge_name()}", True, (220, 228, 236)), (club_tile.x + 18, club_tile.y + 146))
-        self.screen.blit(self.small.render(f"Stadium {FANTASY_STADIUM_OPTIONS[club['stadium']]}"[:34], True, (220, 228, 236)), (club_tile.x + 18, club_tile.y + 168))
+        self.screen.blit(self.small.render(f"OVR {avg_rating}", True, WHITE), (club_tile.x + 106, club_tile.y + 88))
+        self.screen.blit(self.small.render(f"Chemistry {self.fantasy_chemistry_total}/33", True, (220, 228, 236)), (club_tile.x + 106, club_tile.y + 112))
+        self.screen.blit(self.small.render(f"Lineup {'READY' if lineup_ready else 'INCOMPLETE'}", True, (220, 228, 236)), (club_tile.x + 106, club_tile.y + 136))
+        self.screen.blit(self.small.render(f"Stadium {FANTASY_STADIUM_OPTIONS[club['stadium']]}"[:34], True, (220, 228, 236)), (club_tile.x + 18, club_tile.y + 176))
 
-        top_tile = pygame.Rect(944, 346, 200, 196)
+        top_tile = pygame.Rect(404, 404, 370, 206)
         self.draw_glass_panel(top_tile, accent=(244, 206, 84), radius=22, fill=(28, 24, 20, 212))
-        self.screen.blit(self.title_font.render("STAR", True, WHITE), (top_tile.x + 18, top_tile.y + 12))
+        self.screen.blit(self.title_font.render("STAR PLAYER", True, WHITE), (top_tile.x + 18, top_tile.y + 12))
         if top_player:
             preview_card = dict(top_player)
             preview_card.setdefault("league", get_team_league(preview_card.get("team", "")))
-            self.draw_card(top_tile.x + 16, top_tile.y + 48, 92, 126, preview_card, face="front")
-            self.screen.blit(self.small.render(top_player["name"][:16], True, WHITE), (top_tile.x + 116, top_tile.y + 62))
-            self.screen.blit(self.small.render(f"{top_player.get('rating', 0)} OVR  {top_player.get('position', 'ST')}", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 86))
-            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'goals')} goals", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 110))
-            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'assists')} assists", True, (220, 228, 236)), (top_tile.x + 116, top_tile.y + 132))
+            self.draw_card(top_tile.x + 18, top_tile.y + 48, 108, 142, preview_card, face="front")
+            self.screen.blit(self.small.render(top_player["name"][:20], True, WHITE), (top_tile.x + 138, top_tile.y + 60))
+            self.screen.blit(self.small.render(f"{top_player.get('rating', 0)} OVR  {top_player.get('position', 'ST')}", True, (220, 228, 236)), (top_tile.x + 138, top_tile.y + 86))
+            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'goals')} goals", True, (220, 228, 236)), (top_tile.x + 138, top_tile.y + 112))
+            self.screen.blit(self.small.render(f"{self.get_player_stat(top_player['name'], 'assists')} assists", True, (220, 228, 236)), (top_tile.x + 138, top_tile.y + 138))
+            self.screen.blit(self.small.render(f"{top_player.get('team', '')[:20]} | {top_player.get('league', get_team_league(top_player.get('team', '')))[:18]}", True, (220, 228, 236)), (top_tile.x + 138, top_tile.y + 164))
         else:
             self.screen.blit(self.small.render("Open packs to reveal your first star.", True, (220, 228, 236)), (top_tile.x + 18, top_tile.y + 88))
 
-        play_tile = pygame.Rect(674, 564, 470, 108)
-        self.draw_glass_panel(play_tile, accent=(244, 206, 84), radius=22, fill=(174, 152, 82, 196))
-        self.screen.blit(self.title_font.render("PLAY", True, WHITE), (play_tile.x + 18, play_tile.y + 12))
-        self.screen.blit(self.small.render(active_title[:42], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 48))
-        helper = "SPACE match  |  L lineup  |  H club/share  |  O competitions"
-        self.screen.blit(self.small.render(helper, True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 70))
-        self.screen.blit(self.small.render(progress[:52], True, (32, 28, 20)), (play_tile.x + 18, play_tile.y + 88))
-        pygame.draw.polygon(self.screen, (255, 246, 210), [(play_tile.right - 86, play_tile.y + 28), (play_tile.right - 34, play_tile.centery), (play_tile.right - 86, play_tile.bottom - 28)])
+        lineup_tile = pygame.Rect(792, 404, 170, 98)
+        self.draw_glass_panel(lineup_tile, accent=chem_accent, radius=20, fill=(18, 24, 34, 214), shine=False)
+        self.screen.blit(self.font.render("LINEUP", True, WHITE), (lineup_tile.x + 18, lineup_tile.y + 18))
+        lineup_text = " | ".join(name[:8] for name in next_names) if next_names else "Open squad"
+        self.screen.blit(self.small.render("L open lineup", True, (220, 228, 236)), (lineup_tile.x + 18, lineup_tile.y + 48))
+        self.screen.blit(self.micro.render(lineup_text[:26], True, (196, 255, 86)), (lineup_tile.x + 18, lineup_tile.y + 72))
 
-        bottom_nav = pygame.Rect(0, HEIGHT - 72, WIDTH, 72)
-        pygame.draw.rect(self.screen, (44, 48, 56), bottom_nav)
-        pygame.draw.line(self.screen, (160, 166, 176), (0, bottom_nav.y), (WIDTH, bottom_nav.y), 2)
-        nav_items = [
-            ("A/J", "QUESTS"),
-            ("L", "LINEUP"),
-            ("R", "MARKET"),
-            ("B", "EXCHANGE"),
-            ("P/M", "STORE"),
-        ]
-        seg_w = WIDTH // len(nav_items)
-        for idx, (hotkey, label) in enumerate(nav_items):
-            x = idx * seg_w
-            if idx > 0:
-                pygame.draw.line(self.screen, (88, 92, 102), (x, bottom_nav.y + 10), (x, bottom_nav.bottom - 10), 1)
-            active = label == "LINEUP" or (label == "STORE" and self.show_pack_shop)
-            color = (244, 246, 250) if active else (170, 176, 186)
-            accent = (52, 244, 116) if label == "STORE" else (244, 206, 84) if active else (110, 116, 126)
-            pygame.draw.circle(self.screen, accent, (x + 32, bottom_nav.y + 36), 10)
-            self.screen.blit(self.font.render(label, True, color), (x + 54, bottom_nav.y + 24))
-            self.screen.blit(self.micro.render(hotkey, True, (206, 214, 224)), (x + 54, bottom_nav.y + 48))
+        tactics_tile = pygame.Rect(974, 404, 170, 98)
+        self.draw_glass_panel(tactics_tile, accent=(86, 170, 255), radius=20, fill=(18, 24, 34, 214), shine=False)
+        self.screen.blit(self.font.render("TACTICS", True, WHITE), (tactics_tile.x + 18, tactics_tile.y + 18))
+        self.screen.blit(self.small.render("T formations", True, (220, 228, 236)), (tactics_tile.x + 18, tactics_tile.y + 48))
+        self.screen.blit(self.micro.render("Shape and match setup", True, (86, 170, 255)), (tactics_tile.x + 18, tactics_tile.y + 72))
 
-        status = "SPACE play | L lineup | H club/share | P/W shop | D draft | N collection | R market | O comps | ESC modes"
+        quest_tile = pygame.Rect(792, 512, 170, 98)
+        self.draw_glass_panel(quest_tile, accent=(244, 206, 84), radius=20, fill=(26, 24, 18, 214), shine=False)
+        self.screen.blit(self.font.render("QUESTS", True, WHITE), (quest_tile.x + 18, quest_tile.y + 18))
+        self.screen.blit(self.small.render("A/J objectives", True, (220, 228, 236)), (quest_tile.x + 18, quest_tile.y + 48))
+        self.screen.blit(self.micro.render(f"{daily_ready + weekly_ready} ready", True, (244, 206, 84)), (quest_tile.x + 18, quest_tile.y + 72))
+
+        store_tile = pygame.Rect(974, 512, 170, 98)
+        self.draw_glass_panel(store_tile, accent=(196, 255, 86), radius=20, fill=(18, 26, 18, 214), shine=False)
+        self.screen.blit(self.font.render("STORE", True, WHITE), (store_tile.x + 18, store_tile.y + 18))
+        self.screen.blit(self.small.render("P/W packs", True, (220, 228, 236)), (store_tile.x + 18, store_tile.y + 48))
+        self.screen.blit(self.micro.render(f"{len(self.my_packs)} packs owned", True, (196, 255, 86)), (store_tile.x + 18, store_tile.y + 72))
+
+        self.draw_fc_bottom_nav([("A/J", "QUESTS"), ("L", "LINEUP"), ("R", "MARKET"), ("B", "EXCHANGE"), ("P/M", "STORE")], active_index=1)
+
+        status = "SPACE play | L lineup | T tactics | A/J quests | P/W store | D draft | N collection | R market | O comps | ESC modes"
         if record.get("is_developer"):
             status += " | U console"
         self.screen.blit(self.small.render(status, True, (204, 214, 228)), (28, HEIGHT - 94))
@@ -12280,8 +12478,8 @@ class Game:
         mins = int(self.match_time // 60)
         secs = int(self.match_time % 60)
         time_str = f"{mins:02d}:{secs:02d}  H{self.half}"
-        top_bar = pygame.Rect(14, 10, WIDTH - 28, 56)
-        self.draw_glass_panel(top_bar, accent=(244, 206, 84), radius=18, fill=(10, 14, 24, 196), shine=False)
+        top_bar = pygame.Rect(14, 10, WIDTH - 28, 64)
+        self.draw_glass_panel(top_bar, accent=(244, 206, 84), radius=20, fill=(10, 14, 24, 208), shine=False)
         home_chip = pygame.Rect(28, 18, 230, 38)
         away_chip = pygame.Rect(WIDTH - 258, 18, 230, 38)
         self.draw_neon_chip(home_chip.x, home_chip.y, self.current_home, accent=(12, 220, 190), width=home_chip.w)
@@ -12291,8 +12489,9 @@ class Game:
         self.screen.blit(score_surface, (WIDTH // 2 - score_surface.get_width() // 2, 14))
         time_surface = self.small.render(time_str, True, (244, 206, 84))
         self.screen.blit(time_surface, (WIDTH // 2 - time_surface.get_width() // 2, 42))
-        controls = "Arrows move | P pass | K shoot | T tackle | E ask | L lineups | R/F/G tactics"
-        self.screen.blit(self.small.render(controls, True, (210, 218, 230)), (24, 74))
+        controls = "Move  Arrows    Pass  P    Shoot  K    Tackle  T    Lineups  L    Tactics  R/F/G"
+        self.draw_glass_panel(pygame.Rect(18, 80, 700, 34), accent=(86, 170, 255), radius=12, fill=(10, 14, 24, 178), shine=False)
+        self.screen.blit(self.small.render(controls, True, (210, 218, 230)), (30, 89))
 
         # tactics board (toggle with B)
         if self.show_tactics_board:
@@ -12702,6 +12901,8 @@ class Game:
             self.draw_player_select()
         elif self.state == "LINEUP":
             self.draw_lineup_select()
+        elif self.state == "LINEUP_TACTICS":
+            self.draw_lineup_tactics_page()
         elif self.state == "LEAGUE":
             self.draw_league()
         elif self.state == "ACADEMY":
