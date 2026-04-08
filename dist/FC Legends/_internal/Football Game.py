@@ -1625,7 +1625,7 @@ class Game:
         self.title_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], 40, bold=True)
         self.micro = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], 12)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1644,6 +1644,7 @@ class Game:
         self.cloud_status_label = "Connected to Cloud" if self.cloud_api_base else "Cloud Not Configured"
         self.reconnect_button_rect = None
         self.lineup_formation_rects = {}
+        self.lineup_action_rects = {}
         self.lineup_tactics_index = 0
         self.cloud_settings_inputs = {
             "cloud_enabled": True,
@@ -1660,6 +1661,8 @@ class Game:
         self.dev_console_tab = 0
         self.dev_search_query = ""
         self.dev_action_message = ""
+        self.dev_action_timer = 0.0
+        self.dev_action_success = True
         self.dev_coin_delta_index = 1
         self.dev_pack_index = 0
         self.dev_card_index = 0
@@ -1935,7 +1938,7 @@ class Game:
     def persist_local_accounts(self):
         save_accounts(self.accounts_data)
 
-    def sync_record_to_local(self, record=None, password=None):
+    def sync_record_to_local(self, record=None, password=None, developer_code=None):
         record = record or {}
         username = str(record.get("username") or self.active_account or "").strip().lower()
         if not username:
@@ -1955,6 +1958,10 @@ class Game:
         if password:
             local["password_hash"] = self.hash_password(password)
             local["sync_password"] = password
+        if developer_code is None:
+            developer_code = local.get("developer_code", "")
+        if developer_code:
+            local["developer_code"] = developer_code.strip()
         users[username] = local
         self.persist_local_accounts()
         return local
@@ -2178,7 +2185,36 @@ class Game:
         self.fantasy_share_message = f"Imported lineup with {len(matched)} matched starters"
         return True
 
-    def cloud_request(self, method, path, payload=None, needs_auth=False):
+    def refresh_cloud_session_token(self):
+        local = self.local_account_record()
+        if not local:
+            return False
+        username = str(local.get("username") or "").strip()
+        password = str(local.get("sync_password") or "").strip()
+        developer_code = str(local.get("developer_code") or "").strip()
+        if not username or not password:
+            return False
+        login_payload = {
+            "username": username,
+            "password": password,
+            "developer_code": developer_code,
+            "require_dev": False,
+        }
+        try:
+            data = self.cloud_request("POST", "/api/login", login_payload, _allow_reauth=False)
+        except RuntimeError:
+            return False
+        token = data.get("token")
+        user = data.get("user")
+        if not token or not isinstance(user, dict):
+            return False
+        self.cloud_token = token
+        self.cloud_user_cache = user
+        self.account_storage_mode = "CLOUD"
+        self.sync_record_to_local(user, password=password, developer_code=developer_code)
+        return True
+
+    def cloud_request(self, method, path, payload=None, needs_auth=False, _allow_reauth=True):
         if not self.cloud_api_base:
             self.cloud_status_label = "Cloud Not Configured"
             raise RuntimeError("Cloud backend not configured")
@@ -2201,6 +2237,13 @@ class Game:
                 data = json.loads(raw) if raw else {}
             except Exception:
                 data = {}
+            error_text = str(data.get("error") or "").lower()
+            session_rejected = exc.code == 401 or (exc.code == 403 and "expired session" in error_text)
+            if needs_auth and session_rejected and _allow_reauth:
+                if self.refresh_cloud_session_token():
+                    return self.cloud_request(method, path, payload, needs_auth=needs_auth, _allow_reauth=False)
+                self.cloud_token = None
+                self.cloud_user_cache = None
             self.cloud_status_label = "Cloud Auth Required" if exc.code == 401 else "Cloud Error"
             raise RuntimeError(data.get("error") or f"HTTP {exc.code}")
         except (urllib_error.URLError, socket.timeout, TimeoutError):
@@ -2256,9 +2299,9 @@ class Game:
             "goat", "icon", "signature", "promo", "ultimate", "supreme",
             "premier_league", "la_liga", "bundesliga", "serie_a", "ligue_1", "saudi",
         ]
-        event_pack = self.active_event_pack_entry()
-        if event_pack and event_pack["id"] not in packs:
-            packs.append(event_pack["id"])
+        for event_pack in self.active_event_pack_entries():
+            if event_pack["id"] not in packs:
+                packs.append(event_pack["id"])
         return packs or ["gold"]
 
     def developer_card_catalog(self):
@@ -2342,6 +2385,21 @@ class Game:
             if local is not None and self.account_storage_mode == "LOCAL":
                 self.account_storage_mode = "CLOUD"
 
+    def push_dev_action(self, message, success=True):
+        self.dev_action_message = str(message or "")[:140]
+        self.dev_action_timer = 3.4
+        self.dev_action_success = bool(success)
+
+    def draw_dev_action_toast(self):
+        if self.dev_action_timer <= 0 or not self.dev_action_message:
+            return
+        accent = (96, 255, 156) if self.dev_action_success else (255, 110, 110)
+        toast = pygame.Rect(WIDTH - 416, 88, 388, 54)
+        self.draw_glass_panel(toast, accent=accent, radius=16, fill=(14, 18, 24, 228), shine=False)
+        label = "ACTION COMPLETE" if self.dev_action_success else "ACTION FAILED"
+        self.screen.blit(self.micro.render(label, True, accent), (toast.x + 14, toast.y + 10))
+        self.screen.blit(self.small.render(self.dev_action_message[:64], True, WHITE), (toast.x + 14, toast.y + 26))
+
     def fetch_admin_status(self):
         try:
             data = self.cloud_request("GET", "/api/admin/status", needs_auth=True)
@@ -2350,10 +2408,12 @@ class Game:
                 self.dev_announcement_input = data.get("settings", {}).get("announcement", self.dev_announcement_input)
             return self.dev_admin_status
         except RuntimeError as exc:
-            self.dev_action_message = str(exc)
+            self.push_dev_action(str(exc), success=False)
             return self.dev_admin_status
 
     def admin_user_action(self, username, action, **payload):
+        if self.account_storage_mode != "CLOUD" or not self.cloud_token or self.cloud_status_label != "Connected to Cloud":
+            return self.local_admin_user_action(username, action, **payload)
         try:
             data = self.cloud_request(
                 "POST",
@@ -2363,11 +2423,111 @@ class Game:
             )
             user = data.get("user")
             self.refresh_dev_user(user)
-            self.dev_action_message = f"{action.replace('_', ' ').title()} complete for {username}"
+            self.fetch_registered_users()
+            self.fetch_admin_status()
+            action_label = action.replace("_", " ").title()
+            extras = []
+            if action == "grant_coins":
+                extras.append(f"{int(payload.get('amount', 0)):+,} coins")
+            elif action == "grant_packs":
+                extras.append(f"{int(payload.get('amount', 1)):+d} {str(payload.get('pack_id') or 'gold')}")
+            elif action == "add_card":
+                card = payload.get("card") or {}
+                extras.append(str(card.get("name") or "card"))
+            elif action == "remove_card":
+                extras.append("removed card")
+            suffix = f" ({', '.join(extras)})" if extras else ""
+            self.push_dev_action(f"{action_label} for {username}{suffix}", success=True)
             return user
         except RuntimeError as exc:
-            self.dev_action_message = str(exc)
+            self.push_dev_action(str(exc), success=False)
             return None
+
+    def ensure_local_fantasy_snapshot(self, record):
+        snapshot = record.get("fantasy_snapshot")
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        snapshot.setdefault("fantasy_coins", DEVELOPER_FANTASY_COINS if record.get("is_developer") else DEFAULT_FANTASY_COINS)
+        snapshot.setdefault("my_packs", [])
+        snapshot.setdefault("fantasy_roster", [])
+        snapshot.setdefault("event_evo_tokens", 0)
+        snapshot.setdefault("fantasy_team_name", record.get("display_name") or record.get("username") or "Fantasy FC")
+        return snapshot
+
+    def local_admin_user_action(self, username, action, **payload):
+        record = self.local_account_record(username)
+        if not record:
+            self.push_dev_action("Local account not found", success=False)
+            return None
+        snapshot = self.ensure_local_fantasy_snapshot(record)
+        if action == "promote_developer":
+            record["is_developer"] = True
+        elif action == "revoke_developer":
+            record["is_developer"] = False
+        elif action == "ban":
+            record["is_banned"] = True
+        elif action == "unban":
+            record["is_banned"] = False
+        elif action == "suspend":
+            record["is_suspended"] = True
+        elif action == "unsuspend":
+            record["is_suspended"] = False
+        elif action == "reset_password":
+            new_password = str(payload.get("new_password") or "legend123").strip()
+            record["password_hash"] = self.hash_password(new_password)
+            record["sync_password"] = new_password
+        elif action == "grant_coins":
+            snapshot["fantasy_coins"] = max(0, int(snapshot.get("fantasy_coins", 0)) + int(payload.get("amount", 0)))
+        elif action == "grant_packs":
+            pack_id = str(payload.get("pack_id") or "gold")
+            amount = int(payload.get("amount", 1))
+            packs = list(snapshot.get("my_packs", []))
+            if amount >= 0:
+                packs.extend([pack_id] * amount)
+            else:
+                remove_count = min(len([p for p in packs if p == pack_id]), abs(amount))
+                kept = []
+                removed = 0
+                for pack in packs:
+                    if pack == pack_id and removed < remove_count:
+                        removed += 1
+                        continue
+                    kept.append(pack)
+                packs = kept
+            snapshot["my_packs"] = packs
+        elif action == "add_card":
+            card = dict(payload.get("card") or {})
+            if card and not card.get("card_key"):
+                card["card_key"] = self.fantasy_card_key(card)
+            snapshot["fantasy_roster"] = list(snapshot.get("fantasy_roster", [])) + ([card] if card else [])
+        elif action == "remove_card":
+            card_key = str(payload.get("card_key") or "")
+            removed = False
+            kept = []
+            for card in snapshot.get("fantasy_roster", []):
+                current_key = card.get("card_key") or self.fantasy_card_key(card)
+                if not removed and current_key == card_key:
+                    removed = True
+                    continue
+                kept.append(card)
+            if not removed:
+                self.push_dev_action("Card not found on this account.", success=False)
+                return None
+            snapshot["fantasy_roster"] = kept
+        elif action == "repair_account":
+            pass
+        else:
+            self.push_dev_action("Action requires cloud admin", success=False)
+            return None
+        record["fantasy_snapshot"] = snapshot
+        record["last_mode"] = record.get("last_mode", "FANTASY")
+        self.persist_local_accounts()
+        user = self.serialize_local_account(record, include_snapshots=True)
+        self.refresh_dev_user(user)
+        self.fetch_registered_users()
+        action_label = action.replace("_", " ").title()
+        self.push_dev_action(f"{action_label} for {username} (local)", success=True)
+        return user
 
     def admin_tournament_action(self, username, action, **payload):
         try:
@@ -2378,10 +2538,11 @@ class Game:
                 needs_auth=True,
             )
             self.fetch_registered_users()
-            self.dev_action_message = f"{action.replace('_', ' ').title()} complete for {username}"
+            self.fetch_admin_status()
+            self.push_dev_action(f"{action.replace('_', ' ').title()} for {username}", success=True)
             return True
         except RuntimeError as exc:
-            self.dev_action_message = str(exc)
+            self.push_dev_action(str(exc), success=False)
             return False
 
     def admin_update_settings(self, **payload):
@@ -2396,10 +2557,11 @@ class Game:
                     "disabled_modes": settings.get("disabled_modes", {}),
                 }
             )
-            self.dev_action_message = "Developer settings updated"
+            self.fetch_admin_status()
+            self.push_dev_action("Developer settings updated", success=True)
             return settings
         except RuntimeError as exc:
-            self.dev_action_message = str(exc)
+            self.push_dev_action(str(exc), success=False)
             return None
 
     def try_sync_active_account_to_cloud(self):
@@ -2488,6 +2650,24 @@ class Game:
                 self.sync_record_to_local(self.cloud_user_cache)
             except RuntimeError:
                 self.cloud_user_cache = None
+
+    def ensure_developer_console_access(self):
+        record = self.active_account_record() or {}
+        if not record.get("is_developer"):
+            self.account_message = "Developer access required"
+            self.push_dev_action("Developer access required", success=False)
+            return False
+        if self.account_storage_mode != "CLOUD" or not self.cloud_token:
+            self.reconnect_cloud()
+        try:
+            self.fetch_registered_users()
+            self.fetch_admin_status()
+        except Exception:
+            pass
+        if self.cloud_status_label != "Connected to Cloud":
+            self.account_message = "Developer console opened in local fallback mode"
+            self.push_dev_action("Developer console opened in local fallback mode", success=False)
+        return True
 
     def migrate_local_snapshots_to_cloud(self):
         if not self.cloud_token or self.account_storage_mode != "CLOUD":
@@ -3002,7 +3182,7 @@ class Game:
             )
             self.cloud_token = data.get("token")
             self.fetch_cloud_runtime_config()
-            self.sync_record_to_local(data.get("user"), password=password)
+            self.sync_record_to_local(data.get("user"), password=password, developer_code=developer_code)
             self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
             if "Cloud server unavailable" in str(exc) or "Cloud backend not configured" in str(exc):
@@ -3032,7 +3212,7 @@ class Game:
             )
             self.cloud_token = data.get("token")
             self.fetch_cloud_runtime_config()
-            self.sync_record_to_local(data.get("user"), password=password)
+            self.sync_record_to_local(data.get("user"), password=password, developer_code=developer_code)
             self.begin_account_session(username, data.get("user"), storage_mode="CLOUD")
         except RuntimeError as exc:
             try:
@@ -4085,6 +4265,102 @@ class Game:
             unique.append(card)
         return unique
 
+    def event_featured_cards(self, limit=3):
+        if not self.fantasy_pool:
+            self.fantasy_pool = self.build_fantasy_pool()
+        event = self.current_pack_event or {}
+        boosted = []
+        promo_type = event.get("promo")
+        if promo_type:
+            boosted = [
+                p for p in self.fantasy_pool
+                if p.get("promo") == promo_type and p.get("rarity") not in ("Icon", "GOAT")
+            ]
+            generated = self.generated_promo_event_cards(promo_type, limit=48)
+            existing = {card.get("card_key") for card in boosted}
+            for card in generated:
+                if card.get("card_key") not in existing:
+                    boosted.append(card)
+                    existing.add(card.get("card_key"))
+        if not boosted:
+            boosted = self.event_pack_boost_cards()
+        if not boosted and self.current_pack_event:
+            featured_names = set(self.current_pack_event.get("signature_names", []))
+            if featured_names:
+                boosted = [p for p in self.fantasy_pool if p.get("name") in featured_names]
+        if not boosted:
+            boosted = list(self.fantasy_pool[:])
+        boosted = sorted(
+            boosted,
+            key=lambda p: (
+                self.rarity_rank(p.get("rarity", "Bronze")),
+                int(p.get("rating", 0)),
+                p.get("name", ""),
+            ),
+            reverse=True,
+        )
+        return boosted[:limit]
+
+    def generated_promo_event_cards(self, promo_name, limit=48):
+        if not promo_name:
+            return []
+        base_pool = [
+            p for p in self.fantasy_pool
+            if p.get("rarity") not in ("Icon", "GOAT")
+            and p.get("promo") in ("Base", "Signature")
+            and int(p.get("base_rating", p.get("rating", 0))) >= 84
+        ]
+        if not base_pool:
+            return []
+        base_pool = sorted(
+            base_pool,
+            key=lambda p: (
+                int(p.get("base_rating", p.get("rating", 0))),
+                int(p.get("rating", 0)),
+                p.get("name", ""),
+            ),
+            reverse=True,
+        )
+        floors = {
+            "TOTW": (88, 94),
+            "Hero": (88, 94),
+            "Future Star": (92, 100),
+            "Centurions": (96, 104),
+            "Shapeshifter": (96, 104),
+            "Phantom": (120, 129),
+            "Dynasty": (110, 119),
+            "RTTK": (100, 108),
+            "Neon": (100, 108),
+            "Clutch": (96, 104),
+            "Ice": (100, 108),
+            "Thunder": (100, 108),
+            "TOTY": (130, 138),
+        }
+        low, high = floors.get(promo_name, (96, 104))
+        generated = []
+        seen = set()
+        offset_pattern = [0, 1, 2, 3, 1, 4]
+        for idx, base in enumerate(base_pool):
+            key = (base.get("name"), base.get("team"))
+            if key in seen:
+                continue
+            seen.add(key)
+            forged = base.copy()
+            forged["promo"] = promo_name
+            forged["base_rating"] = int(base.get("base_rating", base.get("rating", 0)))
+            boosted_floor = max(low, forged["base_rating"] + 6)
+            boosted_ceiling = max(boosted_floor, high)
+            forged["rating"] = min(boosted_ceiling, max(boosted_floor, boosted_floor + offset_pattern[idx % len(offset_pattern)]))
+            forged["rarity"] = self.card_rarity_from_rating(forged["rating"], promo_name)
+            forged["traits"] = self.generate_card_traits(forged.get("position", "ST"), forged["rarity"], promo_name)
+            forged["price"] = max(5, int(forged["rating"] * 0.6))
+            forged["duplicate_protected"] = True
+            forged["card_key"] = f"{forged['name']}|{promo_name}|{forged['rating']}|{forged.get('position', 'ST')}"
+            generated.append(forged)
+            if len(generated) >= limit:
+                break
+        return generated
+
     def fantasy_competition_menu(self):
         theme_name = self.fantasy_competitions.get("theme", {}).get("name", self.current_theme)
         return [
@@ -4808,7 +5084,13 @@ class Game:
             self.add_commentary(f"Market signing: {card['name']}")
 
     def open_player_pick(self, title, band="Elite", count=3, return_state=None):
-        if band == "signature":
+        if isinstance(band, str) and band.startswith("promo:"):
+            promo_name = band.split(":", 1)[1]
+            if promo_name == "Signature":
+                pool = [p for p in self.cards_for_pack_band("signature") if p.get("promo") == "Signature"]
+            else:
+                pool = [p for p in self.cards_for_pack_band(band) if p.get("promo") == promo_name]
+        elif band == "signature":
             pool = [p for p in self.cards_for_pack_band("signature") if p.get("promo") == "Signature"]
         else:
             pool = [
@@ -4817,7 +5099,13 @@ class Game:
                 and p.get("promo") != "Signature"
             ]
         if not pool:
-            if band == "signature":
+            if isinstance(band, str) and band.startswith("promo:"):
+                promo_name = band.split(":", 1)[1]
+                pool = [
+                    p for p in self.fantasy_pool
+                    if p.get("promo") == promo_name and p.get("rarity") not in ("Icon", "GOAT")
+                ]
+            elif band == "signature":
                 pool = [p for p in self.fantasy_pool if p.get("promo") == "Signature" and p.get("rarity") not in ("Icon", "GOAT")]
             else:
                 pool = [
@@ -5552,22 +5840,51 @@ class Game:
                     self.add_commentary(f"Champions Clash advanced to {champs.get('bracket', ['Quarter Final'])[champs['round']]}")
         self.apply_fantasy_form_boosts()
 
-    def build_event_pack_entry(self, event):
+    def build_event_pack_entries(self, event):
         if not event or not event.get("id") or not event.get("featured_pack"):
-            return None
-        return {
-            "id": f"event_{event['id']}",
-            "name": f"{event['name']} Pack",
-            "cost": event.get("pack_cost", 380),
-            "count": event.get("pack_count", 3),
-            "band": event.get("featured_pack", "promo"),
-            "guaranteed": event.get("guaranteed", 90),
-            "event_id": event["id"],
-            "pack_evo_tokens": event.get("evo_tokens", 1),
-        }
+            return []
+        promo_type = event.get("promo")
+        base_band = f"promo:{promo_type}" if promo_type else event.get("featured_pack", "promo")
+        base_name = event.get("name", "Event")
+        entries = [
+            {
+                "id": f"event_{event['id']}_standard",
+                "name": f"{base_name} Pack",
+                "cost": event.get("pack_cost", 360 if promo_type else 380),
+                "count": event.get("pack_count", 3),
+                "band": base_band,
+                "guaranteed": event.get("guaranteed", 90 if promo_type else 88),
+                "event_id": event["id"],
+                "pack_evo_tokens": event.get("evo_tokens", 1),
+            },
+            {
+                "id": f"event_{event['id']}_deluxe",
+                "name": f"{base_name} Deluxe",
+                "cost": event.get("deluxe_cost", 540 if promo_type else 560),
+                "count": event.get("deluxe_count", 4),
+                "band": base_band,
+                "guaranteed": event.get("deluxe_guaranteed", 94 if promo_type else 92),
+                "event_id": event["id"],
+                "pack_evo_tokens": event.get("evo_tokens", 1) + 1,
+            },
+            {
+                "id": f"event_{event['id']}_pick",
+                "name": f"{base_name} Pick",
+                "cost": event.get("pick_cost", 620 if promo_type else 640),
+                "count": 1,
+                "band": base_band,
+                "guaranteed": event.get("pick_guaranteed", 95 if promo_type else 93),
+                "event_id": event["id"],
+                "pack_evo_tokens": event.get("evo_tokens", 1),
+                "open_mode": "pick",
+                "pick_count": 3,
+                "pick_band": base_band,
+            },
+        ]
+        return entries
 
-    def active_event_pack_entry(self):
-        return self.build_event_pack_entry(self.current_pack_event or {})
+    def active_event_pack_entries(self):
+        return self.build_event_pack_entries(self.current_pack_event or {})
 
     def average_fantasy_rating(self):
         if not self.fantasy_roster:
@@ -5660,20 +5977,21 @@ class Game:
             {"id": "ligue_1", "name": "Ligue 1 Pack", "cost": 210, "count": 3, "band": "league:Ligue 1", "guaranteed": 80},
             {"id": "saudi", "name": "Saudi League Pack", "cost": 190, "count": 3, "band": "league:Saudi Pro League", "guaranteed": 82},
         ]
-        event_pack = self.active_event_pack_entry()
-        if event_pack:
-            return [event_pack] + base
+        event_packs = self.active_event_pack_entries()
+        if event_packs:
+            return event_packs + base
         return base
 
     def get_pack_by_id(self, pack_id):
-        event_pack = self.active_event_pack_entry()
-        if event_pack and pack_id == event_pack["id"]:
-            return event_pack
-        if pack_id.startswith("event_"):
-            event = self.get_pack_event_by_id(pack_id.split("event_", 1)[1])
-            event_pack = self.build_event_pack_entry(event)
-            if event_pack:
+        for event_pack in self.active_event_pack_entries():
+            if pack_id == event_pack["id"]:
                 return event_pack
+        if pack_id.startswith("event_"):
+            event_id = pack_id.split("event_", 1)[1].split("_", 1)[0]
+            event = self.get_pack_event_by_id(event_id)
+            for event_pack in self.build_event_pack_entries(event):
+                if event_pack["id"] == pack_id:
+                    return event_pack
         for pack in self.fantasy_pack_catalog():
             if pack["id"] == pack_id:
                 return pack
@@ -5888,6 +6206,21 @@ class Game:
             self.state = "FANTASY_SBC"
 
     def cards_for_pack_band(self, band):
+        if band.startswith("promo:"):
+            promo_name = band.split(":", 1)[1]
+            if promo_name == "Signature":
+                return [p for p in self.fantasy_pool if p.get("promo") == "Signature" and p.get("rarity") not in ("Icon", "GOAT")]
+            cards = [
+                p for p in self.fantasy_pool
+                if p.get("promo") == promo_name and p.get("rarity") not in ("Icon", "GOAT") and p.get("promo") != "Signature"
+            ]
+            generated = self.generated_promo_event_cards(promo_name, limit=48)
+            existing = {card.get("card_key") for card in cards}
+            for card in generated:
+                if card.get("card_key") not in existing:
+                    cards.append(card)
+                    existing.add(card.get("card_key"))
+            return cards
         if band.startswith("league:"):
             league_name = band.split(":", 1)[1]
             return [
@@ -6038,8 +6371,9 @@ class Game:
         pulls = []
         for pull_idx in range(pack["count"]):
             roll = random.random()
-            allow_promo = band == "promo" or random.random() < 0.01
-            allow_signature = band == "signature" or (band not in ("promo", "signature") and random.random() < 0.01)
+            is_exact_promo_band = isinstance(band, str) and band.startswith("promo:")
+            allow_promo = band == "promo" or is_exact_promo_band or random.random() < 0.01
+            allow_signature = band == "signature" or (band not in ("promo", "signature") and not is_exact_promo_band and random.random() < 0.01)
             allow_goat = band == "GOAT" or (band != "GOAT" and random.random() < 0.00001)
             allow_icon = band == "Icon" or (band != "Icon" and random.random() < 0.0001)
             if band in self.rarity_order():
@@ -6065,6 +6399,23 @@ class Game:
                                 upgrade_pool.extend(upgrade_cards)
                     if upgrade_pool:
                         candidates = upgrade_pool
+            elif is_exact_promo_band:
+                target_promo = band.split(":", 1)[1]
+                if target_promo == "Signature":
+                    candidates = self.cards_for_pack_band("signature")
+                else:
+                    candidates = self.cards_for_pack_band(band)
+                if not candidates:
+                    candidates = [
+                        p for p in self.fantasy_pool
+                        if p.get("promo") == target_promo and p.get("rarity") not in ("Icon", "GOAT")
+                    ]
+                if pull_idx == 0:
+                    candidates = [p for p in candidates if p["rating"] >= pack["guaranteed"]] or candidates
+                elif roll < 0.35:
+                    candidates = [p for p in candidates if p["rating"] >= max(90, pack["guaranteed"] - 2)] or candidates
+                else:
+                    candidates = [p for p in candidates if p["rating"] >= max(86, pack["guaranteed"] - 6)] or candidates
             elif band == "promo":
                 target_promo = self.choose_weighted_promo()
                 if target_promo == "Signature":
@@ -6139,11 +6490,11 @@ class Game:
                 signature_candidates = self.cards_for_pack_band("signature")
                 if signature_candidates:
                     candidates = signature_candidates
-            elif allow_promo and band != "promo":
+            elif allow_promo and band not in ("promo",) and not is_exact_promo_band:
                 promo_candidates = [p for p in candidates if p.get("promo", "Base") != "Base"]
                 if promo_candidates:
                     candidates = promo_candidates
-            elif band != "promo":
+            elif band != "promo" and not is_exact_promo_band:
                 non_special_candidates = [p for p in candidates if p.get("rarity") not in ("Icon", "GOAT")]
                 if non_special_candidates:
                     candidates = non_special_candidates
@@ -6743,105 +7094,38 @@ class Game:
     def draw_squad_card(self, x, y, w, h, entry, role="", selected=False, picked=False):
         name, num, rating = entry
         card_meta = next((c for c in self.fantasy_roster if c["name"] == name and c.get("number") == num and c["rating"] == rating), None)
-        if card_meta:
-            base, accent = self.card_theme_colors(card_meta)
-            promo = card_meta.get("promo", "Base")
-            rarity = card_meta.get("rarity", "Base")
-            league = card_meta.get("league", get_team_league(card_meta.get("team", "")))
-            traits = card_meta.get("traits", [])
-            evo_level = card_meta.get("evo_level", 0)
-            goat_profile = self.goat_card_profile(card_meta) if rarity == "GOAT" else None
-            signature_profile = self.signature_card_profile(card_meta) if promo == "Signature" else None
-        else:
-            _, accent = self.card_tier(rating)
-            base = (245, 220, 135) if rating >= 78 else (205, 212, 222) if rating >= 70 else (176, 138, 100)
-            promo = "Base"
-            rarity = "Base"
-            league = get_team_league("")
-            traits = []
-            evo_level = 0
-            goat_profile = None
-            signature_profile = None
+        if not card_meta:
+            card_meta = {
+                "name": name,
+                "number": num,
+                "rating": rating,
+                "team": self.user_team or "",
+                "league": get_team_league(self.user_team or ""),
+                "position": role or "XI",
+                "promo": "Base",
+                "rarity": self.card_rarity_from_rating(rating, "Base"),
+            }
+        accent = self.card_theme_colors(card_meta)[1]
+        evo_level = card_meta.get("evo_level", 0)
+        chem_tags = self.fantasy_chemistry_breakdown.get((name, num, rating), []) if self.game_mode == "FANTASY" else []
         card = pygame.Rect(int(x), int(y), int(w), int(h))
-        pygame.draw.rect(self.screen, base, card, 0, border_radius=16)
-        self.draw_card_art_layers((x, y, w, h), base, accent, rarity, promo)
-        if goat_profile:
-            overlay = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            for idx, color in enumerate(goat_profile["stripes"][:4]):
-                top = int(h * 0.18) + idx * 12
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 74 if idx < 2 else 56),
-                    [(0, top), (w * 0.20, top - 8), (w * 0.52, top + 8), (0, top + 18)],
-                )
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 70 if idx < 2 else 50),
-                    [(w, top + 8), (w * 0.78, top - 8), (w * 0.46, top + 8), (w, top + 20)],
-                )
-            self.screen.blit(overlay, (x, y))
-        elif signature_profile:
-            overlay = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            for idx, color in enumerate(signature_profile["streaks"][:3]):
-                top = int(h * 0.22) + idx * 14
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 64 if idx == 1 else 48),
-                    [(0, top), (w * 0.22, top - 6), (w * 0.56, top + 8), (0, top + 18)],
-                )
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 56 if idx == 1 else 40),
-                    [(w, top + 8), (w * 0.80, top - 6), (w * 0.40, top + 8), (w, top + 22)],
-                )
-            self.screen.blit(overlay, (x, y))
-        pygame.draw.rect(self.screen, accent, card, 3, border_radius=16)
-        if goat_profile or signature_profile:
-            pygame.draw.rect(self.screen, (255, 232, 170), (x + 4, y + 4, w - 8, h - 8), 1, border_radius=16)
+        self.draw_compact_card(x, y, w, h, card_meta, face="front")
+        header = pygame.Rect(x + 6, y + 6, w - 12, 18)
+        pygame.draw.rect(self.screen, (10, 14, 20, 186), header, 0, border_radius=8)
+        self.screen.blit(self.micro.render(role[:8], True, WHITE), (header.x + 6, header.y + 4))
+        self.screen.blit(self.micro.render(f"#{num}", True, (220, 228, 236)), (header.right - 22, header.y + 4))
+        if chem_tags:
+            chip = pygame.Rect(x + 6, y + h - 42, min(42, w - 12), 16)
+            pygame.draw.rect(self.screen, (10, 14, 20, 186), chip, 0, border_radius=8)
+            self.screen.blit(self.micro.render(chem_tags[0][:5], True, accent), (chip.x + 4, chip.y + 3))
         if evo_level > 0:
-            rim_color = self.blend_color(accent, (220, 255, 235), 0.35)
-            for i in range(evo_level):
-                inset = 6 + i * 3
-                pygame.draw.rect(self.screen, rim_color, (x + inset, y + inset, w - inset * 2, h - inset * 2), 1, border_radius=14)
+            evo_chip = pygame.Rect(x + w - 30, y + 24, 22, 16)
+            pygame.draw.rect(self.screen, (10, 14, 20, 196), evo_chip, 0, border_radius=7)
+            self.screen.blit(self.micro.render(f"E{evo_level}", True, accent), (evo_chip.x + 3, evo_chip.y + 3))
         if selected:
             pygame.draw.rect(self.screen, YELLOW, card.inflate(6, 6), 3, border_radius=16)
         if picked:
             pygame.draw.rect(self.screen, CYAN, card.inflate(10, 10), 3, border_radius=18)
-        header = pygame.Rect(x + 8, y + 8, w - 16, 24)
-        pygame.draw.rect(self.screen, (255, 255, 255, 220), header, 0, border_radius=8)
-        self.screen.blit(self.small.render(str(rating), True, BLACK), (x + 12, y + 10))
-        self.screen.blit(self.small.render(role, True, BLACK), (x + w - 34, y + 10))
-        if rarity == "Icon":
-            self.draw_icon_star(x + w / 2, y + 20, accent)
-        elif goat_profile:
-            self.draw_flag_chip(x + 8, y + 8, 28, 14, goat_profile["flag"], accent)
-            mini_goat = pygame.font.SysFont("Georgia", 11, bold=True, italic=True).render("GOAT", True, accent)
-            self.screen.blit(mini_goat, (x + w / 2 - mini_goat.get_width() / 2, y + 10))
-        elif signature_profile:
-            mini_sig = pygame.font.SysFont("Georgia", 10, bold=True, italic=True).render("SIG", True, accent)
-            self.screen.blit(mini_sig, (x + w / 2 - mini_sig.get_width() / 2, y + 10))
-        if rarity != "Base":
-            rarity_label = rarity[:6].upper()
-            rarity_chip = pygame.Rect(x + 8, y + 34, w - 16, 20)
-            pygame.draw.rect(self.screen, (10, 12, 20, 170), rarity_chip, 0, border_radius=8)
-            self.screen.blit(self.small.render(rarity_label, True, WHITE), (x + 12, y + 36))
-        name_label = name if len(name) <= 12 else name[:10] + ".."
-        footer = pygame.Rect(x + 8, y + h - 38, w - 16, 30)
-        pygame.draw.rect(self.screen, (10, 12, 20, 170), footer, 0, border_radius=8)
-        self.screen.blit(self.small.render(name_label, True, WHITE), (x + 10, y + h - 34))
-        league_label = league[:8].upper()
-        self.screen.blit(self.small.render(f"#{num}", True, (220, 228, 236)), (x + 10, y + h - 18))
-        self.screen.blit(self.small.render(league_label, True, (220, 228, 236)), (x + w - 56, y + h - 18))
-        if traits:
-            trait_label = traits[0][:8].upper()
-            self.screen.blit(self.small.render(trait_label, True, WHITE), (x + w - 62, y + h - 34))
-        chem_tags = self.fantasy_chemistry_breakdown.get((name, num, rating), []) if self.game_mode == "FANTASY" else []
-        if chem_tags:
-            self.screen.blit(self.small.render(chem_tags[0][:5], True, accent), (x + 10, y + h - 34))
-        if promo != "Base":
-            self.screen.blit(self.small.render(promo[:4], True, accent), (x + w - 34, y + h - 18))
-        if evo_level > 0:
-            self.screen.blit(self.small.render(f"E{evo_level}", True, accent), (x + w - 30, y + 36))
         return card
 
     def draw_pack_shop(self, x, y, w, h):
@@ -10189,10 +10473,7 @@ class Game:
                         self.cloud_settings_index = 0
                         self.state = "CLOUD_SETTINGS"
                     elif event.key == pygame.K_u:
-                        record = self.active_account_record() or {}
-                        if record.get("is_developer"):
-                            self.fetch_registered_users()
-                            self.fetch_admin_status()
+                        if self.ensure_developer_console_access():
                             self.registered_users_index = 0
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_ESCAPE:
@@ -10694,10 +10975,7 @@ class Game:
                     elif event.key == pygame.K_q:
                         self.logout_account()
                     elif event.key == pygame.K_u:
-                        record = self.active_account_record() or {}
-                        if record.get("is_developer"):
-                            self.fetch_registered_users()
-                            self.fetch_admin_status()
+                        if self.ensure_developer_console_access():
                             self.registered_users_index = 0
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_SPACE:
@@ -10820,9 +11098,16 @@ class Game:
                         self.lineup_col = 1
                         self.lineup_idx = min(self.lineup_idx, len(self.user_bench) - 1)
                     elif event.key == pygame.K_TAB:
-                        self.lineup_col = (self.lineup_col + 1) % 3
+                        self.lineup_col = 1 if self.lineup_col == 0 else 0
                         max_idx = len(self.get_lineup_list(self.lineup_col)) - 1
                         self.lineup_idx = max(0, min(self.lineup_idx, max_idx))
+                    elif event.key == pygame.K_r:
+                        self.lineup_col = 2
+                        self.lineup_idx = max(0, min(self.lineup_idx, max(0, len(self.user_reserves) - 1)))
+                        self.state = "LINEUP_RESERVES"
+                    elif event.key == pygame.K_a:
+                        self.rebuild_user_lineup()
+                        self.message = "Auto build refreshed from squad order"
                     elif event.key == pygame.K_t:
                         current_formation = self.get_team_formation(self.user_team)
                         catalog = self.formation_catalog()
@@ -10834,9 +11119,7 @@ class Game:
                         self.lineup_idx = min(
                             (len(self.user_starting) - 1)
                             if self.lineup_col == 0
-                            else (len(self.user_bench) - 1)
-                            if self.lineup_col == 1
-                            else (len(self.user_reserves) - 1),
+                            else (len(self.user_bench) - 1),
                             self.lineup_idx + 1,
                         )
                     elif event.key == pygame.K_RETURN:
@@ -10849,6 +11132,29 @@ class Game:
                     elif event.key == pygame.K_SPACE:
                         if self.pending_fixture:
                             self.start_match()
+                elif self.state == "LINEUP_RESERVES":
+                    if event.key == pygame.K_ESCAPE:
+                        self.state = "LINEUP"
+                        self.lineup_col = 0 if self.lineup_pick and self.lineup_pick[0] == 0 else 1 if self.lineup_pick and self.lineup_pick[0] == 1 else 0
+                    elif event.key == pygame.K_TAB:
+                        self.state = "LINEUP"
+                        self.lineup_col = 1 if self.lineup_pick and self.lineup_pick[0] == 1 else 0
+                    elif event.key == pygame.K_UP:
+                        self.lineup_idx = max(0, self.lineup_idx - 1)
+                    elif event.key == pygame.K_DOWN:
+                        self.lineup_idx = min(len(self.user_reserves) - 1, self.lineup_idx + 1)
+                    elif event.key == pygame.K_LEFT and self.user_reserves:
+                        self.lineup_idx = max(0, self.lineup_idx - 1)
+                    elif event.key == pygame.K_RIGHT and self.user_reserves:
+                        self.lineup_idx = min(len(self.user_reserves) - 1, self.lineup_idx + 1)
+                    elif event.key == pygame.K_RETURN and self.user_reserves:
+                        if self.lineup_pick is None:
+                            self.lineup_pick = (2, self.lineup_idx)
+                        else:
+                            a_col, a_idx = self.lineup_pick
+                            self.swap_lineup(a_col, a_idx, 2, self.lineup_idx)
+                            self.lineup_pick = None
+                            self.state = "LINEUP"
                 elif self.state == "LINEUP_TACTICS":
                     catalog = self.formation_catalog()
                     if event.key == pygame.K_ESCAPE:
@@ -10873,10 +11179,37 @@ class Game:
                         self.message = f"Formation set to {self.get_formation_name(formation_id)}"
                         self.state = "LINEUP"
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP":
+                    for action, rect in self.lineup_action_rects.items():
+                        if rect.collidepoint(event.pos):
+                            if action == "auto":
+                                self.rebuild_user_lineup()
+                                self.message = "Auto build refreshed from squad order"
+                            elif action == "reserves":
+                                self.lineup_col = 2
+                                self.lineup_idx = 0
+                                self.state = "LINEUP_RESERVES"
+                            elif action == "tactics":
+                                current_formation = self.get_team_formation(self.user_team)
+                                catalog = self.formation_catalog()
+                                self.lineup_tactics_index = next((idx for idx, (fid, _) in enumerate(catalog) if fid == current_formation), 0)
+                                self.state = "LINEUP_TACTICS"
+                            break
                     for key, rect in self.lineup_rects.items():
                         if rect.collidepoint(event.pos):
                             self.dragging_lineup = key
                             self.lineup_pick = key
+                            break
+                elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP_RESERVES":
+                    for key, rect in self.lineup_rects.items():
+                        if rect.collidepoint(event.pos):
+                            self.lineup_idx = key[1]
+                            if self.lineup_pick is None:
+                                self.lineup_pick = key
+                            else:
+                                a_col, a_idx = self.lineup_pick
+                                self.swap_lineup(a_col, a_idx, key[0], key[1])
+                                self.lineup_pick = None
+                                self.state = "LINEUP"
                             break
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.state == "LINEUP_TACTICS":
                     for formation_id, rect in self.lineup_formation_rects.items():
@@ -11353,7 +11686,7 @@ class Game:
         metrics = self.dev_admin_status.get("metrics", {})
         self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
         self.draw_hero_header("Developer Console", "Cleaner admin operations, economy tools, tournament control, and support views.", accent=(244, 206, 84), accent_two=(86, 170, 255), right_text=tab_name.upper())
-        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse | ENTER action | ESC back", True, (190, 200, 215)), (36, 170))
+        self.screen.blit(self.small.render("TAB tabs | UP/DOWN browse users | ENTER refresh/open | ESC back", True, (190, 200, 215)), (36, 170))
         tab_x = 34
         for idx, tab in enumerate(tabs):
             pill = pygame.Rect(tab_x, 210, 156, 34)
@@ -11413,7 +11746,7 @@ class Game:
                 f"Packs: {packs}",
                 f"Season XP: {xp}",
                 "B ban/unban | V suspend | P dev toggle",
-                "W reset password to legend123 | F repair",
+                "W reset password | F repair account",
             ]
             for line in lines:
                 self.screen.blit(self.small.render(line[:68], True, WHITE), (detail_panel.x + 18, y))
@@ -11428,9 +11761,9 @@ class Game:
                 f"Pack: {self.developer_pack_ids()[self.dev_pack_index % len(self.developer_pack_ids())]}",
                 f"Remove Card: {selected_card.get('name', 'None')} {selected_card.get('rating', '')}",
                 "C add coins | X remove coins",
-                "O add pack | L remove pack",
-                "K open card catalog | R remove top card",
-                "ENTER also opens the card catalog page",
+                "O add 1 pack | L remove 1 pack",
+                "K/ENTER open card catalog | G gift selected card there",
+                "R remove top card from target roster",
             ]
             for line in lines:
                 self.screen.blit(self.small.render(line[:72], True, WHITE), (detail_panel.x + 18, y))
@@ -11501,6 +11834,7 @@ class Game:
                 y += 28
         if self.dev_action_message:
             self.screen.blit(self.small.render(self.dev_action_message[:96], True, YELLOW), (36, HEIGHT - 24))
+        self.draw_dev_action_toast()
 
     def draw_dev_card_catalog_page(self):
         cards = self.filtered_developer_card_catalog()
@@ -11509,7 +11843,7 @@ class Game:
         self.dev_catalog_flip_button_rect = None
         self.draw_modern_backdrop((86, 170, 255), (12, 220, 190))
         self.draw_hero_header("Developer Card Catalog", "Dedicated card browser with cleaner search, preview, and gifting flow.", accent=(86, 170, 255), accent_two=(12, 220, 190), right_text=f"{len(cards)} RESULTS")
-        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER or G gift | V flip | ESC back", True, (190, 200, 215)), (36, 170))
+        self.screen.blit(self.small.render("Type search | UP/DOWN browse | ENTER/G gift card | V flip | ESC back", True, (190, 200, 215)), (36, 170))
 
         target_panel = pygame.Rect(34, 210, 1098, 44)
         self.draw_glass_panel(target_panel, accent=(80, 92, 122), radius=14, fill=(20, 28, 40, 218), shine=False)
@@ -11573,6 +11907,7 @@ class Game:
 
         if self.dev_action_message:
             self.screen.blit(self.small.render(self.dev_action_message[:96], True, YELLOW), (36, HEIGHT - 24))
+        self.draw_dev_action_toast()
 
     def draw_cloud_settings_page(self):
         self.screen.fill((12, 16, 26))
@@ -11708,73 +12043,113 @@ class Game:
         self.screen.blit(self.font.render("Use UP/DOWN and ENTER", True, BLACK), (40, HEIGHT - 40))
 
     def draw_lineup_select(self):
-        self.draw_modern_backdrop((90, 220, 130), (86, 170, 255))
-
-        def visible_range(total, selected, max_visible):
-            if total <= max_visible:
-                return 0, total
-            start = max(0, min(selected - max_visible + 1, total - max_visible))
-            return start, start + max_visible
-
+        self.draw_modern_backdrop((96, 220, 120), (18, 130, 90))
         self.lineup_rects = {}
         self.lineup_formation_rects = {}
+        self.lineup_action_rects = {}
         subtitle = self.user_team or "No club selected"
         if self.pending_fixture:
             home, away = self.pending_fixture
             subtitle = f"{home} vs {away}"
         formation_id = self.get_team_formation(self.user_team)
         formation_name = self.get_formation_name(formation_id)
-        self.draw_fc_top_bar(self.user_team or "Squad", subtitle, counters=[((90, 220, 130), formation_name)], accent=(90, 220, 130))
-        self.draw_hero_header("Squad Broadcast", subtitle, accent=(90, 220, 130), accent_two=(86, 170, 255), right_text=formation_name.upper())
-        if self.pending_fixture:
-            self.draw_kit_picker(930, 28, home, away)
+        self.draw_fc_top_bar(self.user_team or "My Team", subtitle, counters=[((96, 220, 120), formation_name)], accent=(96, 220, 120))
 
-        left_panel = pygame.Rect(20, 154, 238, 548)
-        pitch_rect = pygame.Rect(272, 154, 638, 548)
-        right_panel = pygame.Rect(924, 154, 256, 548)
-        bench_panel = pygame.Rect(272, 714, 908, 116)
+        sidebar = pygame.Rect(28, 108, 268, 648)
+        pitch_rect = pygame.Rect(326, 104, 862, 652)
+        bench_strip = pygame.Rect(360, 696, 792, 114)
 
-        self.draw_glass_panel(left_panel, accent=(86, 170, 255), radius=22)
-        pygame.draw.rect(self.screen, (24, 78, 48), pitch_rect, 0, border_radius=22)
-        pygame.draw.rect(self.screen, (220, 225, 230), pitch_rect, 2, border_radius=22)
-        self.draw_glass_panel(right_panel, accent=(12, 220, 190), radius=22)
-        self.draw_glass_panel(bench_panel, accent=(244, 206, 84), radius=22)
+        self.draw_glass_panel(sidebar, accent=(90, 220, 130), radius=24, fill=(22, 26, 32, 228))
+        pygame.draw.rect(self.screen, (34, 88, 44), pitch_rect, 0, border_radius=26)
+        pygame.draw.rect(self.screen, (210, 224, 214), pitch_rect, 2, border_radius=26)
+        self.draw_glass_panel(bench_strip, accent=(94, 106, 118), radius=18, fill=(18, 22, 28, 214))
 
-        # pitch lines
-        pygame.draw.line(self.screen, (235, 235, 235), (pitch_rect.centerx, pitch_rect.top + 18), (pitch_rect.centerx, pitch_rect.bottom - 18), 2)
-        pygame.draw.circle(self.screen, (235, 235, 235), pitch_rect.center, 62, 2)
-        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.left + 18, pitch_rect.centery - 120, 110, 240), 2)
-        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.right - 128, pitch_rect.centery - 120, 110, 240), 2)
-        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.left + 18, pitch_rect.centery - 60, 50, 120), 2)
-        pygame.draw.rect(self.screen, (235, 235, 235), (pitch_rect.right - 68, pitch_rect.centery - 60, 50, 120), 2)
+        stadium_inner = pitch_rect.inflate(-36, -32)
+        pygame.draw.rect(self.screen, (112, 152, 84), stadium_inner, 0, border_radius=20)
+        for stripe in range(8):
+            stripe_rect = pygame.Rect(stadium_inner.x, stadium_inner.y + stripe * (stadium_inner.h // 8), stadium_inner.w, stadium_inner.h // 16)
+            pygame.draw.rect(self.screen, (102, 144, 74), stripe_rect, 0, border_radius=8)
+        pygame.draw.line(self.screen, (232, 240, 232), (stadium_inner.centerx, stadium_inner.top + 20), (stadium_inner.centerx, stadium_inner.bottom - 20), 3)
+        pygame.draw.circle(self.screen, (232, 240, 232), stadium_inner.center, 74, 3)
+        pygame.draw.rect(self.screen, (232, 240, 232), (stadium_inner.left + 22, stadium_inner.centery - 144, 126, 288), 3)
+        pygame.draw.rect(self.screen, (232, 240, 232), (stadium_inner.right - 148, stadium_inner.centery - 144, 126, 288), 3)
+        pygame.draw.rect(self.screen, (232, 240, 232), (stadium_inner.left + 22, stadium_inner.centery - 76, 58, 152), 3)
+        pygame.draw.rect(self.screen, (232, 240, 232), (stadium_inner.right - 80, stadium_inner.centery - 76, 58, 152), 3)
 
-        self.screen.blit(self.small.render("Selected Player", True, WHITE), (left_panel.x + 12, left_panel.y + 10))
+        self.screen.blit(self.big.render("MY TEAM", True, WHITE), (54, 36))
+        team_picker = pygame.Rect(sidebar.x + 18, sidebar.y + 18, sidebar.w - 36, 54)
+        self.draw_glass_panel(team_picker, accent=(120, 132, 148), radius=14, fill=(60, 62, 64, 236))
+        self.screen.blit(self.font.render("MY TEAM", True, WHITE), (team_picker.x + 18, team_picker.y + 14))
+        pygame.draw.polygon(self.screen, (220, 228, 236), [(team_picker.right - 30, team_picker.y + 22), (team_picker.right - 14, team_picker.y + 22), (team_picker.right - 22, team_picker.y + 34)])
+
+        crest_box = pygame.Rect(sidebar.x + 18, sidebar.y + 88, sidebar.w - 36, 170)
+        self.draw_glass_panel(crest_box, accent=(76, 84, 96), radius=18, fill=(20, 24, 30, 210))
+        badge_text = (self.ensure_fantasy_club_defaults().get("badge") if self.game_mode == "FANTASY" else None)
+        crest_label = (self.fantasy_team_name.strip() or self.user_team or "CLUB")[:12] if self.game_mode == "FANTASY" else (self.user_team or "CLUB")[:12]
+        self.screen.blit(self.big.render(crest_label, True, WHITE), (crest_box.x + 20, crest_box.y + 30))
+        ovr_value = 0
+        if self.user_starting:
+            ovr_value = round(sum(player[2] for player in self.user_starting) / len(self.user_starting))
+        ovr_box = pygame.Rect(crest_box.right - 102, crest_box.y + 26, 82, 98)
+        pygame.draw.rect(self.screen, (174, 62, 82), ovr_box, 0, border_radius=18)
+        pygame.draw.rect(self.screen, (255, 218, 230), ovr_box, 3, border_radius=18)
+        self.screen.blit(self.small.render("OVR", True, WHITE), (ovr_box.x + 20, ovr_box.y + 14))
+        self.screen.blit(self.big.render(str(ovr_value or "--"), True, WHITE), (ovr_box.x + 14, ovr_box.y + 40))
+        self.screen.blit(self.big.render(formation_name, True, WHITE), (crest_box.x + 20, crest_box.y + 110))
         if self.game_mode == "FANTASY":
-            self.screen.blit(self.small.render(f"Team Chem {self.fantasy_chemistry_total}/33", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 26))
-        self.draw_neon_chip(left_panel.x + 12, left_panel.y + 52, "Tactics", accent=(244, 206, 84), width=100)
-        self.screen.blit(self.small.render(f"T open tactics page", True, (220, 228, 236)), (left_panel.x + 18, left_panel.y + 82))
-        self.screen.blit(self.small.render(f"Current shape: {formation_name}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 112))
-        self.screen.blit(self.small.render("Bench", True, WHITE), (bench_panel.x + 12, bench_panel.y + 10))
-        self.screen.blit(self.small.render("Reserves", True, WHITE), (right_panel.x + 12, right_panel.y + 10))
+            self.screen.blit(self.font.render(f"Chem {self.fantasy_chemistry_total}/33", True, (230, 236, 230)), (crest_box.x + 20, crest_box.y + 144))
+
+        button_specs = [
+            ("AUTO BUILD", "A", "auto"),
+            ("RESERVES", "R", "reserves"),
+            ("TEAM EDITING", "T", "tactics"),
+        ]
+        button_y = sidebar.y + 286
+        for label, key_hint, action in button_specs:
+            rect = pygame.Rect(sidebar.x + 18, button_y, sidebar.w - 36, 70)
+            self.lineup_action_rects[action] = rect
+            accent = (94, 106, 118)
+            if action == "reserves":
+                accent = (90, 220, 130)
+            elif action == "tactics":
+                accent = (244, 206, 84)
+            self.draw_glass_panel(rect, accent=accent, radius=16, fill=(54, 58, 62, 238))
+            self.screen.blit(self.font.render(label, True, WHITE), (rect.x + 24, rect.y + 18))
+            self.screen.blit(self.small.render(f"Key {key_hint}", True, (220, 228, 236)), (rect.right - 64, rect.y + 24))
+            button_y += 86
+
+        selected_entry = None
+        if self.lineup_col == 0 and self.user_starting and self.lineup_idx < len(self.user_starting):
+            selected_entry = self.user_starting[self.lineup_idx]
+        elif self.lineup_col == 1 and self.user_bench and self.lineup_idx < len(self.user_bench):
+            selected_entry = self.user_bench[self.lineup_idx]
+        elif self.user_starting:
+            selected_entry = self.user_starting[0]
+        if selected_entry:
+            name, num, rating = selected_entry
+            meta = self.get_fantasy_card_meta(name, num, rating) or self.get_fantasy_card_meta(name) or {}
+            self.screen.blit(self.font.render(name[:18], True, WHITE), (sidebar.x + 22, 566))
+            self.screen.blit(self.small.render(f"OVR {rating} | {meta.get('position', 'ST')} | {meta.get('team', self.user_team or '')}", True, (214, 220, 228)), (sidebar.x + 22, 596))
+            if self.game_mode == "FANTASY":
+                chem = self.fantasy_chemistry_map.get((name, num, rating), 0)
+                self.screen.blit(self.small.render(f"Chemistry {chem}/3 | Promo {meta.get('promo', 'Base')}", True, (214, 220, 228)), (sidebar.x + 22, 618))
+            self.screen.blit(self.small.render("ENTER select | TAB switch XI/bench | SPACE play", True, (190, 198, 208)), (sidebar.x + 22, 664))
 
         positions = self.get_team_positions(self.user_team, "home")
         role_map = [p[2] for p in positions]
         field_left = FIELD_MARGIN
         field_width = WIDTH - 2 * FIELD_MARGIN
         field_height = HEIGHT - 2 * FIELD_MARGIN
-        card_w = 86
-        card_h = 106
+        card_w = 108
+        card_h = 134
 
         for i, entry in enumerate(self.user_starting):
-            is_selected = self.lineup_col == 0 and i == self.lineup_idx
-            is_pick = self.lineup_pick == (0, i)
             px, py, role = positions[i]
             rel_x = (px - field_left) / field_width
             rel_y = (py - FIELD_MARGIN) / field_height
-            cx = pitch_rect.x + rel_x * pitch_rect.w - card_w / 2
-            cy = pitch_rect.y + rel_y * pitch_rect.h - card_h / 2
-            rect = pygame.Rect(int(cx), int(cy), card_w, card_h)
-            self.lineup_rects[(0, i)] = rect
+            cx = stadium_inner.x + rel_x * stadium_inner.w - card_w / 2
+            cy = stadium_inner.y + rel_y * stadium_inner.h - card_h / 2
+            self.lineup_rects[(0, i)] = pygame.Rect(int(cx), int(cy), card_w, card_h)
         if self.game_mode == "FANTASY":
             link_colors = {
                 3: (90, 220, 130),
@@ -11788,135 +12163,84 @@ class Game:
                     continue
                 a_rect = self.lineup_rects[(0, a_idx)]
                 b_rect = self.lineup_rects[(0, b_idx)]
-                ax, ay = a_rect.centerx, a_rect.centery
-                bx, by = b_rect.centerx, b_rect.centery
-                pygame.draw.line(self.screen, link_colors.get(strength, (220, 92, 92)), (ax, ay), (bx, by), 5 if strength >= 3 else 4 if strength == 2 else 3)
-                mid_x = (ax + bx) // 2
-                mid_y = (ay + by) // 2
-                self.screen.blit(self.small.render(label[:5], True, link_colors.get(strength, WHITE)), (mid_x - 12, mid_y - 8))
+                pygame.draw.line(self.screen, link_colors.get(strength, (220, 92, 92)), a_rect.center, b_rect.center, 5 if strength >= 2 else 3)
+                mid_x = (a_rect.centerx + b_rect.centerx) // 2
+                mid_y = (a_rect.centery + b_rect.centery) // 2
+                self.screen.blit(self.small.render(label[:5], True, link_colors.get(strength, WHITE)), (mid_x - 14, mid_y - 8))
         for i, entry in enumerate(self.user_starting):
+            rect = self.lineup_rects[(0, i)]
             is_selected = self.lineup_col == 0 and i == self.lineup_idx
             is_pick = self.lineup_pick == (0, i)
-            role = role_map[i]
-            rect = self.lineup_rects[(0, i)]
-            self.lineup_rects[(0, i)] = self.draw_squad_card(rect.x, rect.y, card_w, card_h, entry, role=role, selected=is_selected, picked=is_pick)
+            self.lineup_rects[(0, i)] = self.draw_squad_card(rect.x, rect.y, card_w, card_h, entry, role=role_map[i], selected=is_selected, picked=is_pick)
 
-        stat_entry = None
-        if self.lineup_col == 0 and self.user_starting and self.lineup_idx < len(self.user_starting):
-            stat_entry = self.user_starting[self.lineup_idx]
-        elif self.lineup_col == 1 and self.user_bench and self.lineup_idx < len(self.user_bench):
-            stat_entry = self.user_bench[self.lineup_idx]
-        elif self.lineup_col == 2 and self.user_reserves and self.lineup_idx < len(self.user_reserves):
-            stat_entry = self.user_reserves[self.lineup_idx]
+        self.screen.blit(self.font.render("RESERVES", True, WHITE), (bench_strip.x + 12, bench_strip.y + 12))
+        self.screen.blit(self.small.render(f"{len(self.user_reserves)} saved off-pitch | press R", True, (200, 208, 220)), (bench_strip.x + 12, bench_strip.y + 42))
+        preview_slots = min(7, len(self.user_bench))
+        for slot in range(preview_slots):
+            entry = self.user_bench[slot]
+            x = bench_strip.x + 210 + slot * 84
+            y = bench_strip.y + 10
+            is_selected = self.lineup_col == 1 and slot == self.lineup_idx
+            is_pick = self.lineup_pick == (1, slot)
+            self.lineup_rects[(1, slot)] = self.draw_squad_card(x, y, 76, 94, entry, role="SUB", selected=is_selected, picked=is_pick)
+        if len(self.user_bench) > preview_slots:
+            self.screen.blit(self.small.render(f"+{len(self.user_bench) - preview_slots}", True, (220, 228, 236)), (bench_strip.right - 44, bench_strip.y + 46))
 
-        if stat_entry:
-            name, num, rating = stat_entry
-            card_meta = self.get_fantasy_card_meta(name, num, rating) or self.get_fantasy_card_meta(name)
-            rarity = card_meta.get("rarity", "Base") if card_meta else "Base"
-            promo = card_meta.get("promo", "Base") if card_meta else "Base"
-            league = card_meta.get("league", get_team_league(card_meta.get("team", ""))) if card_meta else get_team_league("")
-            preferred_position = card_meta.get("position", "ST") if card_meta else "ST"
-            traits = card_meta.get("traits", []) if card_meta else []
-            evo_level = card_meta.get("evo_level", 0) if card_meta else 0
-            chemistry = self.fantasy_chemistry_map.get((name, num, rating), 0) if self.game_mode == "FANTASY" else 0
-            self.screen.blit(self.font.render(f"{name}", True, WHITE), (left_panel.x + 12, left_panel.y + 150))
-            self.screen.blit(self.small.render(f"#{num}  OVR {rating}", True, (200, 210, 220)), (left_panel.x + 12, left_panel.y + 174))
-            self.screen.blit(self.small.render(f"Rarity: {rarity}  Promo: {promo}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 194))
-            self.screen.blit(self.small.render(f"League: {league}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 212))
-            self.screen.blit(self.small.render(f"Preferred Pos: {preferred_position}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 230))
-            if self.game_mode == "FANTASY":
-                evo_text = f"Evolution: Level {evo_level}" if evo_level > 0 else "Evolution: None"
-                self.screen.blit(self.small.render(f"Chemistry: {chemistry}/3", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 248))
-                self.screen.blit(self.small.render(evo_text, True, (170, 235, 210) if evo_level > 0 else (220, 228, 236)), (left_panel.x + 12, left_panel.y + 266))
-                chem_tags = " ".join(self.fantasy_chemistry_breakdown.get((name, num, rating), [])) or "None"
-                self.screen.blit(self.small.render(f"Chem Tags: {chem_tags[:20]}", True, (220, 228, 236)), (left_panel.x + 12, left_panel.y + 284))
-            effective = rating + chemistry
-            pace = int(80 * (effective / 100))
-            pass_pct = int(70 * (effective / 100))
-            shoot = int(70 * (effective / 100))
-            tackle = int(65 * (effective / 100))
-            bars = [("PAC", pace), ("PAS", pass_pct), ("SHO", shoot), ("TAC", tackle)]
-            y = left_panel.y + (318 if self.game_mode == "FANTASY" else 260)
-            for label, value in bars:
-                self.screen.blit(self.small.render(label, True, WHITE), (left_panel.x + 12, y))
-                pygame.draw.rect(self.screen, (40, 48, 62), (left_panel.x + 52, y + 2, 120, 8), 0, border_radius=4)
-                pygame.draw.rect(self.screen, LIGHT_GREEN, (left_panel.x + 52, y + 2, int(120 * (value / 100)), 8), 0, border_radius=4)
-                y += 28
-            skill_text = ", ".join(traits) if traits else "None"
-            self.screen.blit(self.small.render("Skills:", True, WHITE), (left_panel.x + 12, y + 4))
-            skill_lines = [skill_text[i:i + 24] for i in range(0, len(skill_text), 24)] or ["None"]
-            for line_idx, line in enumerate(skill_lines[:2]):
-                self.screen.blit(self.small.render(line, True, (200, 210, 220)), (left_panel.x + 12, y + 24 + line_idx * 18))
-            goals = self.get_player_stat(name, "goals")
-            assists = self.get_player_stat(name, "assists")
-            clean = self.get_player_stat(name, "clean_sheets")
-            tackles = self.get_player_stat(name, "tackles")
-            stat_y = y + 64
-            self.screen.blit(self.small.render(f"{goals} Goals", True, (200, 210, 220)), (left_panel.x + 12, stat_y))
-            self.screen.blit(self.small.render(f"{assists} Assists", True, (200, 210, 220)), (left_panel.x + 12, stat_y + 20))
-            self.screen.blit(self.small.render(f"{clean} Clean Sheets", True, (200, 210, 220)), (left_panel.x + 12, stat_y + 40))
-            self.screen.blit(self.small.render(f"{tackles} Tackles", True, (200, 210, 220)), (left_panel.x + 12, stat_y + 60))
+        if self.pending_fixture:
+            self.draw_kit_picker(936, 26, home, away)
+        self.draw_fc_bottom_nav([("A", "AUTO"), ("R", "RESERVES"), ("T", "TACTICS"), ("SPACE", "PLAY"), ("ESC", "BACK")], active_index=1)
 
-        bench_active = self.lineup_col == 1 or (self.lineup_pick and self.lineup_pick[0] == 1)
-        bench_card_w = 80 if not bench_active else 92
-        bench_card_h = 96 if not bench_active else 110
-        bench_spacing = 12
-        bench_visible = 9 if not bench_active else 8
-        bench_start, bench_end = visible_range(len(self.user_bench), self.lineup_idx if self.lineup_col == 1 else 0, bench_visible)
-        if not bench_active:
-            self.screen.blit(self.small.render("Move to bench to expand", True, (180, 190, 205)), (bench_panel.x + 12, bench_panel.y + 36))
-            preview_count = min(5, len(self.user_bench))
-            for draw_idx, i in enumerate(range(preview_count)):
-                entry = self.user_bench[i]
-                x = bench_panel.x + 12 + draw_idx * 92
-                y = bench_panel.y + 18
-                rect = self.draw_squad_card(x, y, 72, 88, entry, role="SUB")
-                self.lineup_rects[(1, i)] = rect
-            if len(self.user_bench) > preview_count:
-                self.screen.blit(self.small.render(f"+{len(self.user_bench) - preview_count} more", True, (180, 190, 205)), (bench_panel.right - 86, bench_panel.y + 84))
-        else:
-            expand_rect = pygame.Rect(210, 540, 1010, 190)
-            shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            shade.fill((0, 0, 0, 80))
-            self.screen.blit(shade, (0, 0))
-            pygame.draw.rect(self.screen, (24, 30, 42), expand_rect, 0, border_radius=20)
-            pygame.draw.rect(self.screen, (72, 92, 128), expand_rect, 3, border_radius=20)
-            self.screen.blit(self.font.render("Bench", True, WHITE), (expand_rect.x + 16, expand_rect.y + 12))
-            self.screen.blit(self.small.render("UP/DOWN select | ENTER swap | TAB to move on", True, (200, 210, 220)), (expand_rect.x + 16, expand_rect.y + 40))
-            for draw_idx, i in enumerate(range(bench_start, bench_end)):
-                entry = self.user_bench[i]
-                x = expand_rect.x + 18 + draw_idx * (bench_card_w + bench_spacing)
-                y = expand_rect.y + 66
-                is_selected = self.lineup_col == 1 and i == self.lineup_idx
-                is_pick = self.lineup_pick == (1, i)
-                rect = self.draw_squad_card(x, y, bench_card_w, bench_card_h, entry, role="SUB", selected=is_selected, picked=is_pick)
-                self.lineup_rects[(1, i)] = rect
-
-        reserve_line_h = 26
-        reserve_visible = 20
-        reserve_start, reserve_end = visible_range(len(self.user_reserves), self.lineup_idx if self.lineup_col == 2 else 0, reserve_visible)
-        y = right_panel.y + 40
-        for i in range(reserve_start, reserve_end):
-            entry = self.user_reserves[i]
-            is_selected = self.lineup_col == 2 and i == self.lineup_idx
-            is_pick = self.lineup_pick == (2, i)
-            row_rect = pygame.Rect(right_panel.x + 8, y - 2, right_panel.w - 16, reserve_line_h)
-            if is_selected:
-                pygame.draw.rect(self.screen, (70, 82, 110), row_rect, 0, border_radius=8)
-            elif i % 2 == 0:
-                pygame.draw.rect(self.screen, (28, 34, 46), row_rect, 0, border_radius=8)
-            if is_pick:
-                pygame.draw.rect(self.screen, CYAN, row_rect, 2, border_radius=8)
-            name, num, rating = entry
-            label = f"{num:>2}  {name[:14]:<14} {rating:>2}"
-            self.screen.blit(self.small.render(label, True, WHITE), (right_panel.x + 12, y))
-            self.lineup_rects[(2, i)] = row_rect
-            y += reserve_line_h
-
-        self.screen.blit(self.small.render("Drag or ENTER to swap | T tactics | TAB/ARROWS move | SPACE start | ESC back", True, (190, 200, 210)), (24, HEIGHT - 28))
-        if self.game_mode == "FANTASY":
-            self.screen.blit(self.small.render("Links: club/nation/league | green strong | gold medium | red weak", True, (190, 200, 210)), (430, HEIGHT - 28))
-        self.draw_fc_bottom_nav([("T", "TACTICS"), ("TAB", "SWAP"), ("SPACE", "PLAY"), ("ESC", "BACK")], active_index=1)
+    def draw_lineup_reserves_page(self):
+        self.draw_modern_backdrop((96, 220, 120), (70, 92, 128))
+        self.lineup_rects = {}
+        subtitle = self.user_team or "No club selected"
+        self.draw_fc_top_bar(self.user_team or "Reserves", subtitle, counters=[((96, 220, 120), len(self.user_reserves))], accent=(96, 220, 120))
+        self.draw_hero_header("Reserve Squad", "Keep long-form depth off the main lineup page and swap players in when needed.", accent=(96, 220, 120), accent_two=(86, 170, 255), right_text=f"{len(self.user_reserves)} SAVED")
+        left_panel = pygame.Rect(28, 154, 300, 620)
+        grid_panel = pygame.Rect(352, 154, 828, 620)
+        self.draw_glass_panel(left_panel, accent=(90, 220, 130), radius=24, fill=(22, 26, 32, 228))
+        self.draw_glass_panel(grid_panel, accent=(86, 170, 255), radius=24, fill=(18, 24, 34, 228))
+        self.screen.blit(self.font.render("Reserve Actions", True, WHITE), (left_panel.x + 18, left_panel.y + 18))
+        action_lines = [
+            "UP/DOWN move through reserves",
+            "ENTER select or finish a swap",
+            "TAB returns to main lineup",
+            "ESC closes reserves page",
+        ]
+        action_y = left_panel.y + 60
+        for line in action_lines:
+            self.screen.blit(self.small.render(line, True, (210, 218, 230)), (left_panel.x + 18, action_y))
+            action_y += 28
+        if self.lineup_pick:
+            source_col, source_idx = self.lineup_pick
+            source_list = self.get_lineup_list(source_col)
+            if 0 <= source_idx < len(source_list):
+                picked = source_list[source_idx]
+                self.screen.blit(self.small.render(f"Swap target: {picked[0][:18]}", True, (244, 206, 84)), (left_panel.x + 18, action_y + 8))
+        selected = None
+        if self.user_reserves and self.lineup_idx < len(self.user_reserves):
+            selected = self.user_reserves[self.lineup_idx]
+        if selected:
+            meta = self.get_fantasy_card_meta(selected[0], selected[1], selected[2]) or self.get_fantasy_card_meta(selected[0]) or {}
+            self.screen.blit(self.font.render(selected[0][:18], True, WHITE), (left_panel.x + 18, left_panel.bottom - 150))
+            self.screen.blit(self.small.render(f"OVR {selected[2]} | {meta.get('position', 'ST')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.bottom - 118))
+            self.screen.blit(self.small.render(f"{meta.get('team', self.user_team or '')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.bottom - 94))
+        cols = 6
+        card_w = 112
+        card_h = 138
+        spacing_x = 18
+        spacing_y = 22
+        start_x = grid_panel.x + 20
+        start_y = grid_panel.y + 26
+        for idx, entry in enumerate(self.user_reserves):
+            row = idx // cols
+            col = idx % cols
+            x = start_x + col * (card_w + spacing_x)
+            y = start_y + row * (card_h + spacing_y)
+            is_selected = self.lineup_idx == idx
+            is_pick = self.lineup_pick == (2, idx)
+            self.lineup_rects[(2, idx)] = self.draw_squad_card(x, y, card_w, card_h, entry, role="RES", selected=is_selected, picked=is_pick)
+        self.draw_fc_bottom_nav([("ENTER", "SELECT"), ("TAB", "BACK TO XI"), ("ESC", "BACK")], active_index=0)
 
     def draw_lineup_tactics_page(self):
         self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
@@ -12215,15 +12539,20 @@ class Game:
         self.screen.blit(self.title_font.render(event_name[:18].upper(), True, WHITE), (featured.x + 22, featured.y + 18))
         self.screen.blit(self.small.render(event_sub[:62], True, (232, 234, 240)), (featured.x + 24, featured.y + 62))
         self.screen.blit(self.small.render("P/W store  |  D draft  |  Event rewards live now", True, (232, 234, 240)), (featured.x + 24, featured.y + 88))
+        featured_cards = self.event_featured_cards(3)
         card_y = featured.y + 118
         for idx in range(3):
-            card_rect = pygame.Rect(featured.x + 24 + idx * 136, card_y, 108, 108)
-            self.draw_glass_panel(card_rect, accent=event_colors[1], radius=18, fill=(24, 20, 18, 206))
-            inner = pygame.Rect(card_rect.x + 14, card_rect.y + 16, card_rect.w - 28, card_rect.h - 32)
-            pygame.draw.rect(self.screen, (255, 248, 220, 36), inner, 0, border_radius=14)
-            pygame.draw.polygon(self.screen, (255, 236, 172), [(inner.centerx, inner.y + 12), (inner.right - 18, inner.centery), (inner.centerx, inner.bottom - 12), (inner.x + 18, inner.centery)], 2)
-            if idx == 1:
-                pygame.draw.line(self.screen, WHITE, (inner.x + 16, inner.y + 16), (inner.right - 14, inner.bottom - 16), 4)
+            card_x = featured.x + 24 + idx * 136
+            if idx < len(featured_cards):
+                card_meta = dict(featured_cards[idx])
+                card_meta.setdefault("league", get_team_league(card_meta.get("team", "")))
+                self.draw_card(card_x, card_y - 6, 108, 146, card_meta, face="front")
+            else:
+                card_rect = pygame.Rect(card_x, card_y + 10, 108, 108)
+                self.draw_glass_panel(card_rect, accent=event_colors[1], radius=18, fill=(24, 20, 18, 206))
+                inner = pygame.Rect(card_rect.x + 14, card_rect.y + 16, card_rect.w - 28, card_rect.h - 32)
+                pygame.draw.rect(self.screen, (255, 248, 220, 36), inner, 0, border_radius=14)
+                pygame.draw.polygon(self.screen, (255, 236, 172), [(inner.centerx, inner.y + 12), (inner.right - 18, inner.centery), (inner.centerx, inner.bottom - 12), (inner.x + 18, inner.centery)], 2)
         self.screen.blit(self.small.render(f"Live now  |  Event evo {self.event_evo_tokens}  |  Packs {len(self.my_packs)}", True, (232, 234, 240)), (featured.x + 24, featured.bottom - 28))
 
         club_tile = pygame.Rect(36, 404, 350, 206)
@@ -12752,6 +13081,8 @@ class Game:
 
         if self.commentary_timer > 0:
             self.commentary_timer -= 1 / FPS
+        if self.dev_action_timer > 0:
+            self.dev_action_timer = max(0.0, self.dev_action_timer - dt)
         if self.walkout_timer > 0:
             self.walkout_timer = max(0.0, self.walkout_timer - dt)
         if abs(self.collection_flip_progress - self.collection_flip_target) > 0.001:
@@ -12901,6 +13232,8 @@ class Game:
             self.draw_player_select()
         elif self.state == "LINEUP":
             self.draw_lineup_select()
+        elif self.state == "LINEUP_RESERVES":
+            self.draw_lineup_reserves_page()
         elif self.state == "LINEUP_TACTICS":
             self.draw_lineup_tactics_page()
         elif self.state == "LEAGUE":
