@@ -3671,6 +3671,30 @@ class Game:
         self.user_reserves = reserves
         self.user_squad = starters + bench + reserves
 
+    def rebuild_user_lineup(self):
+        if not self.user_team:
+            return
+        if self.game_mode == "FANTASY" and self.fantasy_roster:
+            used_numbers = set()
+            rebuilt_lineup = []
+            rebuilt_reserves = []
+            for i, card in enumerate(self.fantasy_roster):
+                suggested = int(card.get("number", random.randint(1, 99)))
+                number = suggested
+                while number in used_numbers:
+                    number += 1
+                used_numbers.add(number)
+                card["number"] = number
+                entry = (card["name"], number, card["rating"])
+                if i < 11:
+                    rebuilt_lineup.append(entry)
+                else:
+                    rebuilt_reserves.append(entry)
+            TEAM_LINEUPS[self.user_team] = rebuilt_lineup
+            ROSTER_DATA[self.user_team] = rebuilt_reserves
+        self.build_user_squad()
+        self.persist_user_squad_layout()
+
     def persist_user_squad_layout(self):
         if not self.user_team:
             return
@@ -12143,12 +12167,22 @@ class Game:
         card_w = 108
         card_h = 134
 
+        pos_x_values = [pos[0] for pos in positions] or [field_left, field_left + field_width]
+        pos_y_values = [pos[1] for pos in positions] or [FIELD_MARGIN, FIELD_MARGIN + field_height]
+        min_pos_x = min(pos_x_values)
+        max_pos_x = max(pos_x_values)
+        min_pos_y = min(pos_y_values)
+        max_pos_y = max(pos_y_values)
+        usable_w = stadium_inner.w - 150
+        usable_h = stadium_inner.h - 140
+        left_pad = stadium_inner.x + 75
+        top_pad = stadium_inner.y + 44
         for i, entry in enumerate(self.user_starting):
             px, py, role = positions[i]
-            rel_x = (px - field_left) / field_width
-            rel_y = (py - FIELD_MARGIN) / field_height
-            cx = stadium_inner.x + rel_x * stadium_inner.w - card_w / 2
-            cy = stadium_inner.y + rel_y * stadium_inner.h - card_h / 2
+            depth = 0.5 if max_pos_x == min_pos_x else (px - min_pos_x) / (max_pos_x - min_pos_x)
+            lateral = 0.5 if max_pos_y == min_pos_y else (py - min_pos_y) / (max_pos_y - min_pos_y)
+            cx = left_pad + lateral * usable_w - card_w / 2
+            cy = top_pad + (1.0 - depth) * usable_h - card_h / 2
             self.lineup_rects[(0, i)] = pygame.Rect(int(cx), int(cy), card_w, card_h)
         if self.game_mode == "FANTASY":
             link_colors = {
