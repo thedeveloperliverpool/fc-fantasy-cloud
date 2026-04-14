@@ -41,7 +41,6 @@ KICK_RADIUS = 32
 DRIBBLE_PUSH = 0.7
 BALL_FOLLOW_STIFFNESS = 0.25
 BALL_FOLLOW_DAMP = 0.78
-AI_DIFFICULTY = 0.12  # lower = easier for player
 DRIBBLE_TENDENCY = 0.75  # higher = more dribbling vs passing
 SHOOT_TENDENCY = 0.08  # base chance to shoot when in range
 CORNER_ARC_RADIUS = 12
@@ -1625,7 +1624,7 @@ class Game:
         self.title_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], 40, bold=True)
         self.micro = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], 12)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | PENALTY_SCENE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1773,6 +1772,9 @@ class Game:
         self.match_scene_timer = 0.0
         self.match_scene_total = 0.0
         self.match_player_stats = {}
+        self.match_cards = {}
+        self.match_fouls = {"H": 0, "A": 0}
+        self.penalty_state = {}
         self.show_calendar = False
         self.show_cup_bracket = False
         self.show_academy = False
@@ -1851,12 +1853,15 @@ class Game:
         self.user_is_home = True
 
         self.stats = {
-            "H": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0},
-            "A": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0},
+            "H": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0, "xg": 0.0},
+            "A": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0, "xg": 0.0},
         }
         self.next_insight_time = 15.0
         self.commentary_insight("pre")
         self.pending_pass_team = None
+        self.last_possession_team = None
+        self.transition_team = None
+        self.transition_ticks = 0
 
         self.reset_positions(kickoff=True)
         self.add_commentary("Select a mode to start")
@@ -3571,6 +3576,43 @@ class Game:
             self.screen.blit(self.small.render("+50 coins match reward locked", True, LIGHT_GREEN), (panel.x + 30, panel.bottom - 64))
         self.screen.blit(self.small.render("ENTER or SPACE continue", True, (190, 200, 215)), (panel.x + 30, panel.bottom - 34))
 
+    def draw_penalty_scene(self):
+        if not self.penalty_state:
+            return
+        taker = self.penalty_state["taker"]
+        keeper = self.penalty_state["keeper"]
+        mode = self.penalty_user_mode()
+        self.screen.fill((8, 12, 18))
+        pitch = pygame.Rect(120, 110, WIDTH - 240, HEIGHT - 220)
+        pygame.draw.rect(self.screen, (22, 82, 46), pitch, 0, border_radius=26)
+        pygame.draw.rect(self.screen, (232, 236, 238), pitch, 2, border_radius=26)
+        goal = pygame.Rect(WIDTH // 2 - 150, pitch.y + 24, 300, 72)
+        pygame.draw.rect(self.screen, (245, 245, 245), goal, 4, border_radius=6)
+        spot = (WIDTH // 2, pitch.bottom - 130)
+        pygame.draw.circle(self.screen, (245, 245, 245), spot, 4)
+        pygame.draw.arc(self.screen, (245, 245, 245), pygame.Rect(spot[0] - 70, spot[1] - 68, 140, 98), math.pi * 0.12, math.pi * 0.88, 2)
+        self.screen.blit(self.big.render("PENALTY", True, WHITE), (48, 32))
+        self.screen.blit(self.font.render(f"{taker.name} vs {keeper.name}", True, (214, 222, 236)), (48, 72))
+        self.screen.blit(self.small.render("Arrows aim and dive | K shoot", True, (244, 206, 84)), (48, 102))
+
+        aim_x = self.penalty_state.get("aim_x", 0.0)
+        aim_y = self.penalty_state.get("aim_y", 0.0)
+        dive_x = self.penalty_state.get("dive_x", 0.0)
+        dive_y = self.penalty_state.get("dive_y", 0.0)
+        target_pos = (goal.centerx + int(aim_x * 120), goal.centery + int(aim_y * 24))
+        dive_pos = (goal.centerx + int(dive_x * 120), goal.centery + int(dive_y * 24))
+        pygame.draw.circle(self.screen, (244, 206, 84), target_pos, 12, 2)
+        pygame.draw.circle(self.screen, (86, 170, 255), dive_pos, 12, 2)
+        keeper_pos = dive_pos if self.penalty_state.get("resolved") else (goal.centerx, goal.y + 36)
+        pygame.draw.circle(self.screen, (255, 96, 96), keeper_pos, 18)
+        pygame.draw.circle(self.screen, (20, 20, 20), spot, 20)
+        pygame.draw.circle(self.screen, WHITE, (spot[0], spot[1] - 34), 14)
+        role_line = "You are taking the penalty" if mode == "shooter" else "You are controlling the keeper" if mode == "keeper" else "AI penalty"
+        self.screen.blit(self.font.render(role_line, True, WHITE), (48, HEIGHT - 124))
+        result = self.penalty_state.get("result", "")
+        if result:
+            self.screen.blit(self.font.render(result[:72], True, WHITE), (48, HEIGHT - 88))
+
     def award_player(self, name, award):
         if not name:
             return
@@ -4065,6 +4107,7 @@ class Game:
             "ladder": {"week": 1, "points": 0, "played": 0, "wins": 0, "streak": 0, "target": 6, "reward_pack": "elite", "reward_coins": 160, "reward_type": "hybrid"},
             "cup": {"round": 1, "alive": True, "wins": 0, "reward_pack": "elite", "reward_type": "pack"},
             "weekend": {"played": 0, "wins": 0, "target": 5, "reward_pack": "gold", "reward_coins": 80, "active": True, "reward_type": "hybrid"},
+            "penalty_shootout": {"played": 0, "wins": 0, "target": 3, "reward_coins": 140, "reward_type": "coins", "streak": 0},
             "theme": {"name": self.current_theme, "progress": 0, "target": 3, "reward_type": "pick", "pick_count": 3, "pick_band": "Mythic"},
             "draft": {"wins": 0, "losses": 0, "target": 4, "max_losses": 2, "reward_type": "bundle", "reward_pack": "omega", "reward_coins": 260, "pick_count": 3, "pick_band": "Legend", "ready": False},
             "champions": {
@@ -4393,6 +4436,7 @@ class Game:
             ("online_tournament", "Online Tournament", "Automatic bracket runs with your live squad"),
             ("cup", "Knockout Cup", "Progress for an Elite Pack reward"),
             ("weekend", "Weekend Challenge", "String wins together for pack and coin rewards"),
+            ("penalty_shootout", "Penalty Shootout", "Standalone penalty battles for coin rewards"),
             ("theme", theme_name, "Play themed matches for a featured player reward"),
             ("silver", "Silver Cup", "Win three matches for a Silver Pack and coins"),
             ("promo", "Promo Cup", "Clear wins boost promo packs"),
@@ -5464,6 +5508,159 @@ class Game:
             accent = self.blend_color(accent, evo_base[1], 0.82)
         return base, accent
 
+    def card_border_tier(self, player):
+        promo = player.get("promo", "Base")
+        rarity = player.get("rarity") or self.card_rarity_from_rating(player.get("rating", 70), promo)
+        if rarity == "GOAT":
+            return "GOAT"
+        if rarity == "Icon":
+            return "Icon"
+        if promo != "Base":
+            return "Signature/Promo Exclusive"
+        if rarity in ("Legend", "Omega", "Immortal", "Eternal", "Celestial", "Transcendent", "Ascended", "Mythic", "Diamond"):
+            return "Elite"
+        if rarity in ("Elite", "Platinum", "Gold"):
+            return "Rare"
+        return "Common"
+
+    def draw_card_bottom_gem(self, card, accent, tier):
+        gem_w = max(12, int(card.w * 0.11))
+        gem_h = max(10, int(card.h * 0.08))
+        gem = pygame.Rect(card.centerx - gem_w // 2, card.bottom - gem_h - 8, gem_w, gem_h)
+        gem_points = [
+            (gem.centerx, gem.y),
+            (gem.right, gem.y + gem.h // 3),
+            (gem.right - 3, gem.bottom - 2),
+            (gem.left + 3, gem.bottom - 2),
+            (gem.left, gem.y + gem.h // 3),
+        ]
+        inner = self.blend_color(accent, (255, 255, 255), 0.42)
+        outer = self.blend_color(accent, (20, 20, 24), 0.18)
+        pygame.draw.polygon(self.screen, outer, gem_points)
+        pygame.draw.polygon(self.screen, inner, gem_points, 2)
+        if tier in ("Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+            sparkle = [
+                (gem.centerx, gem.y - 4),
+                (gem.centerx + 4, gem.y + 2),
+                (gem.centerx, gem.y + 8),
+                (gem.centerx - 4, gem.y + 2),
+            ]
+            pygame.draw.polygon(self.screen, (255, 255, 255, 180), sparkle)
+
+    def draw_card_frame_layers(self, card, accent, tier, promo="Base", face="front"):
+        x, y, w, h = card
+        frame = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+        outer = pygame.Rect(0, 0, w, h)
+        inner = pygame.Rect(8, 8, w - 16, h - 16)
+        core = pygame.Rect(14, 14, w - 28, h - 28)
+        metal = self.blend_color(accent, (255, 242, 198), 0.38)
+        bright = self.blend_color(accent, (255, 255, 255), 0.56)
+        dark = self.blend_color(accent, (22, 24, 28), 0.34)
+
+        pygame.draw.rect(frame, (*dark, 120), outer, 0, border_radius=24)
+        pygame.draw.rect(frame, metal, outer, 3, border_radius=24)
+        pygame.draw.rect(frame, (255, 255, 255, 32), inner, 1, border_radius=20)
+
+        if tier in ("Rare", "Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+            bevel = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            pygame.draw.rect(bevel, (255, 255, 255, 18), (6, 6, w - 12, max(18, int(h * 0.10))), 0, border_radius=20)
+            pygame.draw.rect(bevel, (*bright, 70), (6, 6, w - 12, h - 12), 2, border_radius=20)
+            frame.blit(bevel, (0, 0))
+            for side in (-1, 1):
+                sx = 0 if side < 0 else w - 16
+                ribs = [
+                    (sx + 8, h * 0.18),
+                    (sx + 16 if side < 0 else sx, h * 0.12),
+                    (sx + 16 if side < 0 else sx, h * 0.84),
+                    (sx + 8, h * 0.90),
+                ]
+                pygame.draw.polygon(frame, (*metal, 110), ribs)
+
+        if tier in ("Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+            for side in (-1, 1):
+                anchor_x = 10 if side < 0 else w - 10
+                pts = [
+                    (anchor_x, h * 0.18),
+                    (anchor_x + 20 * side, h * 0.12),
+                    (anchor_x + 34 * side, h * 0.34),
+                    (anchor_x + 22 * side, h * 0.58),
+                    (anchor_x + 30 * side, h * 0.86),
+                    (anchor_x, h * 0.80),
+                ]
+                pygame.draw.polygon(frame, (*metal, 82), pts)
+                pygame.draw.lines(frame, (*bright, 100), False, pts[:4], 2)
+
+        if tier in ("Signature/Promo Exclusive", "Icon", "GOAT"):
+            for side in (-1, 1):
+                wing_base = 12 if side < 0 else w - 12
+                for idx in range(3):
+                    lift = idx * 18
+                    pts = [
+                        (wing_base, h * (0.22 + idx * 0.07)),
+                        (wing_base + side * (18 + idx * 3), h * (0.18 + idx * 0.06)),
+                        (wing_base + side * (34 + idx * 4), h * (0.28 + idx * 0.08)),
+                        (wing_base + side * (12 + idx * 2), h * (0.34 + idx * 0.09)),
+                    ]
+                    pygame.draw.polygon(frame, (*metal, max(66, 118 - idx * 18)), pts)
+                    pygame.draw.lines(frame, (*bright, 92), False, pts[:3], 2)
+
+        if tier == "Icon":
+            crest = pygame.Rect(int(w * 0.22), 14, int(w * 0.56), max(16, int(h * 0.08)))
+            pygame.draw.arc(frame, (*bright, 140), crest, math.pi, math.tau, 3)
+            pygame.draw.arc(frame, (*metal, 110), crest.inflate(-18, 10), math.pi, math.tau, 2)
+
+        if tier == "GOAT":
+            crown = [
+                (w * 0.26, 24),
+                (w * 0.36, 8),
+                (w * 0.46, 22),
+                (w * 0.54, 6),
+                (w * 0.64, 22),
+                (w * 0.74, 8),
+                (w * 0.84, 24),
+            ]
+            pygame.draw.lines(frame, (*bright, 180), False, crown, 4)
+            pygame.draw.rect(frame, (*metal, 130), (w * 0.26, 24, w * 0.58, 8), 0, border_radius=4)
+            for side in (-1, 1):
+                laurel_x = int(18 if side < 0 else w - 18)
+                for idx in range(4):
+                    leaf = [
+                        (laurel_x, h * (0.30 + idx * 0.08)),
+                        (laurel_x + side * 14, h * (0.27 + idx * 0.08)),
+                        (laurel_x + side * 24, h * (0.34 + idx * 0.08)),
+                        (laurel_x + side * 8, h * (0.37 + idx * 0.08)),
+                    ]
+                    pygame.draw.polygon(frame, (*metal, 132), leaf)
+
+        if tier == "Signature/Promo Exclusive":
+            energy = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            for idx in range(4):
+                band_y = int(h * (0.20 + idx * 0.16))
+                pygame.draw.polygon(
+                    energy,
+                    (*accent, max(28, 78 - idx * 12)),
+                    [(0, band_y), (w * 0.52, band_y - h * 0.06), (w, band_y + h * 0.04), (w * 0.42, band_y + h * 0.12)],
+                )
+            frame.blit(energy, (0, 0))
+
+        if face == "back":
+            seal = pygame.Rect(int(w * 0.22), int(h * 0.26), int(w * 0.56), int(h * 0.36))
+            pygame.draw.rect(frame, (12, 14, 18, 156), seal, 0, border_radius=18)
+            pygame.draw.rect(frame, (*metal, 120), seal, 2, border_radius=18)
+            center_x = seal.centerx
+            center_y = seal.centery
+            diamond = [
+                (center_x, center_y - 24),
+                (center_x + 28, center_y),
+                (center_x, center_y + 24),
+                (center_x - 28, center_y),
+            ]
+            pygame.draw.polygon(frame, (*bright, 120), diamond, 3)
+            pygame.draw.line(frame, (*bright, 80), (center_x - 18, center_y + 48), (center_x + 18, center_y + 48), 2)
+
+        self.screen.blit(frame, (x, y))
+        self.draw_card_bottom_gem(card, accent, tier)
+
     def fantasy_card_key(self, player):
         return (
             player.get("name"),
@@ -5745,6 +5942,22 @@ class Game:
                     weekend["played"] = 0
                     weekend["wins"] = 0
                     weekend["active"] = True
+        elif competition_key == "penalty_shootout":
+            contest = comps.get("penalty_shootout", {})
+            self.record_fantasy_competition_result(contest, won, False, user_goals, opp_goals)
+            if won:
+                contest["streak"] = contest.get("streak", 0) + 1
+                if contest["wins"] >= contest.get("target", 3):
+                    self.grant_reward("coins", reward_coins=contest.get("reward_coins", 140), title="Penalty Shootout", source="Penalty Shootout")
+                    self.add_commentary(f"Penalty Shootout reward claimed: {contest.get('reward_coins', 140)} coins")
+                    contest["wins"] = 0
+                    contest["played"] = 0
+                    contest["goals_for"] = 0
+                    contest["goals_against"] = 0
+                    contest["streak"] = 0
+            else:
+                contest["wins"] = 0
+                contest["streak"] = 0
         elif competition_key == "theme":
             theme = comps.get("theme", {})
             self.record_fantasy_competition_result(theme, won, drew, user_goals, opp_goals)
@@ -6695,8 +6908,8 @@ class Game:
 
     def draw_card_art_layers(self, rect, base_color, accent, rarity="Gold", promo="Base"):
         x, y, w, h = rect
-        dark = self.blend_color(base_color, (12, 14, 22), 0.32)
-        light = self.blend_color(base_color, WHITE, 0.18)
+        dark = self.blend_color(base_color, (10, 12, 18), 0.42)
+        light = self.blend_color(base_color, WHITE, 0.08)
         bg = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
         for i in range(int(h)):
             mix = 0 if h <= 1 else i / max(1, h - 1)
@@ -6705,52 +6918,13 @@ class Game:
         self.screen.blit(bg, (x, y))
 
         gloss = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-        pygame.draw.polygon(gloss, (255, 255, 255, 20), [(0, 0), (w * 0.52, 0), (w * 0.24, h), (0, h)])
-        pygame.draw.polygon(gloss, (*accent, 26), [(w * 0.72, 0), (w, 0), (w, h * 0.56), (w * 0.44, h * 0.18)])
-        pygame.draw.ellipse(gloss, (*accent, 18), (w * 0.16, h * 0.04, w * 0.68, h * 0.16))
-        for idx in range(6):
-            band_y = int(h * (0.16 + idx * 0.12))
-            pygame.draw.line(gloss, (255, 255, 255, 10), (0, band_y), (w, band_y - int(h * 0.04)), 2)
+        pygame.draw.polygon(gloss, (255, 255, 255, 14), [(0, 0), (w * 0.42, 0), (w * 0.18, h), (0, h)])
+        pygame.draw.polygon(gloss, (*accent, 18), [(w * 0.74, 0), (w, 0), (w, h * 0.52), (w * 0.48, h * 0.18)])
+        pygame.draw.ellipse(gloss, (*accent, 20), (w * 0.12, h * 0.02, w * 0.76, h * 0.16))
+        for idx in range(5):
+            band_y = int(h * (0.18 + idx * 0.13))
+            pygame.draw.line(gloss, (255, 255, 255, 8), (0, band_y), (w, band_y - int(h * 0.05)), 2)
         self.screen.blit(gloss, (x, y))
-
-        edge = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-        pygame.draw.rect(edge, (255, 255, 255, 12), (6, 6, w - 12, h - 12), 1, border_radius=16)
-        pygame.draw.rect(edge, (*accent, 58), (0, 0, w, 4), 0, border_radius=12)
-        pygame.draw.rect(edge, (*accent, 36), (8, 8, w - 16, h - 16), 1, border_radius=16)
-        self.screen.blit(edge, (x, y))
-        if rarity == "GOAT":
-            shine = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            for idx in range(6):
-                band_y = int(h * (0.08 + idx * 0.11))
-                pygame.draw.polygon(
-                    shine,
-                    (*accent, max(16, 70 - idx * 8)),
-                    [(0, band_y), (w * 0.70, band_y - h * 0.07), (w, band_y + h * 0.06), (w * 0.32, band_y + h * 0.14)],
-                )
-            pygame.draw.ellipse(shine, (255, 255, 255, 58), (w * 0.08, h * 0.04, w * 0.84, h * 0.18))
-            for star_idx in range(14):
-                sx = int(w * (0.12 + (star_idx % 4) * 0.20) + (star_idx // 4) * 7)
-                sy = int(h * (0.18 + (star_idx // 4) * 0.12))
-                pygame.draw.circle(shine, (255, 235, 170, 70), (sx, sy), 2)
-            pygame.draw.rect(shine, (255, 220, 120, 60), (12, 12, w - 24, h - 24), 2, border_radius=18)
-            pygame.draw.rect(shine, (255, 255, 255, 36), (18, 18, w - 36, h - 36), 1, border_radius=16)
-            self.screen.blit(shine, (x, y))
-        elif promo == "Signature":
-            shine = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            pygame.draw.rect(shine, (255, 218, 120, 54), (12, 12, w - 24, h - 24), 2, border_radius=18)
-            pygame.draw.rect(shine, (255, 255, 255, 26), (18, 18, w - 36, h - 36), 1, border_radius=16)
-            for idx in range(5):
-                band_y = int(h * (0.16 + idx * 0.12))
-                pygame.draw.polygon(
-                    shine,
-                    (*accent, max(18, 68 - idx * 10)),
-                    [(0, band_y), (w * 0.48, band_y - h * 0.08), (w, band_y + h * 0.04), (w * 0.54, band_y + h * 0.14)],
-                )
-            for star_idx in range(10):
-                sx = int(w * (0.14 + (star_idx % 5) * 0.16))
-                sy = int(h * (0.14 + (star_idx // 5) * 0.12))
-                pygame.draw.circle(shine, (255, 232, 172, 80), (sx, sy), 2)
-            self.screen.blit(shine, (x, y))
 
     def draw_icon_star(self, center_x, center_y, color):
         points = []
@@ -6785,142 +6959,193 @@ class Game:
         self.player_portrait_cache[slug] = portrait
         return portrait
 
-    def draw_card_front(self, x, y, w, h, player):
+    def portrait_layout_profile(self, player, rect):
+        tier = self.card_border_tier(player)
+        position = player.get("position", "ST")
+        scale_x = 0.84
+        scale_y = 0.80
+        offset_x = 0.0
+        offset_y = 0.05
+        if tier == "Common":
+            scale_x = 0.80
+            scale_y = 0.76
+            offset_y = 0.06
+        elif tier == "Rare":
+            scale_x = 0.82
+            scale_y = 0.78
+            offset_y = 0.05
+        elif tier == "Elite":
+            scale_x = 0.86
+            scale_y = 0.80
+            offset_y = 0.04
+        elif tier == "Signature/Promo Exclusive":
+            scale_x = 0.90
+            scale_y = 0.84
+            offset_y = 0.03
+        elif tier == "Icon":
+            scale_x = 0.88
+            scale_y = 0.82
+            offset_y = 0.04
+        elif tier == "GOAT":
+            scale_x = 0.92
+            scale_y = 0.86
+            offset_y = 0.02
+        if position in ("GK", "CB", "LB", "RB"):
+            scale_x -= 0.02
+            scale_y -= 0.02
+            offset_y += 0.02
+        return {
+            "scale_x": max(0.72, scale_x),
+            "scale_y": max(0.70, scale_y),
+            "offset_x": offset_x,
+            "offset_y": offset_y,
+            "bottom_padding": max(10, int(rect.h * 0.04)),
+        }
+
+    def draw_card_portrait(self, player, art_surface, art_rect):
+        portrait = self.load_player_portrait(player)
+        if portrait:
+            profile = self.portrait_layout_profile(player, art_rect)
+            scale = max(
+                (art_rect.w * profile["scale_x"]) / max(1, portrait.get_width()),
+                (art_rect.h * profile["scale_y"]) / max(1, portrait.get_height()),
+            )
+            scaled = pygame.transform.smoothscale(
+                portrait,
+                (
+                    max(1, int(portrait.get_width() * scale)),
+                    max(1, int(portrait.get_height() * scale)),
+                ),
+            )
+            px = int((art_rect.w - scaled.get_width()) / 2 + art_rect.w * profile["offset_x"])
+            target_top = int(art_rect.h * profile["offset_y"])
+            py = max(
+                -18,
+                min(
+                    target_top,
+                    art_rect.h - scaled.get_height() + profile["bottom_padding"],
+                ),
+            )
+            art_surface.blit(scaled, (px, py))
+            return
+        center_x = art_rect.w // 2
+        accent = self.card_theme_colors(player)[1]
+        body_color = (236, 240, 248, 210)
+        trim = (*accent, 220)
+        pygame.draw.ellipse(art_surface, (255, 255, 255, 40), (art_rect.w * 0.18, art_rect.h * 0.12, art_rect.w * 0.64, art_rect.h * 0.72))
+        pygame.draw.circle(art_surface, body_color, (center_x, int(art_rect.h * 0.25)), max(12, int(art_rect.w * 0.11)))
+        torso = [(center_x - art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.24, art_rect.h * 0.94), (center_x - art_rect.w * 0.24, art_rect.h * 0.94)]
+        pygame.draw.polygon(art_surface, body_color, torso)
+        pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.08, art_rect.h * 0.50), (center_x - art_rect.w * 0.22, art_rect.h * 0.74), 10)
+        pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.08, art_rect.h * 0.50), (center_x + art_rect.w * 0.22, art_rect.h * 0.74), 10)
+        pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.06, art_rect.h * 0.94), (center_x - art_rect.w * 0.14, art_rect.h * 1.06), 10)
+        pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.06, art_rect.h * 0.94), (center_x + art_rect.w * 0.14, art_rect.h * 1.06), 10)
+
+    def draw_unified_card_front(self, x, y, w, h, player, compact=False):
         rating = player["rating"]
         team = player["team"]
         league = player.get("league", get_team_league(team))
         tier = player.get("rarity") or self.card_tier(rating)[0]
+        border_tier = self.card_border_tier(player)
         base_color, accent = self.card_theme_colors(player)
         promo = player.get("promo", "Base")
         name = player["name"]
         evo_level = player.get("evo_level", 0)
 
-        card = pygame.Rect(int(x), int(y), int(w), int(h))
+        x = int(x)
+        y = int(y)
+        w = int(w)
+        h = int(h)
+        card = pygame.Rect(x, y, w, h)
+
         shadow = pygame.Surface((w + 24, h + 26), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, (0, 0, 0, 86), (12, 14, w, h), 0, border_radius=24)
-        pygame.draw.rect(shadow, (*accent, 30), (8, 10, w, h), 0, border_radius=24)
+        pygame.draw.rect(shadow, (0, 0, 0, 86), (12, 14, w, h), 0, border_radius=max(16, int(w * 0.10)))
+        pygame.draw.rect(shadow, (*accent, 30), (8, 10, w, h), 0, border_radius=max(16, int(w * 0.10)))
         self.screen.blit(shadow, (x - 12, y - 12))
-        pygame.draw.rect(self.screen, base_color, card, 0, border_radius=22)
+
+        pygame.draw.rect(self.screen, base_color, card, 0, border_radius=max(16, int(w * 0.10)))
         self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, promo)
+        self.draw_card_frame_layers(card, accent, border_tier, promo, face="front")
 
-        inner = pygame.Rect(x + 10, y + 10, w - 20, h - 20)
-        pygame.draw.rect(self.screen, (8, 12, 20), inner, 2, border_radius=20)
-        pygame.draw.rect(self.screen, (255, 255, 255, 10), (x + 14, y + 14, w - 28, h - 28), 1, border_radius=18)
+        title_h = max(18, int(h * 0.070))
+        title_rect = pygame.Rect(x + int(w * 0.10), y + int(h * 0.045), w - int(w * 0.20), title_h)
+        self.draw_glass_panel(title_rect, accent=accent, radius=max(8, int(title_h * 0.45)), fill=(28, 26, 24, 210), shine=False)
+        promo_label = "GOAT EDITION" if tier == "GOAT" else "ICON EDITION" if border_tier == "Icon" else "SIGNATURE" if promo == "Signature" else promo.upper()
+        title_font = self.micro if compact else self.small
+        title_text = promo_label[:18]
+        title_surface = title_font.render(title_text, True, WHITE)
+        self.screen.blit(title_surface, (title_rect.centerx - title_surface.get_width() // 2, title_rect.y + max(3, (title_rect.h - title_surface.get_height()) // 2)))
 
-        art_rect = pygame.Rect(x + 14, y + 56, w - 28, h - 134)
+        plate_w = max(48, int(w * 0.23))
+        plate_h = max(48, int(h * 0.18))
+        rating_plate = pygame.Rect(x + int(w * 0.08), y + int(h * 0.15), plate_w, plate_h)
+        pygame.draw.rect(self.screen, (10, 14, 20), rating_plate, 0, border_radius=max(10, int(plate_w * 0.16)))
+        pygame.draw.rect(self.screen, accent, rating_plate, 2, border_radius=max(10, int(plate_w * 0.16)))
+        rating_font = self.big if compact else self.title_font
+        rating_surface = rating_font.render(str(rating), True, WHITE)
+        self.screen.blit(rating_surface, (rating_plate.x + max(8, int(plate_w * 0.12)), rating_plate.y + max(2, int(plate_h * 0.02))))
+        pos_font = self.small if compact else self.font
+        pos_surface = pos_font.render(player.get("position", "ST"), True, WHITE)
+        self.screen.blit(pos_surface, (rating_plate.x + max(10, int(plate_w * 0.14)), rating_plate.bottom - pos_surface.get_height() - max(5, int(plate_h * 0.10))))
+
+        art_rect = pygame.Rect(x + int(w * 0.12), y + int(h * 0.19), w - int(w * 0.24), h - int(h * 0.45))
         art_surface = pygame.Surface((art_rect.w, art_rect.h), pygame.SRCALPHA)
         for iy in range(art_rect.h):
             mix = iy / max(1, art_rect.h - 1)
-            row = self.blend_color(self.blend_color(base_color, WHITE, 0.16), self.blend_color(base_color, (10, 12, 18), 0.42), mix)
+            row = self.blend_color(self.blend_color(base_color, WHITE, 0.10), self.blend_color(base_color, (10, 12, 18), 0.48), mix)
             pygame.draw.line(art_surface, row, (0, iy), (art_rect.w, iy))
-        pygame.draw.polygon(art_surface, (*accent, 44), [(0, art_rect.h), (art_rect.w * 0.28, art_rect.h * 0.44), (art_rect.w * 0.56, art_rect.h), (0, art_rect.h)])
-        pygame.draw.polygon(art_surface, (255, 255, 255, 18), [(0, 0), (art_rect.w * 0.56, 0), (art_rect.w * 0.24, art_rect.h), (0, art_rect.h)])
-        pygame.draw.polygon(art_surface, (*accent, 34), [(art_rect.w * 0.70, 0), (art_rect.w, 0), (art_rect.w, art_rect.h * 0.58), (art_rect.w * 0.42, art_rect.h * 0.18)])
-        pygame.draw.ellipse(art_surface, (*accent, 42), (art_rect.w * 0.16, art_rect.h * 0.01, art_rect.w * 0.68, art_rect.h * 0.18))
-        pygame.draw.rect(art_surface, (*accent, 110), (0, 0, art_rect.w, art_rect.h), 2, border_radius=18)
-        portrait = self.load_player_portrait(player)
-        if portrait:
-            focus_scale = max((art_rect.w * 0.88) / max(1, portrait.get_width()), (art_rect.h * 0.78) / max(1, portrait.get_height()))
-            scaled = pygame.transform.smoothscale(
-                portrait,
-                (
-                    max(1, int(portrait.get_width() * focus_scale)),
-                    max(1, int(portrait.get_height() * focus_scale)),
-                ),
-            )
-            px = (art_rect.w - scaled.get_width()) // 2
-            py = int(art_rect.h * 0.03)
-            py = max(min(py, art_rect.h - scaled.get_height() + 28), -10)
-            art_surface.blit(scaled, (px, py))
-        else:
-            center_x = art_rect.w // 2
-            body_color = (236, 240, 248, 210)
-            trim = (*accent, 220)
-            pygame.draw.ellipse(art_surface, (255, 255, 255, 40), (art_rect.w * 0.18, art_rect.h * 0.12, art_rect.w * 0.64, art_rect.h * 0.72))
-            pygame.draw.circle(art_surface, body_color, (center_x, int(art_rect.h * 0.25)), max(12, int(art_rect.w * 0.11)))
-            torso = [(center_x - art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.14, art_rect.h * 0.44), (center_x + art_rect.w * 0.24, art_rect.h * 0.94), (center_x - art_rect.w * 0.24, art_rect.h * 0.94)]
-            pygame.draw.polygon(art_surface, body_color, torso)
-            pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.08, art_rect.h * 0.50), (center_x - art_rect.w * 0.22, art_rect.h * 0.74), 10)
-            pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.08, art_rect.h * 0.50), (center_x + art_rect.w * 0.22, art_rect.h * 0.74), 10)
-            pygame.draw.line(art_surface, trim, (center_x - art_rect.w * 0.06, art_rect.h * 0.94), (center_x - art_rect.w * 0.14, art_rect.h * 1.06), 10)
-            pygame.draw.line(art_surface, trim, (center_x + art_rect.w * 0.06, art_rect.h * 0.94), (center_x + art_rect.w * 0.14, art_rect.h * 1.06), 10)
+        pygame.draw.rect(art_surface, (0, 0, 0, 18), (0, 0, art_rect.w, art_rect.h), 0, border_radius=max(12, int(art_rect.w * 0.08)))
+        pygame.draw.rect(art_surface, (*accent, 112), (0, 0, art_rect.w, art_rect.h), 2, border_radius=max(12, int(art_rect.w * 0.08)))
+        wedge = [
+            (int(art_rect.w * 0.64), art_rect.h),
+            (art_rect.w, art_rect.h),
+            (art_rect.w, int(art_rect.h * 0.56)),
+        ]
+        pygame.draw.polygon(art_surface, (6, 10, 16, 200), wedge)
+        self.draw_card_portrait(player, art_surface, pygame.Rect(0, 0, art_rect.w, art_rect.h))
         self.screen.blit(art_surface, art_rect.topleft)
 
-        promo_chip = pygame.Rect(x + 14, y + 14, w - 28, 24)
-        self.draw_glass_panel(promo_chip, accent=accent, radius=10, fill=(12, 16, 24, 182), shine=False)
-        promo_label = "GOAT EDITION" if tier == "GOAT" else "SIGNATURE" if promo == "Signature" else promo.upper()
-        self.screen.blit(self.micro.render(promo_label[:24], True, WHITE), (promo_chip.centerx - self.micro.size(promo_label[:24])[0] // 2, promo_chip.y + 7))
+        footer_h = max(34, int(h * 0.14))
+        footer = pygame.Rect(x + int(w * 0.08), y + h - footer_h - int(h * 0.05), w - int(w * 0.16), footer_h)
+        self.draw_glass_panel(footer, accent=accent, radius=max(12, int(footer_h * 0.34)), fill=(10, 14, 22, 222), shine=False)
+        name_font = self.font if compact else self.big
+        max_name = 15 if compact else 17
+        short_name = name.upper() if len(name) <= max_name else name[:max_name - 3].upper() + "..."
+        name_surface = name_font.render(short_name, True, WHITE)
+        self.screen.blit(name_surface, (footer.centerx - name_surface.get_width() // 2, footer.y + max(4, int(footer_h * 0.08))))
+        meta_font = self.micro if compact else self.small
+        meta_text = f"{team[:12].upper()} | {league[:12].upper()}"
+        meta_surface = meta_font.render(meta_text, True, (218, 226, 238))
+        self.screen.blit(meta_surface, (footer.centerx - meta_surface.get_width() // 2, footer.bottom - meta_surface.get_height() - max(4, int(footer_h * 0.10))))
 
-        rating_plate = pygame.Rect(x + 16, y + 42, 66, 66)
-        pygame.draw.rect(self.screen, (10, 14, 20), rating_plate, 0, border_radius=16)
-        pygame.draw.rect(self.screen, accent, rating_plate, 2, border_radius=16)
-        rating_text = self.title_font.render(str(rating), True, WHITE)
-        self.screen.blit(rating_text, (rating_plate.x + 10, rating_plate.y + 4))
-        pos_text = self.small.render(player.get("position", "ST"), True, WHITE)
-        self.screen.blit(pos_text, (rating_plate.x + 14, rating_plate.bottom - 18))
-
-        footer = pygame.Rect(x + 14, y + h - 74, w - 28, 60)
-        self.draw_glass_panel(footer, accent=accent, radius=16, fill=(10, 14, 22, 210), shine=False)
-        short_name = name if len(name) <= 16 else name[:13] + "..."
-        name_text = self.font.render(short_name.upper(), True, WHITE)
-        self.screen.blit(name_text, (footer.centerx - name_text.get_width() // 2, footer.y + 8))
-        meta = f"{team[:14]}  |  {league[:14]}"
-        meta_text = self.micro.render(meta, True, (218, 226, 238))
-        self.screen.blit(meta_text, (footer.centerx - meta_text.get_width() // 2, footer.y + 34))
         if evo_level > 0:
-            evo_chip = pygame.Rect(x + w - 64, y + h - 106, 50, 22)
+            evo_chip = pygame.Rect(x + w - max(54, int(w * 0.18)) - int(w * 0.06), y + h - footer_h - int(h * 0.13), max(54, int(w * 0.18)), max(18, int(h * 0.045)))
             self.draw_glass_panel(evo_chip, accent=(176, 255, 232), radius=10, fill=(10, 18, 26, 196), shine=False)
-            self.screen.blit(self.micro.render(f"EVO {evo_level}", True, WHITE), (evo_chip.x + 8, evo_chip.y + 7))
+            evo_surface = self.micro.render(f"EVO {evo_level}", True, WHITE)
+            self.screen.blit(evo_surface, (evo_chip.centerx - evo_surface.get_width() // 2, evo_chip.y + max(3, (evo_chip.h - evo_surface.get_height()) // 2)))
 
-        pygame.draw.rect(self.screen, accent, card, 3, border_radius=22)
-        pygame.draw.rect(self.screen, (255, 255, 255, 28), (x + 6, y + 6, w - 12, h - 12), 1, border_radius=20)
+    def draw_card_front(self, x, y, w, h, player):
+        self.draw_unified_card_front(x, y, w, h, player, compact=False)
 
     def draw_compact_card(self, x, y, w, h, player, face="front"):
-        rating = player["rating"]
-        team = player["team"]
-        league = player.get("league", get_team_league(team))
-        tier = player.get("rarity") or self.card_tier(rating)[0]
-        base_color, accent = self.card_theme_colors(player)
-        card = pygame.Rect(int(x), int(y), int(w), int(h))
-        shadow = pygame.Surface((w + 12, h + 12), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, (0, 0, 0, 70), (6, 6, w, h), 0, border_radius=16)
-        self.screen.blit(shadow, (x - 6, y - 6))
-        pygame.draw.rect(self.screen, base_color, card, 0, border_radius=16)
-        self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, player.get("promo", "Base"))
-        pygame.draw.rect(self.screen, accent, card, 2, border_radius=16)
-        pygame.draw.rect(self.screen, (255, 255, 255, 24), (x + 4, y + 4, w - 8, h - 8), 1, border_radius=14)
-
-        portrait_rect = pygame.Rect(x + 8, y + 28, w - 16, max(28, h - 66))
         if face == "front":
-            portrait = self.load_player_portrait(player)
-            if portrait:
-                scale = max((portrait_rect.w * 0.92) / max(1, portrait.get_width()), (portrait_rect.h * 0.80) / max(1, portrait.get_height()))
-                scaled = pygame.transform.smoothscale(
-                    portrait,
-                    (
-                        max(1, int(portrait.get_width() * scale)),
-                        max(1, int(portrait.get_height() * scale)),
-                    ),
-                )
-                px = portrait_rect.x + (portrait_rect.w - scaled.get_width()) // 2
-                py = portrait_rect.y + max(-4, min(4, portrait_rect.h - scaled.get_height()))
-                self.screen.blit(scaled, (px, py))
-            else:
-                pygame.draw.ellipse(self.screen, (255, 255, 255, 28), portrait_rect)
+            self.draw_unified_card_front(x, y, w, h, player, compact=True)
         else:
+            rating = player["rating"]
+            tier = player.get("rarity") or self.card_tier(rating)[0]
+            border_tier = self.card_border_tier(player)
+            base_color, accent = self.card_theme_colors(player)
+            card = pygame.Rect(int(x), int(y), int(w), int(h))
+            shadow = pygame.Surface((w + 12, h + 12), pygame.SRCALPHA)
+            pygame.draw.rect(shadow, (0, 0, 0, 70), (6, 6, w, h), 0, border_radius=16)
+            self.screen.blit(shadow, (x - 6, y - 6))
+            pygame.draw.rect(self.screen, base_color, card, 0, border_radius=16)
+            self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, player.get("promo", "Base"))
+            self.draw_card_frame_layers(card, accent, border_tier, player.get("promo", "Base"), face=face)
             back_inner = pygame.Rect(x + 10, y + 28, w - 20, h - 44)
             pygame.draw.rect(self.screen, (18, 22, 34), back_inner, 0, border_radius=12)
             pygame.draw.rect(self.screen, accent, back_inner, 2, border_radius=12)
             pygame.draw.line(self.screen, accent, (back_inner.centerx, back_inner.y + 8), (back_inner.centerx, back_inner.bottom - 8), 2)
-
-        rating_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], max(18, min(28, int(h * 0.20))), bold=True)
-        pos_font = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], max(11, min(15, int(h * 0.10))), bold=True)
-        name_font = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], max(10, min(14, int(h * 0.09))), bold=True)
-        self.screen.blit(rating_font.render(str(rating), True, WHITE), (x + 10, y + 8))
-        self.screen.blit(pos_font.render(player.get("position", "ST"), True, WHITE), (x + 12, y + 28))
-        short = player["name"] if len(player["name"]) <= 14 else player["name"][:11] + "..."
-        name_text = name_font.render(short.upper(), True, WHITE)
-        self.screen.blit(name_text, (x + (w - name_text.get_width()) // 2, y + h - 22))
 
     def draw_card_back(self, x, y, w, h, player):
         name = player["name"]
@@ -6928,12 +7153,11 @@ class Game:
         team = player["team"]
         league = player.get("league", get_team_league(team))
         tier = player.get("rarity") or self.card_tier(rating)[0]
+        border_tier = self.card_border_tier(player)
         base_color, accent = self.card_theme_colors(player)
         promo = player.get("promo", "Base")
         form_boost = player.get("form_boost", 0)
         evo_level = player.get("evo_level", 0)
-        goat_profile = self.goat_card_profile(player) if tier == "GOAT" else None
-        signature_profile = self.signature_card_profile(player) if promo == "Signature" else None
         card = pygame.Rect(x, y, w, h)
         shadow = pygame.Surface((w + 22, h + 24), pygame.SRCALPHA)
         pygame.draw.rect(shadow, (0, 0, 0, 74), (10, 12, w, h), 0, border_radius=22)
@@ -6941,44 +7165,7 @@ class Game:
         self.screen.blit(shadow, (x - 10, y - 10))
         pygame.draw.rect(self.screen, base_color, card, 0, border_radius=18)
         self.draw_card_art_layers((x, y, w, h), base_color, accent, tier, promo)
-        if goat_profile:
-            overlay = pygame.Surface((w, h), pygame.SRCALPHA)
-            stripe_h = max(16, int(h * 0.085))
-            for idx, color in enumerate(goat_profile["stripes"]):
-                top = int(h * 0.18) + idx * max(12, stripe_h - 6)
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 88 if idx < 3 else 66),
-                    [(0, top), (w * 0.24, top - 8), (w * 0.58, top + stripe_h // 2), (0, top + stripe_h + 6)],
-                )
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 80 if idx < 3 else 56),
-                    [(w, top + 12), (w * 0.72, top - 6), (w * 0.42, top + stripe_h // 2), (w, top + stripe_h + 10)],
-                )
-            pygame.draw.ellipse(overlay, (255, 255, 255, 58), (w * 0.10, h * 0.04, w * 0.80, h * 0.20))
-            pygame.draw.rect(overlay, (255, 220, 120, 46), (10, 10, w - 20, h - 20), 2, border_radius=18)
-            self.screen.blit(overlay, (x, y))
-        elif signature_profile:
-            overlay = pygame.Surface((w, h), pygame.SRCALPHA)
-            for idx, color in enumerate(signature_profile["streaks"]):
-                top = int(h * 0.22) + idx * max(16, int(h * 0.10))
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 74 if idx == 1 else 52),
-                    [(0, top), (w * 0.18, top - 10), (w * 0.64, top + 8), (0, top + 24)],
-                )
-                pygame.draw.polygon(
-                    overlay,
-                    (*color, 68 if idx == 1 else 46),
-                    [(w, top + 18), (w * 0.84, top - 6), (w * 0.36, top + 14), (w, top + 34)],
-                )
-            pygame.draw.ellipse(overlay, (*signature_profile["glow"], 42), (w * 0.10, h * 0.08, w * 0.80, h * 0.16))
-            pygame.draw.ellipse(overlay, (255, 255, 255, 36), (w * 0.16, h * 0.05, w * 0.68, h * 0.12))
-            self.screen.blit(overlay, (x, y))
-        pygame.draw.rect(self.screen, accent, card, 3, border_radius=18)
-        if goat_profile or signature_profile:
-            pygame.draw.rect(self.screen, (255, 232, 170), (x + 6, y + 6, w - 12, h - 12), 1, border_radius=18)
+        self.draw_card_frame_layers(card, accent, border_tier, promo, face="back")
         if evo_level > 0:
             rim_color = self.blend_color(accent, (220, 255, 235), 0.35)
             for i in range(evo_level):
@@ -6990,32 +7177,24 @@ class Game:
             pygame.draw.rect(glow, (*accent, alpha), (8 + i * 4, 10 + i * 3, w - 16 - i * 8, h * 0.22), 0, border_radius=14)
         self.screen.blit(glow, (x, y))
         badge = pygame.Rect(x + 12, y + 12, w - 24, 40)
-        badge_fill = (255, 255, 255, 20) if not goat_profile else (8, 10, 16, 210)
+        badge_fill = (8, 10, 16, 210) if border_tier in ("GOAT", "Signature/Promo Exclusive", "Icon") else (255, 255, 255, 20)
         pygame.draw.rect(self.screen, badge_fill, badge, 0, border_radius=12)
         pygame.draw.rect(self.screen, (*accent, 120), badge, 1, border_radius=12)
-        if goat_profile:
+        if border_tier == "GOAT":
             goat_font = pygame.font.SysFont("Georgia", 20, bold=True, italic=True)
-            goat_word = goat_font.render(goat_profile["title"], True, accent)
+            goat_word = goat_font.render("GOAT", True, accent)
             self.screen.blit(goat_word, (x + w / 2 - goat_word.get_width() / 2, y + 17))
-        elif signature_profile:
+        elif border_tier == "Signature/Promo Exclusive":
             sig_font = pygame.font.SysFont("Georgia", 18, bold=True, italic=True)
-            sig_word = sig_font.render("Signature", True, accent)
+            sig_word = sig_font.render("Exclusive", True, accent)
             self.screen.blit(sig_word, (x + w / 2 - sig_word.get_width() / 2, y + 18))
         else:
-            self.screen.blit(self.small.render(tier.upper(), True, accent), (x + 16, y + 18))
-        if tier == "Icon":
+            self.screen.blit(self.small.render(border_tier.upper(), True, accent), (x + 16, y + 18))
+        if border_tier == "Icon":
             self.draw_icon_star(x + w / 2, y + 28, accent)
-        elif goat_profile:
-            self.draw_flag_chip(x + 12, y + 12, 44, 20, goat_profile["flag"], accent)
-            crown_points = [
-                (x + w - 48, y + 30),
-                (x + w - 40, y + 18),
-                (x + w - 32, y + 28),
-                (x + w - 24, y + 16),
-                (x + w - 16, y + 30),
-            ]
-            pygame.draw.lines(self.screen, accent, False, crown_points, 3)
-        elif signature_profile:
+        elif border_tier == "GOAT":
+            self.draw_flag_chip(x + 12, y + 12, 44, 20, self.goat_card_profile(player)["flag"], accent)
+        elif border_tier == "Signature/Promo Exclusive":
             star_points = [
                 (x + w - 34, y + 20),
                 (x + w - 30, y + 28),
@@ -7778,6 +7957,8 @@ class Game:
                 reward_text = f"Reward: {comp.get('reward_pack', 'elite').title()} Pack on cup win"
             elif key == "weekend":
                 reward_text = f"Reward: {comp.get('reward_pack', 'gold').title()} Pack + {comp.get('reward_coins', 80)} coins"
+            elif key == "penalty_shootout":
+                reward_text = f"Reward: {comp.get('reward_coins', 140)} coins after {comp.get('target', 3)} wins"
             elif key == "draft":
                 reward_text = self.reward_summary(comp.get("reward_type", "bundle"), comp.get("reward_pack", "omega"), comp.get("reward_coins", 260), comp.get("pick_band", "Legend"), comp.get("pick_count", 3))
             elif key == "champions":
@@ -7793,6 +7974,9 @@ class Game:
                 self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
             elif key == "ladder":
                 status_text = f"Week {comp.get('week', 1)} | {comp.get('points', 0)} pts | Streak {comp.get('streak', 0)}"
+                self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
+            elif key == "penalty_shootout":
+                status_text = f"{comp.get('wins', 0)}/{comp.get('target', 3)} wins | Streak {comp.get('streak', 0)}"
                 self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
             elif key == "draft":
                 run_text = f"{comp.get('wins', 0)}W-{comp.get('losses', 0)}L | {'Active draft squad' if self.fantasy_draft_active else 'Build a fresh squad'}"
@@ -8769,6 +8953,7 @@ class Game:
             "division": "Division Match",
             "ladder": "Weekly Ladder",
             "weekend": "Weekend Challenge",
+            "penalty_shootout": "Penalty Shootout",
             "theme": self.fantasy_competitions.get("theme", {}).get("name", "Themed Tournament"),
             "cup": "Knockout Cup",
             "draft": "Draft Run",
@@ -8803,6 +8988,32 @@ class Game:
             else:
                 fixture = (opponent, self.user_team)
         return labels.get(mode, "Fantasy Match"), fixture
+
+    def start_penalty_shootout_competition(self):
+        opponents = self.fantasy_opponents()
+        if not opponents or not self.user_team:
+            return
+        opponent = random.choice(opponents)
+        fixture = (self.user_team, opponent) if self.week_index % 2 == 0 else (opponent, self.user_team)
+        self.current_home, self.current_away = fixture
+        self.current_competition = "Penalty Shootout"
+        self.fantasy_fixture_label = "Penalty Shootout"
+        self.fantasy_match_competition = "penalty_shootout"
+        self.pending_fixture = None
+        self.user_is_home = self.current_home == self.user_team
+        self.score_h = 0
+        self.score_a = 0
+        self.match_time = 0
+        self.half = 1
+        self.set_piece_pending = False
+        self.set_piece_taker = None
+        self.set_piece_type = None
+        self.ball_free_ticks = 0
+        self.match_probabilities = None
+        self.reset_positions(kickoff=True)
+        self.begin_penalty_scene("H" if self.user_is_home else "A")
+        if self.penalty_state:
+            self.penalty_state["competition_mode"] = True
 
     def get_lineup_list(self, col):
         if col == 0:
@@ -8839,9 +9050,11 @@ class Game:
         squad = self.home if self.user_is_home else self.away
         if not squad:
             return
-        candidates = [p for p in squad if p.role != "GK"]
+        candidates = [p for p in squad if p.role != "GK" and not getattr(p, "sent_off", False)]
         if not candidates:
-            candidates = squad[:]
+            candidates = [p for p in squad if not getattr(p, "sent_off", False)]
+        if not candidates:
+            return
         if self.controlled in candidates and len(candidates) > 1:
             next_player = min(
                 [p for p in candidates if p is not self.controlled],
@@ -9373,10 +9586,16 @@ class Game:
             self.user_injuries = random.choice([0, 0, 1, 2])
             self.user_match_form = clamp(self.user_form - 0.03 * self.user_injuries, 0.8, 1.2)
         self.stats = {
-            "H": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0},
-            "A": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0},
+            "H": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0, "xg": 0.0},
+            "A": {"pos_time": 0.0, "shots": 0, "pass_att": 0, "pass_cmp": 0, "xg": 0.0},
         }
         self.pending_pass_team = None
+        self.last_possession_team = None
+        self.transition_team = None
+        self.transition_ticks = 0
+        self.match_cards = {}
+        self.match_fouls = {"H": 0, "A": 0}
+        self.penalty_state = {}
         self.reset_positions(kickoff=True)
         # ensure controlled player always on user's team
         if self.user_team:
@@ -9562,6 +9781,12 @@ class Game:
         key_name = None
         if self.user_starting:
             key_name = self.user_starting[self.user_player_index or 0][0]
+        user_key = "H" if self.user_is_home else "A"
+        opp_key = "A" if user_key == "H" else "H"
+        user_stats = self.stats.get(user_key, {})
+        opp_stats = self.stats.get(opp_key, {})
+        total_pos = max(0.1, user_stats.get("pos_time", 0.0) + opp_stats.get("pos_time", 0.0))
+        user_pos = round(user_stats.get("pos_time", 0.0) / total_pos * 100)
         lines = []
         if moment == "pre":
             lines = [
@@ -9570,12 +9795,12 @@ class Game:
             ]
         elif moment == "half":
             lines = [
-                f"At the break: {self.user_team} look {form_note}.",
+                f"At the break: {self.user_team} have {user_stats.get('shots', 0)} shots and {user_stats.get('xg', 0.0):.1f} xG.",
                 f"Halftime: {key_name} has been influential for {self.user_team}.",
             ]
         elif moment == "full":
             lines = [
-                f"Full-time: {self.user_team} were {form_note} today.",
+                f"Full-time: {self.user_team} finish with {user_stats.get('xg', 0.0):.1f} xG and {user_pos}% possession.",
                 f"Post-match: {key_name} stood out for {self.user_team}.",
             ]
         else:
@@ -9583,6 +9808,7 @@ class Game:
                 f"{self.user_team} look {form_note} right now.",
                 f"{key_name} is dictating the tempo.",
                 f"Table watch: {self.user_team} are {rank}th.",
+                f"Live read: {self.user_team} have {user_stats.get('shots', 0)} shots to {opp_stats.get('shots', 0)}.",
             ]
         if lines:
             self.add_commentary(random.choice(lines), flash=False)
@@ -9593,10 +9819,267 @@ class Game:
             line = self.line_level
             tempo = self.tempo_level
         else:
-            press = 2
-            line = 2
-            tempo = 2
+            formation_id = self.get_team_formation(self.current_home if team == "H" else self.current_away)
+            defaults = {
+                1: (2, 2, 2),
+                2: (2, 2, 3),
+                3: (3, 2, 3),
+                4: (2, 2, 2),
+                5: (1, 1, 2),
+                6: (2, 1, 2),
+                7: (3, 2, 3),
+                8: (3, 3, 3),
+            }
+            press, line, tempo = defaults.get(formation_id, (2, 2, 2))
         return press, line, tempo
+
+    def role_group(self, role):
+        role = (role or "").upper()
+        if role == "GK":
+            return "GK"
+        if any(tag in role for tag in ("CB", "LB", "RB", "WB")):
+            return "DF"
+        if any(tag in role for tag in ("CDM", "CM", "CAM", "LM", "RM", "LAM", "RAM")):
+            return "MF"
+        return "FW"
+
+    def team_average_rating(self, team_code):
+        squad = self.home if team_code == "H" else self.away
+        ratings = [p.rating for p in squad if getattr(p, "rating", 0)]
+        return sum(ratings) / len(ratings) if ratings else 70.0
+
+    def team_strength_factor(self, team_code):
+        other = "A" if team_code == "H" else "H"
+        diff = self.team_average_rating(team_code) - self.team_average_rating(other)
+        return clamp(1.0 + diff / 260.0, 0.84, 1.18)
+
+    def defensive_pressure(self, defending_team, x, y):
+        squad = self.home if defending_team == "H" else self.away
+        pressure = 0.0
+        for p in squad:
+            if p.role == "GK":
+                continue
+            d = math.hypot(p.x - x, p.y - y)
+            if d < 34:
+                pressure += 0.42
+            elif d < 70:
+                pressure += 0.20
+            elif d < 110:
+                pressure += 0.07
+        return clamp(pressure, 0.0, 1.0)
+
+    def shot_context(self, carrier, goal_x):
+        defending_team = "A" if carrier.team == "H" else "H"
+        traits = self.apply_fantasy_player_traits(carrier)
+        pressure = self.defensive_pressure(defending_team, carrier.x, carrier.y)
+        if "Press Resist" in traits:
+            pressure *= 0.82
+        distance = abs(goal_x - carrier.x)
+        angle_quality = clamp(1.0 - abs(carrier.y - HEIGHT / 2) / max(65, GOAL_WIDTH * 1.35), 0.24, 1.0)
+        in_box = self.in_penalty_box(carrier.team, carrier.x, carrier.y)
+        role_bonus = {"FW": 0.12, "MF": 0.05, "DF": -0.08, "GK": -0.25}.get(self.role_group(carrier.role), 0.0)
+        strength = self.team_strength_factor(carrier.team)
+        rating_factor = (carrier.rating - 72) / 140.0
+        if "Finesse Shot" in traits:
+            angle_quality = min(1.08, angle_quality + 0.08)
+        trait_bonus = 0.0
+        if "Aerial" in traits and in_box and abs(carrier.y - HEIGHT / 2) < 90:
+            trait_bonus += 0.04
+        if "Finesse Shot" in traits:
+            trait_bonus += 0.03 if not in_box or abs(carrier.y - HEIGHT / 2) > 26 else 0.01
+        xg = 0.08 + role_bonus + rating_factor + (0.18 if in_box else 0.0) + angle_quality * 0.22 - distance / 560.0 - pressure * 0.22 + (strength - 1.0) * 0.25
+        on_target = 0.34 + rating_factor * 0.75 + angle_quality * 0.16 - pressure * 0.14 - distance / 920.0 + (strength - 1.0) * 0.18
+        xg += trait_bonus
+        on_target += trait_bonus * 0.9
+        return {
+            "xg": clamp(xg, 0.03, 0.84),
+            "on_target": clamp(on_target, 0.14, 0.95),
+            "pressure": pressure,
+            "target_y": clamp(HEIGHT / 2 + random.randint(-24, 24), HEIGHT / 2 - GOAL_WIDTH / 2 + 8, HEIGHT / 2 + GOAL_WIDTH / 2 - 8),
+        }
+
+    def match_state_bias(self, team_code):
+        score_diff = (self.score_h - self.score_a) if team_code == "H" else (self.score_a - self.score_h)
+        remaining = max(0.0, HALF_SECONDS - self.match_time) if self.half == 2 else HALF_SECONDS
+        bias = {"press": 0, "line": 0, "tempo": 0.0, "shoot": 0.0}
+        if self.half == 2 and remaining <= 240:
+            if score_diff < 0:
+                bias = {"press": 1, "line": 18, "tempo": 0.10, "shoot": 0.08}
+            elif score_diff > 0:
+                bias = {"press": -1, "line": -18, "tempo": -0.08, "shoot": -0.06}
+        return bias
+
+    def send_off_player(self, player):
+        player.sent_off = True
+        player.has_ball = False
+        player.x = -100
+        player.y = -100
+        player.home_x = -100
+        player.home_y = -100
+        self.add_commentary(f"Red card for {player.name}")
+        if player is self.controlled:
+            self.cycle_controlled_player()
+
+    def award_card(self, player, straight_red=False):
+        current = self.match_cards.get(player.name, {"yellow": 0, "red": False, "team": player.team})
+        if straight_red:
+            current["red"] = True
+            self.match_cards[player.name] = current
+            self.send_off_player(player)
+            return "red"
+        current["yellow"] += 1
+        self.match_cards[player.name] = current
+        self.add_commentary(f"Yellow card for {player.name}")
+        player.yellow_cards = current["yellow"]
+        if current["yellow"] >= 2:
+            current["red"] = True
+            self.match_cards[player.name] = current
+            self.send_off_player(player)
+            return "red"
+        return "yellow"
+
+    def award_free_kick(self, attacking_team, x, y):
+        takers = [p for p in (self.home if attacking_team == "H" else self.away) if not getattr(p, "sent_off", False)]
+        if not takers:
+            return
+        self.ball.x = clamp(x, FIELD_MARGIN + 24, WIDTH - FIELD_MARGIN - 24)
+        self.ball.y = clamp(y, FIELD_MARGIN + 24, HEIGHT - FIELD_MARGIN - COMMENTARY_BAR_H - 24)
+        self.ball.vx = 0
+        self.ball.vy = 0
+        self.ball_free_ticks = 0
+        for p in self.home + self.away:
+            p.has_ball = False
+        self.set_piece_pending = True
+        self.set_piece_taker = self.closest_players(takers, self.ball.x, self.ball.y, 1)[0]
+        self.set_piece_type = "freekick"
+        self.add_commentary(f"Free kick to {'Home' if attacking_team == 'H' else 'Away'}")
+
+    def begin_penalty_scene(self, attacking_team):
+        attackers = [p for p in (self.home if attacking_team == "H" else self.away) if p.role != "GK" and not getattr(p, "sent_off", False)]
+        defenders = self.away if attacking_team == "H" else self.home
+        keeper = next((p for p in defenders if p.role == "GK" and not getattr(p, "sent_off", False)), None)
+        if not attackers or not keeper:
+            return
+        taker = max(attackers, key=lambda p: p.rating)
+        self.state = "PENALTY_SCENE"
+        self.penalty_state = {
+            "attacking_team": attacking_team,
+            "taker": taker,
+            "keeper": keeper,
+            "aim_x": 0.0,
+            "aim_y": 0.0,
+            "dive_x": 0.0,
+            "dive_y": 0.0,
+            "resolved": False,
+            "result": "",
+            "timer": 1.1,
+        }
+        self.add_commentary(f"Penalty to {'Home' if attacking_team == 'H' else 'Away'}")
+
+    def award_foul(self, defender, carrier, manual=False):
+        self.match_fouls[defender.team] = self.match_fouls.get(defender.team, 0) + 1
+        self.last_assist_candidate = None
+        self.last_assist_team = None
+        self.add_commentary(f"Foul by {defender.name} on {carrier.name}")
+        carrier.has_ball = False
+        defender.has_ball = False
+        goal_x = WIDTH - FIELD_MARGIN if carrier.team == "H" else FIELD_MARGIN
+        danger = abs(goal_x - carrier.x)
+        straight_red = danger < 110 and random.random() < (0.22 if manual else 0.14)
+        yellow_risk = clamp(0.30 + max(0, 150 - danger) / 240, 0.22, 0.78)
+        if straight_red:
+            self.award_card(defender, straight_red=True)
+        elif random.random() < yellow_risk:
+            self.award_card(defender, straight_red=False)
+        if self.in_penalty_box(carrier.team, carrier.x, carrier.y):
+            self.begin_penalty_scene(carrier.team)
+        else:
+            self.award_free_kick(carrier.team, carrier.x, carrier.y)
+
+    def penalty_user_mode(self):
+        team = self.penalty_state.get("attacking_team")
+        if not team or not self.user_team:
+            return "ai"
+        user_team_code = "H" if self.user_is_home else "A"
+        if team == user_team_code:
+            return "shooter"
+        return "keeper"
+
+    def resolve_penalty_scene(self):
+        if not self.penalty_state or self.penalty_state.get("resolved"):
+            return
+        taker = self.penalty_state["taker"]
+        keeper = self.penalty_state["keeper"]
+        team = self.penalty_state["attacking_team"]
+        mode = self.penalty_user_mode()
+        traits = self.apply_fantasy_player_traits(taker)
+        aim_x = self.penalty_state.get("aim_x", 0.0)
+        aim_y = self.penalty_state.get("aim_y", 0.0)
+        if mode == "ai":
+            aim_x = random.uniform(-0.85, 0.85)
+            aim_y = random.uniform(-0.80, 0.80)
+        dive_x = self.penalty_state.get("dive_x", 0.0)
+        dive_y = self.penalty_state.get("dive_y", 0.0)
+        if mode != "keeper":
+            keeper_read = clamp(0.12 + (keeper.rating - taker.rating) / 220, 0.06, 0.28)
+            if random.random() < keeper_read:
+                dive_x = aim_x + random.uniform(-0.20, 0.20)
+                dive_y = aim_y + random.uniform(-0.18, 0.18)
+            else:
+                dive_x = random.uniform(-0.9, 0.9)
+                dive_y = random.uniform(-0.8, 0.8)
+        accuracy = clamp(0.58 + (taker.rating - 70) / 120, 0.48, 0.95)
+        if "Finesse Shot" in traits:
+            accuracy = min(0.98, accuracy + 0.08)
+        power = clamp(0.60 + (taker.rating - 70) / 90, 0.58, 1.0)
+        if abs(aim_x) > 0.70 or abs(aim_y) > 0.70:
+            accuracy -= 0.08
+        save_window = clamp(0.18 + (keeper.rating - taker.rating) / 250, 0.12, 0.30)
+        save_distance = math.hypot(aim_x - dive_x, aim_y - dive_y)
+        scored = random.random() < accuracy and save_distance > save_window
+        if scored:
+            if team == "H":
+                self.score_h += 1
+            else:
+                self.score_a += 1
+            self.register_stat(taker.name, "goals")
+            self.penalty_state["result"] = f"Penalty scored by {taker.name}"
+            self.say("goal", a=taker.name, t=self.current_home if team == "H" else self.current_away)
+        else:
+            self.penalty_state["result"] = f"{keeper.name} saves the penalty" if save_distance <= save_window else f"{taker.name} misses the penalty"
+            self.add_commentary(self.penalty_state["result"])
+        self.penalty_state["resolved"] = True
+        self.penalty_state["timer"] = 1.6
+
+    def finish_penalty_scene(self):
+        if not self.penalty_state:
+            self.state = "LIVE"
+            return
+        competition_mode = self.penalty_state.get("competition_mode", False)
+        attacking_team = self.penalty_state.get("attacking_team", "H")
+        scored = str(self.penalty_state.get("result", "")).lower().startswith("penalty scored")
+        self.penalty_state = {}
+        if competition_mode:
+            self.update_fantasy_competitions(scored, False, "penalty_shootout", 1 if scored else 0, 0 if scored else 1)
+            self.state = "LEAGUE"
+            self.kickoff_pending = True
+            self.pending_fixture = None
+            self.save_active_profile()
+            return
+        self.kickoff_pending = True
+        self.kickoff_team = "A" if attacking_team == "H" else "H"
+        self.reset_positions(kickoff=True)
+        self.state = "LIVE"
+
+    def select_pressers(self, players, x, y, count, defending_team):
+        own_goal_x = FIELD_MARGIN if defending_team == "H" else WIDTH - FIELD_MARGIN
+        def score(player):
+            d = math.hypot(player.x - x, player.y - y)
+            role_bias = {"DF": -24, "MF": -10, "FW": 18, "GK": 500}.get(self.role_group(player.role), 0)
+            danger_bias = -abs(x - own_goal_x) * 0.05 if self.role_group(player.role) == "DF" else 0
+            return d + role_bias + danger_bias
+        ranked = sorted([p for p in players if p.role != "GK"], key=score)
+        return ranked[:count]
 
     def formation_catalog(self):
         return [(formation_id, name) for formation_id, (name, _) in FORMATION_TEMPLATES.items()]
@@ -9662,6 +10145,8 @@ class Game:
             if self.game_mode == "FANTASY":
                 player.speed *= self.chemistry_multiplier(chem)
                 player.rating = player.rating + chem
+            player.yellow_cards = 0
+            player.sent_off = False
             self.home.append(player)
 
         for i, (x, y, role) in enumerate(away_positions):
@@ -9679,6 +10164,8 @@ class Game:
             if self.game_mode == "FANTASY" and self.current_away == self.user_team:
                 player.speed *= self.chemistry_multiplier(chem)
                 player.rating = player.rating + chem
+            player.yellow_cards = 0
+            player.sent_off = False
             self.away.append(player)
 
         for p in self.home + self.away:
@@ -9738,6 +10225,145 @@ class Game:
             (tx - radius * 0.5, ty + radius * 0.86),
         ]
 
+    def nearest_opponent_distance(self, x, y, opponents):
+        if not opponents:
+            return 999.0
+        return min(math.hypot(p.x - x, p.y - y) for p in opponents)
+
+    def lane_pressure(self, carrier, target, opponents):
+        dx = target.x - carrier.x
+        dy = target.y - carrier.y
+        length_sq = dx * dx + dy * dy
+        if length_sq < 1 or not opponents:
+            return 0.0
+        best = 999.0
+        for opp in opponents:
+            t = clamp(((opp.x - carrier.x) * dx + (opp.y - carrier.y) * dy) / length_sq, 0.0, 1.0)
+            proj_x = carrier.x + dx * t
+            proj_y = carrier.y + dy * t
+            best = min(best, math.hypot(opp.x - proj_x, opp.y - proj_y))
+        return best
+
+    def refresh_match_flow_state(self):
+        carrier = self.ball_carrier()
+        team = carrier.team if carrier else None
+        if team != self.last_possession_team:
+            self.transition_team = team
+            self.transition_ticks = 40 if team else 16
+            self.last_possession_team = team
+        elif self.transition_ticks > 0:
+            self.transition_ticks -= 1
+
+    def in_transition(self, team_code):
+        return self.transition_team == team_code and self.transition_ticks > 0
+
+    def choose_pass_target(self, carrier):
+        teammates = [p for p in (self.home if carrier.team == "H" else self.away) if p is not carrier]
+        opponents = self.away if carrier.team == "H" else self.home
+        direction = 1 if carrier.team == "H" else -1
+        best_target = None
+        best_score = -1e9
+        for mate in teammates:
+            dx = mate.x - carrier.x
+            dy = mate.y - carrier.y
+            distance = math.hypot(dx, dy)
+            if distance < 18 or distance > 260:
+                continue
+            forward = dx * direction
+            lane_space = self.lane_pressure(carrier, mate, opponents)
+            local_space = self.nearest_opponent_distance(mate.x, mate.y, opponents)
+            support_bonus = 0.0
+            group = self.role_group(mate.role)
+            if group == "FW":
+                support_bonus += 10 if forward > 15 else -6
+            elif group == "MF":
+                support_bonus += 6
+            else:
+                support_bonus += 2 if forward > -20 else -3
+            if self.in_transition(carrier.team):
+                support_bonus += max(0.0, forward) * 0.12
+            score = (
+                max(-40.0, forward) * 0.45
+                + local_space * 1.1
+                + lane_space * 1.35
+                + support_bonus
+                - abs(dy) * 0.10
+                - abs(distance - 110) * 0.12
+            )
+            if score > best_score:
+                best_score = score
+                best_target = mate
+        return best_target or (self.closest_players(teammates, carrier.x + direction * 70, carrier.y, 1)[0] if teammates else None)
+
+    def support_run_target(self, player, carrier, team_code, line_offset=0):
+        direction = 1 if team_code == "H" else -1
+        top_limit = FIELD_MARGIN + 16
+        bottom_limit = HEIGHT - FIELD_MARGIN - COMMENTARY_BAR_H - 16
+        if not carrier:
+            return player.home_x, player.home_y
+        group = self.role_group(player.role)
+        transition_push = 26 if self.in_transition(team_code) else 0
+        if group == "FW":
+            depth = 88 + transition_push
+            lateral = 72
+        elif group == "MF":
+            depth = 48 + transition_push * 0.6
+            lateral = 52
+        else:
+            depth = 18 + max(0, line_offset) * 0.3
+            lateral = 36
+        side = -1 if player.home_y < carrier.y else 1
+        if abs(player.home_y - carrier.y) < 18:
+            side = -1 if player is (self.home[0] if team_code == "H" else self.away[0]) else 1
+        target_x = carrier.x + direction * depth
+        target_y = carrier.y + side * lateral
+        target_x = clamp(target_x, FIELD_MARGIN + 32, WIDTH - FIELD_MARGIN - 32)
+        target_y = clamp(target_y, top_limit, bottom_limit)
+        return (
+            player.home_x * 0.28 + target_x * 0.72,
+            player.home_y * 0.20 + target_y * 0.80,
+        )
+
+    def defensive_shape_target(self, player, carrier, team_code, line_offset=0):
+        direction = 1 if team_code == "H" else -1
+        top_limit = FIELD_MARGIN + 16
+        bottom_limit = HEIGHT - FIELD_MARGIN - COMMENTARY_BAR_H - 16
+        central_y = (HEIGHT - COMMENTARY_BAR_H) / 2
+        group = self.role_group(player.role)
+        base_x = player.home_x + (line_offset if team_code == "H" else -line_offset)
+        base_y = player.home_y
+        if not carrier:
+            return base_x, base_y
+        if group == "DF":
+            cover_x = carrier.x - direction * 78
+            cover_y = central_y * 0.30 + carrier.y * 0.35 + base_y * 0.35
+        elif group == "MF":
+            cover_x = carrier.x - direction * 48
+            cover_y = carrier.y * 0.55 + base_y * 0.45
+        else:
+            cover_x = carrier.x - direction * 22
+            cover_y = carrier.y * 0.65 + base_y * 0.35
+        if self.in_transition("A" if team_code == "H" else "H"):
+            cover_x -= direction * 14
+        target_x = clamp(base_x * 0.40 + cover_x * 0.60, FIELD_MARGIN + 28, WIDTH - FIELD_MARGIN - 28)
+        target_y = clamp(base_y * 0.42 + cover_y * 0.58, top_limit, bottom_limit)
+        return target_x, target_y
+
+    def trigger_corner(self, keeper_team, left_goal, ball_y):
+        attack_team = self.away if keeper_team == "H" else self.home
+        self.last_touch_team = keeper_team
+        self.ball.x = FIELD_MARGIN if left_goal else WIDTH - FIELD_MARGIN
+        self.ball.y = FIELD_MARGIN if ball_y < HEIGHT / 2 else HEIGHT - FIELD_MARGIN
+        self.ball.vx = 0
+        self.ball.vy = 0
+        self.ball_free_ticks = 0
+        for p in self.home + self.away:
+            p.has_ball = False
+        self.set_piece_pending = True
+        self.set_piece_taker = self.closest_players(attack_team, self.ball.x, self.ball.y, 1)[0]
+        self.set_piece_type = "corner"
+        self.say("corner", t="Away" if keeper_team == "H" else "Home")
+
     def ball_carrier(self):
         for p in self.home + self.away:
             if p.has_ball:
@@ -9784,12 +10410,22 @@ class Game:
             return
         if carrier.team != "H" and not allow_any_team:
             return
+        if target is None:
+            target = self.choose_pass_target(carrier)
+        if not target:
+            return
         traits = self.apply_fantasy_player_traits(carrier)
         if random.random() < 0.12:
             self.say("dribble", a=carrier.name)
-        accuracy = clamp(0.5 + (carrier.rating - 60) / 120, 0.45, 0.95)
+        opponents = self.away if carrier.team == "H" else self.home
+        lane_space = self.lane_pressure(carrier, target, opponents)
+        receiver_space = self.nearest_opponent_distance(target.x, target.y, opponents)
+        pressure_penalty = clamp((26 - min(26.0, lane_space)) / 70 + (20 - min(20.0, receiver_space)) / 80, 0.0, 0.22)
+        accuracy = clamp(0.5 + (carrier.rating - 60) / 120 - pressure_penalty, 0.42, 0.95)
         if "Playmaker" in traits:
             accuracy = min(0.98, accuracy + 0.08)
+        if self.in_transition(carrier.team):
+            accuracy = max(0.40, accuracy - 0.04)
         if random.random() > accuracy:
             self.last_assist_candidate = None
             self.last_assist_team = None
@@ -9818,20 +10454,24 @@ class Game:
         self.ball_free_ticks = 10
         self.say("pass", a=carrier.name, b=target.name)
 
-    def shoot_toward(self, goal_x, allow_any_team=False, prefer_controlled=False):
-        carrier = self.get_kicker(allow_any_team=allow_any_team, prefer_controlled=prefer_controlled)
+    def shoot_toward(self, goal_x, allow_any_team=False, prefer_controlled=False, forced_carrier=None):
+        carrier = forced_carrier or self.get_kicker(allow_any_team=allow_any_team, prefer_controlled=prefer_controlled)
         if not carrier:
             return
         if carrier.team != "H" and not allow_any_team:
             return
         traits = self.apply_fantasy_player_traits(carrier)
         self.stats[carrier.team]["shots"] += 1
-        if random.random() < 0.25:
+        context = self.shot_context(carrier, goal_x)
+        self.stats[carrier.team]["xg"] += context["xg"]
+        if context["xg"] > 0.34:
             self.say("near_goal", a=carrier.name)
-        shot_speed = SHOT_SPEED * clamp(0.85 + (carrier.rating - 60) / 150, 0.8, 1.2)
+        elif random.random() < 0.18:
+            self.say("near_goal", a=carrier.name)
+        shot_speed = SHOT_SPEED * clamp(0.82 + (carrier.rating - 60) / 145 + (self.team_strength_factor(carrier.team) - 1.0) * 0.30 - context["pressure"] * 0.10, 0.76, 1.28)
         if "Finesse Shot" in traits:
             shot_speed *= 1.06
-        goal_y = HEIGHT / 2
+        goal_y = context["target_y"]
         dx = goal_x - carrier.x
         dy = goal_y - carrier.y
         d = math.hypot(dx, dy)
@@ -9842,10 +10482,16 @@ class Game:
         self.ball.y = carrier.y
         self.ball.vx = (dx / d) * shot_speed
         self.ball.vy = (dy / d) * shot_speed
-        accuracy = clamp(0.55 + (carrier.rating - 60) / 110, 0.4, 0.92)
+        accuracy = context["on_target"]
         if "Finesse Shot" in traits:
-            accuracy = min(0.97, accuracy + 0.09)
+            accuracy = min(0.97, accuracy + 0.06)
         if random.random() > accuracy:
+            miss_y = goal_y + random.choice([-1, 1]) * random.randint(42, 100)
+            miss_dx = goal_x - carrier.x
+            miss_dy = miss_y - carrier.y
+            miss_d = max(1.0, math.hypot(miss_dx, miss_dy))
+            self.ball.vx = (miss_dx / miss_d) * shot_speed * (1.04 + random.random() * 0.16)
+            self.ball.vy = (miss_dy / miss_d) * shot_speed * (1.04 + random.random() * 0.16)
             self.say("shot_miss", a=carrier.name)
             self.ball_free_ticks = 8
             return
@@ -9857,8 +10503,16 @@ class Game:
     def shoot_ball(self):
         if not self.controlled:
             return
-        goal_x = WIDTH - FIELD_MARGIN + 10 if self.controlled.team == "H" else FIELD_MARGIN - 10
-        self.shoot_toward(goal_x, allow_any_team=True, prefer_controlled=True)
+        carrier = self.ball_carrier()
+        shooter = None
+        if carrier and carrier.team == self.controlled.team:
+            shooter = self.controlled if carrier is self.controlled else carrier
+        elif math.hypot(self.controlled.x - self.ball.x, self.controlled.y - self.ball.y) <= KICK_RADIUS:
+            shooter = self.controlled
+        if not shooter:
+            return
+        goal_x = WIDTH - FIELD_MARGIN + 10 if shooter.team == "H" else FIELD_MARGIN - 10
+        self.shoot_toward(goal_x, allow_any_team=True, prefer_controlled=(shooter is self.controlled), forced_carrier=shooter)
 
     def tackle_check(self):
         carrier = self.ball_carrier()
@@ -9866,10 +10520,16 @@ class Game:
             return
         if carrier.team == "H":
             for d in self.away:
+                if getattr(d, "sent_off", False):
+                    continue
                 if dist(d, carrier) < TACKLE_RADIUS:
                     traits = self.apply_fantasy_player_traits(d)
                     if "Interceptor" not in traits and random.random() < 0.18:
                         continue
+                    foul_roll = 0.12 + max(0, carrier.rating - d.rating) / 240
+                    if random.random() < foul_roll:
+                        self.award_foul(d, carrier)
+                        break
                     carrier.has_ball = False
                     d.has_ball = True
                     self.say("tackle_win", a=d.name)
@@ -9880,10 +10540,16 @@ class Game:
                     break
         else:
             for h in self.home:
+                if getattr(h, "sent_off", False):
+                    continue
                 if dist(h, carrier) < TACKLE_RADIUS:
                     traits = self.apply_fantasy_player_traits(h)
                     if "Interceptor" not in traits and random.random() < 0.18:
                         continue
+                    foul_roll = 0.12 + max(0, carrier.rating - h.rating) / 240
+                    if random.random() < foul_roll:
+                        self.award_foul(h, carrier)
+                        break
                     carrier.has_ball = False
                     h.has_ball = True
                     self.say("tackle_win", a=h.name)
@@ -9906,7 +10572,9 @@ class Game:
             win_chance = clamp(0.55 + diff / 200, 0.35, 0.85)
             if "Interceptor" in self.apply_fantasy_player_traits(self.controlled):
                 win_chance = min(0.92, win_chance + 0.12)
-            if random.random() < win_chance:
+            foul_chance = clamp(0.14 + max(0, -diff) / 180, 0.12, 0.34)
+            roll = random.random()
+            if roll < win_chance:
                 carrier.has_ball = False
                 self.controlled.has_ball = True
                 self.say("tackle_win", a=self.controlled.name)
@@ -9914,6 +10582,8 @@ class Game:
                 self.last_assist_team = None
                 if self.controlled.role == "DF":
                     self.register_stat(self.controlled.name, "tackles")
+            elif roll < win_chance + foul_chance:
+                self.award_foul(self.controlled, carrier, manual=True)
             else:
                 self.say("tackle_miss", a=self.controlled.name)
         else:
@@ -9931,7 +10601,7 @@ class Game:
             d = math.hypot(self.controlled.x - self.ball.x, self.controlled.y - self.ball.y)
             if d < CONTROL_RADIUS:
                 resist = "Press Resist" in self.apply_fantasy_player_traits(self.controlled)
-                pressure = min(math.hypot(p.x - self.controlled.x, p.y - self.controlled.y) for p in self.home + self.away if p is not self.controlled)
+                pressure = min(math.hypot(p.x - self.controlled.x, p.y - self.controlled.y) for p in self.home + self.away if p is not self.controlled and not getattr(p, "sent_off", False))
                 for p in self.home + self.away:
                     p.has_ball = False
                 if pressure < 28 and not resist and random.random() < 0.22:
@@ -9951,6 +10621,8 @@ class Game:
         nearest = None
         best_d = 1e9
         for p in self.home + self.away:
+            if getattr(p, "sent_off", False):
+                continue
             d = math.hypot(p.x - self.ball.x, p.y - self.ball.y)
             if d < best_d:
                 best_d = d
@@ -10080,30 +10752,58 @@ class Game:
     def keeper_save(self):
         if self.ball_carrier():
             return
+        def try_save(keeper, team_code, left_goal):
+            if not keeper:
+                return False
+            goal_x = FIELD_MARGIN if left_goal else WIDTH - FIELD_MARGIN
+            if abs(self.ball.x - goal_x) >= 34 or abs(self.ball.y - HEIGHT / 2) >= GOAL_WIDTH / 2:
+                return False
+            if math.hypot(keeper.x - self.ball.x, keeper.y - self.ball.y) >= KEEPER_RADIUS + 6:
+                return False
+            attack_team = "A" if team_code == "H" else "H"
+            shot_power = clamp(abs(self.ball.vx) / max(0.1, SHOT_SPEED), 0.3, 1.4)
+            save_chance = clamp(0.52 + (keeper.rating - self.team_average_rating(attack_team)) / 180 - (shot_power - 0.7) * 0.28, 0.20, 0.92)
+            if random.random() > save_chance:
+                return False
+            self.last_touch_team = team_code
+            self.last_touch_name = keeper.name
+            self.last_assist_candidate = None
+            self.last_assist_team = None
+            outcome = random.random()
+            if shot_power < 0.78 and outcome < 0.42:
+                keeper.has_ball = True
+                self.ball.vx = 0
+                self.ball.vy = 0
+                self.say("save")
+                teammates = [p for p in (self.home if team_code == "H" else self.away) if p is not keeper]
+                if teammates:
+                    target = min(teammates, key=lambda p: (p.x - keeper.x) ** 2 + (p.y - keeper.y) ** 2)
+                    self.pass_ball(target, allow_any_team=True)
+            elif outcome < 0.70:
+                self.ball.x = goal_x + (16 if left_goal else -16)
+                self.ball.y = clamp(self.ball.y + random.choice([-1, 1]) * random.randint(14, 46), FIELD_MARGIN + 10, HEIGHT - FIELD_MARGIN - 10)
+                self.ball.vx = (1 if left_goal else -1) * random.uniform(3.8, 5.8)
+                self.ball.vy = random.choice([-1, 1]) * random.uniform(1.0, 2.4)
+                self.ball_free_ticks = 5
+                self.say("save")
+            elif outcome < 0.90:
+                self.ball.x = goal_x + (8 if left_goal else -8)
+                self.ball.y = clamp(self.ball.y + random.choice([-1, 1]) * random.randint(54, 110), FIELD_MARGIN, HEIGHT - FIELD_MARGIN)
+                self.ball.vx = (1 if left_goal else -1) * random.uniform(2.5, 4.2)
+                self.ball.vy = random.choice([-1, 1]) * random.uniform(2.8, 4.6)
+                self.ball_free_ticks = 8
+                self.say("save")
+            else:
+                self.trigger_corner(team_code, left_goal, self.ball.y)
+                self.say("save")
+            return True
+
         hk = next((p for p in self.home if p.role == "GK"), None)
-        if hk and self.ball.x < FIELD_MARGIN + 30 and abs(self.ball.y - HEIGHT / 2) < GOAL_WIDTH / 2:
-            if math.hypot(hk.x - self.ball.x, hk.y - self.ball.y) < KEEPER_RADIUS:
-                hk.has_ball = True
-                self.ball.vx = 0
-                self.ball.vy = 0
-                self.say("save")
-                teammates = [p for p in self.home if p is not hk]
-                if teammates:
-                    target = min(teammates, key=lambda p: (p.x - hk.x) ** 2 + (p.y - hk.y) ** 2)
-                    self.pass_ball(target, allow_any_team=True)
-                return
+        if try_save(hk, "H", True):
+            return
         ak = next((p for p in self.away if p.role == "GK"), None)
-        if ak and self.ball.x > WIDTH - FIELD_MARGIN - 30 and abs(self.ball.y - HEIGHT / 2) < GOAL_WIDTH / 2:
-            if math.hypot(ak.x - self.ball.x, ak.y - self.ball.y) < KEEPER_RADIUS:
-                ak.has_ball = True
-                self.ball.vx = 0
-                self.ball.vy = 0
-                self.say("save")
-                teammates = [p for p in self.away if p is not ak]
-                if teammates:
-                    target = min(teammates, key=lambda p: (p.x - ak.x) ** 2 + (p.y - ak.y) ** 2)
-                    self.pass_ball(target, allow_any_team=True)
-                return
+        if try_save(ak, "A", False):
+            return
 
     def setup_set_piece_positions(self):
         if not self.set_piece_taker:
@@ -10151,6 +10851,20 @@ class Game:
                     continue
                 p.home_x = p.home_x
                 p.home_y = p.home_y
+        elif self.set_piece_type == "freekick":
+            attack = self.home if self.set_piece_taker.team == "H" else self.away
+            defend = self.away if self.set_piece_taker.team == "H" else self.home
+            direction = 1 if self.set_piece_taker.team == "H" else -1
+            for p in attack:
+                if p is self.set_piece_taker or p.role == "GK" or getattr(p, "sent_off", False):
+                    continue
+                p.home_x, p.home_y = self.support_run_target(p, self.set_piece_taker, self.set_piece_taker.team)
+            for p in defend:
+                if p.role == "GK" or getattr(p, "sent_off", False):
+                    continue
+                tx, ty = self.defensive_shape_target(p, self.set_piece_taker, p.team)
+                p.home_x = tx - direction * 20
+                p.home_y = ty
 
     def update_set_piece(self):
         if not self.set_piece_pending or not self.set_piece_taker:
@@ -10196,40 +10910,49 @@ class Game:
                 target = self.closest_players([p for p in team if p is not self.set_piece_taker], self.ball.x, self.ball.y, 1)[0]
                 self.pass_ball(target, allow_any_team=True)
                 self.set_piece_pending = False
+            elif self.set_piece_type == "freekick":
+                goal_x = WIDTH - FIELD_MARGIN + 10 if self.set_piece_taker.team == "H" else FIELD_MARGIN - 10
+                distance = abs(goal_x - self.ball.x)
+                if distance < 250 and random.random() < 0.62:
+                    self.shoot_toward(goal_x, allow_any_team=True, forced_carrier=self.set_piece_taker)
+                else:
+                    self.pass_ball(self.choose_pass_target(self.set_piece_taker), allow_any_team=True)
+                self.set_piece_pending = False
 
     def update_ai(self):
+        self.refresh_match_flow_state()
         if self.set_piece_pending:
             for p in self.away:
-                if p is self.set_piece_taker:
+                if p is self.set_piece_taker or getattr(p, "sent_off", False):
                     continue
                 p.move_toward(p.home_x, p.home_y, spd=p.speed * 0.5)
             return
         press, line, tempo = self.get_team_settings("A")
-        press_count = 2 + press
-        line_offset = (line - 2) * 25
-        tempo_speed = 0.9 + 0.1 * (tempo - 2)
-        dribble_bias = DRIBBLE_TENDENCY + (0.1 if tempo == 1 else -0.1 if tempo == 3 else 0)
+        state_bias = self.match_state_bias("A")
+        strength = self.team_strength_factor("A")
+        press_count = max(1, 2 + press + state_bias["press"])
+        line_offset = (line - 2) * 25 + state_bias["line"]
+        tempo_speed = 0.9 + 0.1 * (tempo - 2) + state_bias["tempo"]
+        dribble_bias = DRIBBLE_TENDENCY + (0.1 if tempo == 1 else -0.1 if tempo == 3 else 0) + state_bias["shoot"] * 0.2
         carrier = self.ball_carrier()
-        if carrier is self.controlled:
-            return
         if carrier and carrier.team == "A":
-            if self.in_penalty_box("A", carrier.x, carrier.y):
-                self.shoot_toward(FIELD_MARGIN - 10, allow_any_team=True)
+            goal_x = FIELD_MARGIN - 10
+            context = self.shot_context(carrier, goal_x)
+            if self.in_penalty_box("A", carrier.x, carrier.y) and context["xg"] > 0.20:
+                self.shoot_toward(goal_x, allow_any_team=True, forced_carrier=carrier)
                 return
-            dist_to_goal = abs(carrier.x - (FIELD_MARGIN - 10))
-            nearest_def = self.closest_players(self.home, carrier.x, carrier.y, 1)[0]
-            space = dist(nearest_def, carrier)
-            if dist_to_goal < 220 and random.random() < SHOOT_TENDENCY * (0.6 + AI_DIFFICULTY):
-                self.shoot_toward(FIELD_MARGIN - 10, allow_any_team=True)
+            dist_to_goal = abs(carrier.x - goal_x)
+            if dist_to_goal < 240 and random.random() < SHOOT_TENDENCY + state_bias["shoot"] + max(0.0, context["xg"] - 0.14) * 0.9:
+                self.shoot_toward(goal_x, allow_any_team=True, forced_carrier=carrier)
             elif random.random() < dribble_bias:
                 carrier.move_toward(
-                    FIELD_MARGIN - 10,
-                    carrier.y,
-                    spd=carrier.speed * (0.95 * AI_DIFFICULTY + 0.25) * tempo_speed,
+                    goal_x,
+                    carrier.y + random.randint(-12, 12),
+                    spd=carrier.speed * (0.38 + strength * 0.60 + (0.08 if self.in_transition("A") else 0.0)) * tempo_speed,
                 )
             else:
                 if self.ai_pass_cooldown == 0:
-                    target = self.closest_players([p for p in self.away if p is not carrier], carrier.x, carrier.y, 1)[0]
+                    target = self.choose_pass_target(carrier)
                     self.pass_ball(target, allow_any_team=True)
                     self.ai_pass_cooldown = 20
 
@@ -10237,8 +10960,8 @@ class Game:
             target_x, target_y = carrier.x, carrier.y
         else:
             target_x, target_y = self.ball.x, self.ball.y
-        away_field = [p for p in self.away if p.role != "GK"]
-        away_chasers = self.closest_players(away_field, target_x, target_y, min(press_count, len(away_field)))
+        away_field = [p for p in self.away if p.role != "GK" and not getattr(p, "sent_off", False)]
+        away_chasers = self.select_pressers(away_field, target_x, target_y, min(press_count, len(away_field)), "A")
         tri_targets = self.triangle_targets(target_x, target_y, radius=75)
 
         attack_shift = -60 if carrier and carrier.team == "A" else 0
@@ -10246,6 +10969,8 @@ class Game:
 
         for p in self.away:
             if p is self.controlled:
+                continue
+            if getattr(p, "sent_off", False):
                 continue
             if p is carrier:
                 continue
@@ -10255,21 +10980,23 @@ class Game:
                 desired_x = box_max - min(PENALTY_BOX_DEPTH * 0.6, max(10, (WIDTH - self.ball.x) * 0.4))
                 target_x = clamp(desired_x, box_min, box_max)
                 target_y = clamp(self.ball.y, HEIGHT / 2 - PENALTY_BOX_HEIGHT / 2, HEIGHT / 2 + PENALTY_BOX_HEIGHT / 2)
-                p.move_toward(target_x, target_y, spd=p.speed * (0.5 + 0.3 * AI_DIFFICULTY))
+                p.move_toward(target_x, target_y, spd=p.speed * (0.52 + 0.24 * strength))
                 continue
             if p in away_chasers:
                 if carrier and carrier.team == "H":
                     tx, ty = tri_targets[away_chasers.index(p) % len(tri_targets)]
-                    p.move_toward(tx, ty, spd=p.speed * (0.6 * AI_DIFFICULTY + 0.35) * tempo_speed)
+                    p.move_toward(tx, ty, spd=p.speed * (0.34 + 0.34 * strength) * tempo_speed)
                     if dist(p, carrier) < TACKLE_RADIUS + 20:
                         self.tackle_check()
                 elif not carrier:
                     p.move_toward(self.ball.x, self.ball.y, spd=p.speed * 0.6 * tempo_speed)
             else:
                 if carrier and carrier.team == "A":
-                    p.move_toward(p.home_x + attack_shift, p.home_y, spd=p.speed * 0.55 * tempo_speed)
+                    tx, ty = self.support_run_target(p, carrier, "A", line_offset)
+                    p.move_toward(tx + attack_shift * 0.35, ty, spd=p.speed * 0.55 * tempo_speed)
                 elif carrier and carrier.team == "H":
-                    p.move_toward(p.home_x + defend_shift, p.home_y, spd=p.speed * 0.55 * tempo_speed)
+                    tx, ty = self.defensive_shape_target(p, carrier, "A", line_offset)
+                    p.move_toward(tx + defend_shift * 0.25, ty, spd=p.speed * 0.55 * tempo_speed)
                 elif not carrier:
                     sway_x = math.sin(p.y * 0.01 + pygame.time.get_ticks() * 0.001) * 10
                     sway_y = math.cos(p.x * 0.01 + pygame.time.get_ticks() * 0.001) * 8
@@ -10280,26 +11007,30 @@ class Game:
     def update_home_ai(self):
         if self.set_piece_pending:
             for p in self.home:
-                if p is self.set_piece_taker or p is self.controlled:
+                if p is self.set_piece_taker or p is self.controlled or getattr(p, "sent_off", False):
                     continue
                 p.move_toward(p.home_x, p.home_y, spd=p.speed * 0.5)
             return
         press, line, tempo = self.get_team_settings("H")
-        press_count = 2 + press
-        line_offset = (line - 2) * 25
-        tempo_speed = 0.9 + 0.1 * (tempo - 2)
-        dribble_bias = DRIBBLE_TENDENCY + (0.1 if tempo == 1 else -0.1 if tempo == 3 else 0)
+        state_bias = self.match_state_bias("H")
+        strength = self.team_strength_factor("H")
+        press_count = max(1, 2 + press + state_bias["press"])
+        line_offset = (line - 2) * 25 + state_bias["line"]
+        tempo_speed = 0.9 + 0.1 * (tempo - 2) + state_bias["tempo"]
+        dribble_bias = DRIBBLE_TENDENCY + (0.1 if tempo == 1 else -0.1 if tempo == 3 else 0) + state_bias["shoot"] * 0.2
         carrier = self.ball_carrier()
         if carrier and carrier.team == "H" and carrier is not self.controlled:
-            if self.in_penalty_box("H", carrier.x, carrier.y):
-                self.shoot_ball()
+            goal_x = WIDTH - FIELD_MARGIN + 10
+            context = self.shot_context(carrier, goal_x)
+            if self.in_penalty_box("H", carrier.x, carrier.y) and context["xg"] > 0.20:
+                self.shoot_toward(goal_x, allow_any_team=True, forced_carrier=carrier)
                 return
         if carrier:
             target_x, target_y = carrier.x, carrier.y
         else:
             target_x, target_y = self.ball.x, self.ball.y
-        home_field = [p for p in self.home if p.role != "GK" and p is not self.controlled]
-        home_chasers = self.closest_players(home_field, target_x, target_y, min(press_count, len(home_field)))
+        home_field = [p for p in self.home if p.role != "GK" and p is not self.controlled and not getattr(p, "sent_off", False)]
+        home_chasers = self.select_pressers(home_field, target_x, target_y, min(press_count, len(home_field)), "H")
         tri_targets = self.triangle_targets(target_x, target_y, radius=75)
 
         attack_shift = 60 if carrier and carrier.team == "H" else 0
@@ -10308,22 +11039,25 @@ class Game:
         for p in self.home:
             if p is self.controlled:
                 continue
+            if getattr(p, "sent_off", False):
+                continue
             if p.role == "GK":
                 box_min = FIELD_MARGIN
                 box_max = FIELD_MARGIN + PENALTY_BOX_DEPTH
                 desired_x = box_min + min(PENALTY_BOX_DEPTH * 0.6, max(10, (self.ball.x - FIELD_MARGIN) * 0.4))
                 target_x = clamp(desired_x, box_min, box_max)
                 target_y = clamp(self.ball.y, HEIGHT / 2 - PENALTY_BOX_HEIGHT / 2, HEIGHT / 2 + PENALTY_BOX_HEIGHT / 2)
-                p.move_toward(target_x, target_y, spd=p.speed * 0.7)
+                p.move_toward(target_x, target_y, spd=p.speed * (0.54 + 0.24 * strength))
                 continue
             if carrier and carrier.team == "H" and carrier is p:
                 goal_x = WIDTH - FIELD_MARGIN + 10
-                if abs(goal_x - carrier.x) < 220 and random.random() < SHOOT_TENDENCY:
-                    self.shoot_ball()
+                context = self.shot_context(carrier, goal_x)
+                if abs(goal_x - carrier.x) < 240 and random.random() < SHOOT_TENDENCY + state_bias["shoot"] + max(0.0, context["xg"] - 0.14) * 0.9:
+                    self.shoot_toward(goal_x, allow_any_team=True, forced_carrier=carrier)
                 elif random.random() < dribble_bias:
-                    carrier.move_toward(goal_x, carrier.y, spd=carrier.speed * 0.95 * tempo_speed)
+                    carrier.move_toward(goal_x, carrier.y + random.randint(-12, 12), spd=carrier.speed * (0.38 + strength * 0.60 + (0.08 if self.in_transition("H") else 0.0)) * tempo_speed)
                 elif self.ai_pass_cooldown == 0:
-                    target = self.closest_players([t for t in self.home if t is not carrier], carrier.x, carrier.y, 1)[0]
+                    target = self.choose_pass_target(carrier)
                     self.pass_ball(target, allow_any_team=True)
                     self.ai_pass_cooldown = 20
                 else:
@@ -10331,13 +11065,14 @@ class Game:
             elif carrier and carrier.team == "A":
                 if p in home_chasers:
                     tx, ty = tri_targets[home_chasers.index(p) % len(tri_targets)]
-                    p.move_toward(tx, ty, spd=p.speed * 0.7 * tempo_speed)
+                    p.move_toward(tx, ty, spd=p.speed * (0.34 + 0.34 * strength) * tempo_speed)
                     if dist(p, carrier) < TACKLE_RADIUS + 20:
                         self.tackle_check()
                 else:
+                    tx, ty = self.defensive_shape_target(p, carrier, "H", line_offset)
                     sway_x = math.sin(p.y * 0.01 + pygame.time.get_ticks() * 0.001) * 10
                     sway_y = math.cos(p.x * 0.01 + pygame.time.get_ticks() * 0.001) * 8
-                    p.move_toward(p.home_x + defend_shift + sway_x, p.home_y + sway_y, spd=p.speed * 0.55 * tempo_speed)
+                    p.move_toward(tx + defend_shift * 0.25 + sway_x, ty + sway_y, spd=p.speed * 0.55 * tempo_speed)
             elif not carrier:
                 if p in home_chasers:
                     p.move_toward(self.ball.x, self.ball.y, spd=p.speed * 0.6 * tempo_speed)
@@ -10346,9 +11081,10 @@ class Game:
                     sway_y = math.cos(p.x * 0.01 + pygame.time.get_ticks() * 0.001) * 8
                     p.move_toward(p.home_x + sway_x, p.home_y + sway_y, spd=p.speed * 0.55 * tempo_speed)
             else:
+                tx, ty = self.support_run_target(p, carrier, "H", line_offset)
                 sway_x = math.sin(p.y * 0.01 + pygame.time.get_ticks() * 0.001) * 10
                 sway_y = math.cos(p.x * 0.01 + pygame.time.get_ticks() * 0.001) * 8
-                p.move_toward(p.home_x + attack_shift + sway_x, p.home_y + sway_y, spd=p.speed * 0.55 * tempo_speed)
+                p.move_toward(tx + attack_shift * 0.35 + sway_x, ty + sway_y, spd=p.speed * 0.55 * tempo_speed)
 
     def handle_controls(self, keys):
         if self.state != "LIVE":
@@ -10380,6 +11116,12 @@ class Game:
 
     def clamp_players(self):
         for p in self.home + self.away:
+            if getattr(p, "sent_off", False):
+                p.x = -100
+                p.y = -100
+                p.vx = 0
+                p.vy = 0
+                continue
             if self.set_piece_pending and p is self.set_piece_taker:
                 clamped_x = clamp(p.x, FIELD_MARGIN - 12, WIDTH - FIELD_MARGIN + 12)
                 clamped_y = clamp(p.y, FIELD_MARGIN - 12, HEIGHT - FIELD_MARGIN + 12)
@@ -10411,6 +11153,25 @@ class Game:
                     self.toggle_dev_catalog_card_face()
                     continue
             if event.type == pygame.KEYDOWN:
+                if self.state == "PENALTY_SCENE":
+                    if not self.penalty_state:
+                        continue
+                    mode = self.penalty_user_mode()
+                    if event.key == pygame.K_LEFT:
+                        key = "dive_x" if mode == "keeper" else "aim_x"
+                        self.penalty_state[key] = max(-1.0, self.penalty_state.get(key, 0.0) - 0.14)
+                    elif event.key == pygame.K_RIGHT:
+                        key = "dive_x" if mode == "keeper" else "aim_x"
+                        self.penalty_state[key] = min(1.0, self.penalty_state.get(key, 0.0) + 0.14)
+                    elif event.key == pygame.K_UP:
+                        key = "dive_y" if mode == "keeper" else "aim_y"
+                        self.penalty_state[key] = max(-1.0, self.penalty_state.get(key, 0.0) - 0.14)
+                    elif event.key == pygame.K_DOWN:
+                        key = "dive_y" if mode == "keeper" else "aim_y"
+                        self.penalty_state[key] = min(1.0, self.penalty_state.get(key, 0.0) + 0.14)
+                    elif event.key == pygame.K_k and mode == "shooter":
+                        self.resolve_penalty_scene()
+                    continue
                 if self.state == "ACCOUNT_HOME":
                     options = ["Sign In", "Create Account", "Developer Sign In"]
                     if event.key == pygame.K_DOWN:
@@ -11003,7 +11764,10 @@ class Game:
                             self.registered_users_index = 0
                             self.state = "DEV_REGISTERED_USERS"
                     elif event.key == pygame.K_SPACE:
-                        self.start_week()
+                        if self.game_mode == "FANTASY" and self.fantasy_active_competition == "penalty_shootout":
+                            self.start_penalty_shootout_competition()
+                        else:
+                            self.start_week()
                     elif event.key == pygame.K_s and self.game_mode != "FANTASY":
                         self.skip_to_end_of_season()
                     elif event.key == pygame.K_t:
@@ -11157,6 +11921,7 @@ class Game:
                         if self.pending_fixture:
                             self.start_match()
                 elif self.state == "LINEUP_RESERVES":
+                    cols = 6
                     if event.key == pygame.K_ESCAPE:
                         self.state = "LINEUP"
                         self.lineup_col = 0 if self.lineup_pick and self.lineup_pick[0] == 0 else 1 if self.lineup_pick and self.lineup_pick[0] == 1 else 0
@@ -11164,9 +11929,9 @@ class Game:
                         self.state = "LINEUP"
                         self.lineup_col = 1 if self.lineup_pick and self.lineup_pick[0] == 1 else 0
                     elif event.key == pygame.K_UP:
-                        self.lineup_idx = max(0, self.lineup_idx - 1)
+                        self.lineup_idx = max(0, self.lineup_idx - cols)
                     elif event.key == pygame.K_DOWN:
-                        self.lineup_idx = min(len(self.user_reserves) - 1, self.lineup_idx + 1)
+                        self.lineup_idx = min(len(self.user_reserves) - 1, self.lineup_idx + cols)
                     elif event.key == pygame.K_LEFT and self.user_reserves:
                         self.lineup_idx = max(0, self.lineup_idx - 1)
                     elif event.key == pygame.K_RIGHT and self.user_reserves:
@@ -12071,6 +12836,7 @@ class Game:
         self.lineup_rects = {}
         self.lineup_formation_rects = {}
         self.lineup_action_rects = {}
+        bench_focus = self.lineup_col == 1
         subtitle = self.user_team or "No club selected"
         if self.pending_fixture:
             home, away = self.pending_fixture
@@ -12082,11 +12848,13 @@ class Game:
         sidebar = pygame.Rect(28, 108, 268, 648)
         pitch_rect = pygame.Rect(326, 104, 862, 652)
         bench_strip = pygame.Rect(360, 696, 792, 114)
+        bench_focus_panel = pygame.Rect(372, 560, 768, 170)
 
         self.draw_glass_panel(sidebar, accent=(90, 220, 130), radius=24, fill=(22, 26, 32, 228))
         pygame.draw.rect(self.screen, (34, 88, 44), pitch_rect, 0, border_radius=26)
         pygame.draw.rect(self.screen, (210, 224, 214), pitch_rect, 2, border_radius=26)
-        self.draw_glass_panel(bench_strip, accent=(94, 106, 118), radius=18, fill=(18, 22, 28, 214))
+        if not bench_focus:
+            self.draw_glass_panel(bench_strip, accent=(94, 106, 118), radius=18, fill=(18, 22, 28, 214))
 
         stadium_inner = pitch_rect.inflate(-36, -32)
         pygame.draw.rect(self.screen, (112, 152, 84), stadium_inner, 0, border_radius=20)
@@ -12157,7 +12925,19 @@ class Game:
             if self.game_mode == "FANTASY":
                 chem = self.fantasy_chemistry_map.get((name, num, rating), 0)
                 self.screen.blit(self.small.render(f"Chemistry {chem}/3 | Promo {meta.get('promo', 'Base')}", True, (214, 220, 228)), (sidebar.x + 22, 618))
-            self.screen.blit(self.small.render("ENTER select | TAB switch XI/bench | SPACE play", True, (190, 198, 208)), (sidebar.x + 22, 664))
+            effective_rating = rating + (self.fantasy_chemistry_map.get((name, num, rating), 0) if self.game_mode == "FANTASY" else 0)
+            stamina = min(99, 58 + int(effective_rating * 0.28))
+            power = min(99, 52 + int(effective_rating * 0.34))
+            pace = min(99, 48 + int(effective_rating * 0.30))
+            passing = min(99, 46 + int(effective_rating * 0.29))
+            stat_rows = [("STA", stamina), ("PWR", power), ("PAC", pace), ("PAS", passing)]
+            stat_y = 650
+            for label, value in stat_rows:
+                self.screen.blit(self.small.render(f"{label} {value}", True, WHITE), (sidebar.x + 22, stat_y))
+                pygame.draw.rect(self.screen, (50, 56, 68), (sidebar.x + 86, stat_y + 5, 130, 8), 0, border_radius=4)
+                pygame.draw.rect(self.screen, (96, 220, 120), (sidebar.x + 86, stat_y + 5, int(130 * (value / 100)), 8), 0, border_radius=4)
+                stat_y += 24
+            self.screen.blit(self.small.render("ENTER select | TAB bench view | SPACE play", True, (190, 198, 208)), (sidebar.x + 22, 754))
 
         positions = self.get_team_positions(self.user_team, "home")
         role_map = [p[2] for p in positions]
@@ -12173,16 +12953,18 @@ class Game:
         max_pos_x = max(pos_x_values)
         min_pos_y = min(pos_y_values)
         max_pos_y = max(pos_y_values)
-        usable_w = stadium_inner.w - 150
-        usable_h = stadium_inner.h - 140
-        left_pad = stadium_inner.x + 75
-        top_pad = stadium_inner.y + 44
+        usable_w = stadium_inner.w - 206
+        usable_h = stadium_inner.h - 216
+        left_pad = stadium_inner.x + 103
+        top_pad = stadium_inner.y + 62
         for i, entry in enumerate(self.user_starting):
             px, py, role = positions[i]
             depth = 0.5 if max_pos_x == min_pos_x else (px - min_pos_x) / (max_pos_x - min_pos_x)
             lateral = 0.5 if max_pos_y == min_pos_y else (py - min_pos_y) / (max_pos_y - min_pos_y)
             cx = left_pad + lateral * usable_w - card_w / 2
             cy = top_pad + (1.0 - depth) * usable_h - card_h / 2
+            cx = max(stadium_inner.x + 16, min(cx, stadium_inner.right - card_w - 16))
+            cy = max(stadium_inner.y + 14, min(cy, stadium_inner.bottom - card_h - 14))
             self.lineup_rects[(0, i)] = pygame.Rect(int(cx), int(cy), card_w, card_h)
         if self.game_mode == "FANTASY":
             link_colors = {
@@ -12207,22 +12989,41 @@ class Game:
             is_pick = self.lineup_pick == (0, i)
             self.lineup_rects[(0, i)] = self.draw_squad_card(rect.x, rect.y, card_w, card_h, entry, role=role_map[i], selected=is_selected, picked=is_pick)
 
-        self.screen.blit(self.font.render("RESERVES", True, WHITE), (bench_strip.x + 12, bench_strip.y + 12))
-        self.screen.blit(self.small.render(f"{len(self.user_reserves)} saved off-pitch | press R", True, (200, 208, 220)), (bench_strip.x + 12, bench_strip.y + 42))
-        preview_slots = min(7, len(self.user_bench))
-        for slot in range(preview_slots):
-            entry = self.user_bench[slot]
-            x = bench_strip.x + 210 + slot * 84
-            y = bench_strip.y + 10
-            is_selected = self.lineup_col == 1 and slot == self.lineup_idx
-            is_pick = self.lineup_pick == (1, slot)
-            self.lineup_rects[(1, slot)] = self.draw_squad_card(x, y, 76, 94, entry, role="SUB", selected=is_selected, picked=is_pick)
-        if len(self.user_bench) > preview_slots:
-            self.screen.blit(self.small.render(f"+{len(self.user_bench) - preview_slots}", True, (220, 228, 236)), (bench_strip.right - 44, bench_strip.y + 46))
+        if bench_focus:
+            shade = pygame.Surface((pitch_rect.w, pitch_rect.h), pygame.SRCALPHA)
+            shade.fill((0, 0, 0, 72))
+            self.screen.blit(shade, pitch_rect.topleft)
+            self.draw_glass_panel(bench_focus_panel, accent=(244, 206, 84), radius=20, fill=(18, 22, 28, 232))
+            self.screen.blit(self.font.render("BENCH", True, WHITE), (bench_focus_panel.x + 18, bench_focus_panel.y + 14))
+            self.screen.blit(self.small.render("TAB return to XI | ENTER swap | R reserves", True, (214, 220, 228)), (bench_focus_panel.x + 18, bench_focus_panel.y + 44))
+            preview_slots = min(7, len(self.user_bench))
+            for slot in range(preview_slots):
+                entry = self.user_bench[slot]
+                x = bench_focus_panel.x + 22 + slot * 104
+                y = bench_focus_panel.y + 56
+                is_selected = self.lineup_col == 1 and slot == self.lineup_idx
+                is_pick = self.lineup_pick == (1, slot)
+                self.lineup_rects[(1, slot)] = self.draw_squad_card(x, y, 88, 108, entry, role="SUB", selected=is_selected, picked=is_pick)
+            if len(self.user_bench) > preview_slots:
+                self.screen.blit(self.small.render(f"+{len(self.user_bench) - preview_slots} more bench cards", True, (220, 228, 236)), (bench_focus_panel.right - 174, bench_focus_panel.y + 126))
+        else:
+            self.screen.blit(self.font.render("BENCH", True, WHITE), (bench_strip.x + 12, bench_strip.y + 12))
+            self.screen.blit(self.small.render(f"{len(self.user_reserves)} reserves saved off-pitch | press R", True, (200, 208, 220)), (bench_strip.x + 12, bench_strip.y + 42))
+            preview_slots = min(7, len(self.user_bench))
+            for slot in range(preview_slots):
+                entry = self.user_bench[slot]
+                x = bench_strip.x + 210 + slot * 84
+                y = bench_strip.y + 10
+                is_selected = self.lineup_col == 1 and slot == self.lineup_idx
+                is_pick = self.lineup_pick == (1, slot)
+                self.lineup_rects[(1, slot)] = self.draw_squad_card(x, y, 76, 94, entry, role="SUB", selected=is_selected, picked=is_pick)
+            if len(self.user_bench) > preview_slots:
+                self.screen.blit(self.small.render(f"+{len(self.user_bench) - preview_slots}", True, (220, 228, 236)), (bench_strip.right - 44, bench_strip.y + 46))
 
         if self.pending_fixture:
             self.draw_kit_picker(936, 26, home, away)
-        self.draw_fc_bottom_nav([("A", "AUTO"), ("R", "RESERVES"), ("T", "TACTICS"), ("SPACE", "PLAY"), ("ESC", "BACK")], active_index=1)
+        if not bench_focus:
+            self.draw_fc_bottom_nav([("A", "AUTO"), ("R", "RESERVES"), ("T", "TACTICS"), ("SPACE", "PLAY"), ("ESC", "BACK")], active_index=1)
 
     def draw_lineup_reserves_page(self):
         self.draw_modern_backdrop((96, 220, 120), (70, 92, 128))
@@ -12236,7 +13037,7 @@ class Game:
         self.draw_glass_panel(grid_panel, accent=(86, 170, 255), radius=24, fill=(18, 24, 34, 228))
         self.screen.blit(self.font.render("Reserve Actions", True, WHITE), (left_panel.x + 18, left_panel.y + 18))
         action_lines = [
-            "UP/DOWN move through reserves",
+            "Arrows move through reserves",
             "ENTER select or finish a swap",
             "TAB returns to main lineup",
             "ESC closes reserves page",
@@ -12259,6 +13060,22 @@ class Game:
             self.screen.blit(self.font.render(selected[0][:18], True, WHITE), (left_panel.x + 18, left_panel.bottom - 150))
             self.screen.blit(self.small.render(f"OVR {selected[2]} | {meta.get('position', 'ST')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.bottom - 118))
             self.screen.blit(self.small.render(f"{meta.get('team', self.user_team or '')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.bottom - 94))
+            stamina = min(99, 58 + int(selected[2] * 0.28))
+            power = min(99, 52 + int(selected[2] * 0.34))
+            pace = min(99, 48 + int(selected[2] * 0.30))
+            passing = min(99, 46 + int(selected[2] * 0.29))
+            defending = min(99, 42 + int(selected[2] * 0.27))
+            bars = [("STA", stamina), ("PWR", power), ("PAC", pace), ("PAS", passing), ("DEF", defending)]
+            bar_y = left_panel.y + 228
+            for label, value in bars:
+                self.screen.blit(self.small.render(f"{label} {value}", True, WHITE), (left_panel.x + 18, bar_y))
+                pygame.draw.rect(self.screen, (48, 54, 64), (left_panel.x + 82, bar_y + 5, 150, 8), 0, border_radius=4)
+                pygame.draw.rect(self.screen, (96, 220, 120), (left_panel.x + 82, bar_y + 5, int(150 * (value / 100)), 8), 0, border_radius=4)
+                bar_y += 26
+            traits = ", ".join(meta.get("traits", [])[:4]) if meta.get("traits") else "No special traits"
+            self.screen.blit(self.small.render(f"Promo: {meta.get('promo', 'Base')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.y + 384))
+            self.screen.blit(self.small.render(f"Rarity: {meta.get('rarity', 'Base')}", True, (214, 220, 228)), (left_panel.x + 18, left_panel.y + 410))
+            self.screen.blit(self.small.render(traits[:28], True, (214, 220, 228)), (left_panel.x + 18, left_panel.y + 446))
         cols = 6
         card_w = 112
         card_h = 138
@@ -12266,14 +13083,26 @@ class Game:
         spacing_y = 22
         start_x = grid_panel.x + 20
         start_y = grid_panel.y + 26
-        for idx, entry in enumerate(self.user_reserves):
-            row = idx // cols
+        visible_rows = 3
+        selected_row = self.lineup_idx // cols if self.user_reserves else 0
+        max_start_row = max(0, ((len(self.user_reserves) - 1) // cols) - visible_rows + 1)
+        start_row = min(max(0, selected_row - 1), max_start_row)
+        end_row = start_row + visible_rows
+        visible_start = start_row * cols
+        visible_end = min(len(self.user_reserves), end_row * cols)
+        for idx in range(visible_start, visible_end):
+            entry = self.user_reserves[idx]
+            row = (idx - visible_start) // cols
             col = idx % cols
             x = start_x + col * (card_w + spacing_x)
             y = start_y + row * (card_h + spacing_y)
             is_selected = self.lineup_idx == idx
             is_pick = self.lineup_pick == (2, idx)
             self.lineup_rects[(2, idx)] = self.draw_squad_card(x, y, card_w, card_h, entry, role="RES", selected=is_selected, picked=is_pick)
+        if visible_start > 0:
+            self.screen.blit(self.small.render("More above", True, (214, 220, 228)), (grid_panel.centerx - 40, grid_panel.y + 6))
+        if visible_end < len(self.user_reserves):
+            self.screen.blit(self.small.render("More below", True, (214, 220, 228)), (grid_panel.centerx - 42, grid_panel.bottom - 26))
         self.draw_fc_bottom_nav([("ENTER", "SELECT"), ("TAB", "BACK TO XI"), ("ESC", "BACK")], active_index=0)
 
     def draw_lineup_tactics_page(self):
@@ -13082,6 +13911,8 @@ class Game:
             for j in range(i + 1, len(players)):
                 a = players[i]
                 b = players[j]
+                if getattr(a, "sent_off", False) or getattr(b, "sent_off", False):
+                    continue
                 dx = b.x - a.x
                 dy = b.y - a.y
                 d = math.hypot(dx, dy)
@@ -13144,6 +13975,17 @@ class Game:
                     self.finish_match()
                 else:
                     self.state = "LIVE"
+
+        if self.state == "PENALTY_SCENE":
+            if self.penalty_state:
+                self.penalty_state["timer"] = max(0.0, self.penalty_state.get("timer", 0.0) - dt)
+                if not self.penalty_state.get("resolved"):
+                    if self.penalty_user_mode() != "shooter" and self.penalty_state["timer"] <= 0:
+                        self.resolve_penalty_scene()
+                    elif self.penalty_user_mode() == "shooter" and self.penalty_state["timer"] <= 0:
+                        self.resolve_penalty_scene()
+                elif self.penalty_state["timer"] <= 0:
+                    self.finish_penalty_scene()
 
         if self.state == "LIVE":
             if self.full_time_pending:
@@ -13234,6 +14076,8 @@ class Game:
             self.draw_pack_summary_page()
         elif self.state == "MATCH_SCENE":
             self.draw_match_scene()
+        elif self.state == "PENALTY_SCENE":
+            self.draw_penalty_scene()
         elif self.state == "FANTASY_SBC":
             self.draw_fantasy_sbc_page()
         elif self.state == "FANTASY_SBC_BUILD":
