@@ -1624,7 +1624,7 @@ class Game:
         self.title_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], 40, bold=True)
         self.micro = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], 12)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | PENALTY_SCENE | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | PENALTY_SCENE | PENALTY_RESULT | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1716,6 +1716,11 @@ class Game:
         self.fantasy_competition_index = 0
         self.fantasy_active_competition = "division"
         self.fantasy_match_competition = "division"
+        self.penalty_shootout_setup = {}
+        self.penalty_order_strategy = "best_first"
+        self.penalty_order_focus = "pool"
+        self.penalty_order_pool_index = 0
+        self.penalty_order_slot_index = 0
         self.online_division_data = {"entry": {}, "leaderboard": []}
         self.online_division_index = 0
         self.online_division_message = ""
@@ -1775,6 +1780,7 @@ class Game:
         self.match_cards = {}
         self.match_fouls = {"H": 0, "A": 0}
         self.penalty_state = {}
+        self.penalty_result_state = {}
         self.show_calendar = False
         self.show_cup_bracket = False
         self.show_academy = False
@@ -3036,6 +3042,8 @@ class Game:
             self.build_fantasy_pool()
             if not self.fantasy_competitions:
                 self.init_fantasy_competitions()
+            else:
+                self.ensure_fantasy_competitions_defaults()
             self.apply_fantasy_club_identity()
             if not self.fantasy_objectives:
                 self.init_fantasy_objectives()
@@ -3582,36 +3590,358 @@ class Game:
         taker = self.penalty_state["taker"]
         keeper = self.penalty_state["keeper"]
         mode = self.penalty_user_mode()
-        self.screen.fill((8, 12, 18))
-        pitch = pygame.Rect(120, 110, WIDTH - 240, HEIGHT - 220)
+        shootout_mode = self.penalty_state.get("shootout_mode", False)
+        self.screen.fill((6, 10, 18))
+        for stripe in range(9):
+            color = (10, 30 + stripe * 4, 18 + stripe * 2)
+            pygame.draw.rect(self.screen, color, (0, 110 + stripe * 62, WIDTH, 62))
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(overlay, (0, 0, 0, 110), (0, 0, WIDTH, HEIGHT))
+        pygame.draw.circle(overlay, (86, 170, 255, 50), (WIDTH // 2, 124), 220)
+        pygame.draw.circle(overlay, (244, 206, 84, 34), (WIDTH // 2, HEIGHT - 110), 260)
+        self.screen.blit(overlay, (0, 0))
+        pitch = pygame.Rect(96, 104, WIDTH - 192, HEIGHT - 196)
         pygame.draw.rect(self.screen, (22, 82, 46), pitch, 0, border_radius=26)
         pygame.draw.rect(self.screen, (232, 236, 238), pitch, 2, border_radius=26)
-        goal = pygame.Rect(WIDTH // 2 - 150, pitch.y + 24, 300, 72)
+        goal = pygame.Rect(WIDTH // 2 - 156, pitch.y + 24, 312, 72)
         pygame.draw.rect(self.screen, (245, 245, 245), goal, 4, border_radius=6)
         spot = (WIDTH // 2, pitch.bottom - 130)
         pygame.draw.circle(self.screen, (245, 245, 245), spot, 4)
         pygame.draw.arc(self.screen, (245, 245, 245), pygame.Rect(spot[0] - 70, spot[1] - 68, 140, 98), math.pi * 0.12, math.pi * 0.88, 2)
-        self.screen.blit(self.big.render("PENALTY", True, WHITE), (48, 32))
-        self.screen.blit(self.font.render(f"{taker.name} vs {keeper.name}", True, (214, 222, 236)), (48, 72))
-        self.screen.blit(self.small.render("Arrows aim and dive | K shoot", True, (244, 206, 84)), (48, 102))
+        panel = pygame.Rect(28, 22, WIDTH - 56, 72)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=20, fill=(10, 14, 24, 226))
+        title = "PENALTY SHOOTOUT" if shootout_mode else "PENALTY"
+        self.screen.blit(self.big.render(title, True, WHITE), (48, 32))
+        summary = f"{taker.name} vs {keeper.name}"
+        if shootout_mode:
+            home_goals = sum(1 for ok in self.penalty_state.get("history", {}).get("H", []) if ok)
+            away_goals = sum(1 for ok in self.penalty_state.get("history", {}).get("A", []) if ok)
+            score_line = f"{self.current_home} {home_goals} - {away_goals} {self.current_away}"
+            self.screen.blit(self.font.render(score_line, True, (214, 222, 236)), (WIDTH // 2 - 140, 36))
+            self.screen.blit(self.small.render(summary, True, (214, 222, 236)), (48, 70))
+        else:
+            self.screen.blit(self.font.render(summary, True, (214, 222, 236)), (48, 70))
+        self.screen.blit(self.small.render("Arrows aim or dive | K shoot", True, (244, 206, 84)), (48, 98))
+        if self.penalty_state.get("competition_mode"):
+            contest = self.fantasy_competitions.get("penalty_shootout", {})
+            reward_chip = pygame.Rect(WIDTH - 252, 28, 108, 28)
+            streak_chip = pygame.Rect(WIDTH - 136, 28, 96, 28)
+            self.draw_glass_panel(reward_chip, accent=(244, 206, 84), radius=12, fill=(16, 24, 34, 214), shine=False)
+            self.draw_glass_panel(streak_chip, accent=(255, 92, 92), radius=12, fill=(16, 24, 34, 214), shine=False)
+            self.screen.blit(self.small.render(f"{contest.get('reward_coins', 140)}C", True, WHITE), (reward_chip.x + 30, reward_chip.y + 8))
+            self.screen.blit(self.small.render(f"Stk {contest.get('streak', 0)}", True, WHITE), (streak_chip.x + 24, streak_chip.y + 8))
+
+        if shootout_mode:
+            marker_y = 118
+            histories = self.penalty_state.get("history", {})
+            for idx in range(5):
+                for col, team in enumerate(("H", "A")):
+                    x = WIDTH // 2 - 98 + idx * 36
+                    y = marker_y + col * 20
+                    pygame.draw.circle(self.screen, (62, 72, 88), (x, y), 7)
+                    if idx < len(histories.get(team, [])):
+                        color = LIGHT_GREEN if histories[team][idx] else (255, 92, 92)
+                        pygame.draw.circle(self.screen, color, (x, y), 7)
+                        pygame.draw.circle(self.screen, (245, 245, 245), (x, y), 7, 1)
+            if len(histories.get("H", [])) > 5 or len(histories.get("A", [])) > 5:
+                self.screen.blit(self.small.render("Sudden death", True, (244, 206, 84)), (WIDTH // 2 + 100, marker_y - 6))
 
         aim_x = self.penalty_state.get("aim_x", 0.0)
         aim_y = self.penalty_state.get("aim_y", 0.0)
         dive_x = self.penalty_state.get("dive_x", 0.0)
         dive_y = self.penalty_state.get("dive_y", 0.0)
-        target_pos = (goal.centerx + int(aim_x * 120), goal.centery + int(aim_y * 24))
-        dive_pos = (goal.centerx + int(dive_x * 120), goal.centery + int(dive_y * 24))
-        pygame.draw.circle(self.screen, (244, 206, 84), target_pos, 12, 2)
-        pygame.draw.circle(self.screen, (86, 170, 255), dive_pos, 12, 2)
-        keeper_pos = dive_pos if self.penalty_state.get("resolved") else (goal.centerx, goal.y + 36)
-        pygame.draw.circle(self.screen, (255, 96, 96), keeper_pos, 18)
-        pygame.draw.circle(self.screen, (20, 20, 20), spot, 20)
-        pygame.draw.circle(self.screen, WHITE, (spot[0], spot[1] - 34), 14)
+        target_pos = self.penalty_state.get("shot_target") or (goal.centerx + int(aim_x * 120), goal.centery + int(aim_y * 24))
+        dive_pos = self.penalty_state.get("dive_target") or (goal.centerx + int(dive_x * 120), goal.centery + int(dive_y * 24))
+        target_preview = (goal.centerx + int(aim_x * 120), goal.centery + int(aim_y * 24))
+        anim_progress = self.penalty_state.get("anim_progress", 0.0)
+        if self.penalty_state.get("resolved"):
+            dive_anim = min(1.0, anim_progress / 0.55)
+        else:
+            dive_anim = 0.0
+        keeper_origin = (goal.centerx, goal.y + 36)
+        keeper_pos = (
+            int(keeper_origin[0] + (dive_pos[0] - keeper_origin[0]) * dive_anim),
+            int(keeper_origin[1] + (dive_pos[1] - keeper_origin[1]) * min(1.0, dive_anim * 0.9)),
+        )
+        stretch = 1.0 + abs(keeper_pos[0] - keeper_origin[0]) / 80.0
+        keeper_w = int(22 + 18 * stretch)
+        keeper_h = int(42 - min(12, abs(keeper_pos[0] - keeper_origin[0]) / 12))
+        keeper_rect = pygame.Rect(keeper_pos[0] - keeper_w // 2, keeper_pos[1] - keeper_h // 2, keeper_w, max(20, keeper_h))
+        pygame.draw.ellipse(self.screen, (255, 96, 96), keeper_rect)
+        pygame.draw.ellipse(self.screen, (255, 196, 196), keeper_rect, 2)
+        head_offset_x = int((keeper_w * 0.22) * (1 if keeper_pos[0] >= keeper_origin[0] else -1))
+        pygame.draw.circle(self.screen, (255, 196, 196), (keeper_pos[0] + head_offset_x, keeper_rect.y - 6), 9)
+        for ring in range(3):
+            radius = 10 + ring * 8
+            alpha = max(32, 110 - ring * 28)
+            surf = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (244, 206, 84, alpha), (surf.get_width() // 2, surf.get_height() // 2), radius, 2)
+            self.screen.blit(surf, (target_preview[0] - surf.get_width() // 2, target_preview[1] - surf.get_height() // 2))
+        pygame.draw.line(self.screen, (244, 206, 84), (target_preview[0] - 16, target_preview[1]), (target_preview[0] + 16, target_preview[1]), 2)
+        pygame.draw.line(self.screen, (244, 206, 84), (target_preview[0], target_preview[1] - 16), (target_preview[0], target_preview[1] + 16), 2)
+        curve_anchor = (WIDTH // 2, goal.bottom + 34)
+        pygame.draw.aaline(self.screen, (244, 206, 84), curve_anchor, target_preview)
+        pygame.draw.circle(self.screen, (86, 170, 255), dive_pos, 10, 2)
+        pygame.draw.line(self.screen, (86, 170, 255), (dive_pos[0] - 10, dive_pos[1]), (dive_pos[0] + 10, dive_pos[1]), 2)
+        taker_x = spot[0] + int(self.penalty_state.get("runup_offset", 0.0))
+        pygame.draw.circle(self.screen, (20, 20, 20), (taker_x, spot[1]), 20)
+        pygame.draw.circle(self.screen, WHITE, (taker_x, spot[1] - 34), 14)
+        ball_pos = spot
+        if self.penalty_state.get("resolved"):
+            start = self.penalty_state.get("anim_start", spot)
+            mid = self.penalty_state.get("anim_mid", target_pos)
+            end = self.penalty_state.get("anim_end", target_pos)
+            if anim_progress < 0.72:
+                t = anim_progress / 0.72
+                ball_pos = (int(start[0] + (mid[0] - start[0]) * t), int(start[1] + (mid[1] - start[1]) * t))
+            else:
+                t = min(1.0, (anim_progress - 0.72) / 0.28)
+                ball_pos = (int(mid[0] + (end[0] - mid[0]) * t), int(mid[1] + (end[1] - mid[1]) * t))
+        pygame.draw.circle(self.screen, (18, 18, 18), ball_pos, 10)
+        pygame.draw.circle(self.screen, WHITE, ball_pos, 10, 2)
+
+        power = self.penalty_state.get("power", 0.6)
+        pressure = self.penalty_state.get("pressure", 0.0)
+        shooter_stats = self.penalty_state.get("shooter_profile", self.penalty_player_profile(taker))
+        keeper_stats = self.penalty_state.get("keeper_profile", self.penalty_player_profile(keeper, keeper_mode=True))
+        stat_panel = pygame.Rect(38, 146, 242, 164)
+        self.draw_glass_panel(stat_panel, accent=(244, 206, 84), radius=22, fill=(10, 14, 24, 222))
+        self.screen.blit(self.small.render("Shooter", True, (244, 206, 84)), (stat_panel.x + 16, stat_panel.y + 12))
+        self.screen.blit(self.font.render(taker.name[:18], True, WHITE), (stat_panel.x + 16, stat_panel.y + 34))
+        self.screen.blit(self.small.render(f"Penalty {shooter_stats['penalty']}  |  Composure {shooter_stats['composure']}", True, (214, 222, 236)), (stat_panel.x + 16, stat_panel.y + 70))
+        self.screen.blit(self.small.render(f"Power {shooter_stats['power']}  |  Stamina {shooter_stats['stamina']}", True, (214, 222, 236)), (stat_panel.x + 16, stat_panel.y + 92))
+        self.screen.blit(self.small.render(f"Pressure {int(pressure * 100)}%", True, (255, 160, 120) if pressure > 0.35 else (214, 222, 236)), (stat_panel.x + 16, stat_panel.y + 114))
+        power_rect = pygame.Rect(stat_panel.x + 16, stat_panel.bottom - 28, stat_panel.w - 32, 12)
+        pygame.draw.rect(self.screen, (40, 46, 62), power_rect, 0, border_radius=6)
+        pygame.draw.rect(self.screen, (244, 206, 84), (power_rect.x, power_rect.y, int(power_rect.w * power), power_rect.h), 0, border_radius=6)
+
+        keeper_panel = pygame.Rect(WIDTH - 280, 146, 242, 164)
+        self.draw_glass_panel(keeper_panel, accent=(86, 170, 255), radius=22, fill=(10, 14, 24, 222))
+        self.screen.blit(self.small.render("Keeper", True, (86, 170, 255)), (keeper_panel.x + 16, keeper_panel.y + 12))
+        self.screen.blit(self.font.render(keeper.name[:18], True, WHITE), (keeper_panel.x + 16, keeper_panel.y + 34))
+        self.screen.blit(self.small.render(f"Reflex {keeper_stats['reflex']}  |  Reach {keeper_stats['reach']}", True, (214, 222, 236)), (keeper_panel.x + 16, keeper_panel.y + 70))
+        self.screen.blit(self.small.render(f"Handling {keeper_stats['handling']}  |  Pressure {keeper_stats['nerve']}", True, (214, 222, 236)), (keeper_panel.x + 16, keeper_panel.y + 92))
+        self.screen.blit(self.small.render(f"Dive target {int(dive_x * 100):+d},{int(dive_y * 100):+d}", True, (214, 222, 236)), (keeper_panel.x + 16, keeper_panel.y + 114))
+
         role_line = "You are taking the penalty" if mode == "shooter" else "You are controlling the keeper" if mode == "keeper" else "AI penalty"
+        countdown = max(0.0, self.penalty_state.get("timer", 0.0))
         self.screen.blit(self.font.render(role_line, True, WHITE), (48, HEIGHT - 124))
+        self.screen.blit(self.small.render(f"Clock {countdown:0.1f}s", True, (214, 222, 236)), (48, HEIGHT - 94))
         result = self.penalty_state.get("result", "")
         if result:
             self.screen.blit(self.font.render(result[:72], True, WHITE), (48, HEIGHT - 88))
+
+    def penalty_player_profile(self, player, keeper_mode=False):
+        traits = self.apply_fantasy_player_traits(player)
+        rating = max(50, int(getattr(player, "rating", 70)))
+        stamina = min(99, 58 + int(rating * 0.28))
+        power = min(99, 52 + int(rating * 0.34))
+        composure = min(99, 55 + int(rating * 0.30) + (8 if "Press Resist" in traits else 0) + (6 if "Finesse Shot" in traits else 0))
+        penalty = min(99, 54 + int(rating * 0.32) + (7 if "Finesse Shot" in traits else 0) + (4 if self.role_group(player.role) == "FW" else 0))
+        if keeper_mode:
+            reflex = min(99, 56 + int(rating * 0.31) + (6 if self.role_group(player.role) == "GK" else 0))
+            handling = min(99, 54 + int(rating * 0.28) + (6 if "Press Resist" in traits else 0))
+            reach = min(99, 54 + int(rating * 0.29) + (5 if "Interceptor" in traits else 0))
+            nerve = min(99, 52 + int(rating * 0.27) + (8 if "Press Resist" in traits else 0))
+            return {"reflex": reflex, "handling": handling, "reach": reach, "nerve": nerve}
+        return {"stamina": stamina, "power": power, "composure": composure, "penalty": penalty}
+
+    def penalty_shootout_winner(self):
+        if not self.penalty_state or not self.penalty_state.get("shootout_mode"):
+            return None
+        history = self.penalty_state.get("history", {"H": [], "A": []})
+        goals_h = sum(1 for ok in history.get("H", []) if ok)
+        goals_a = sum(1 for ok in history.get("A", []) if ok)
+        kicks_h = len(history.get("H", []))
+        kicks_a = len(history.get("A", []))
+        if kicks_h < 5 or kicks_a < 5:
+            rem_h = 5 - kicks_h
+            rem_a = 5 - kicks_a
+            if goals_h > goals_a + rem_a:
+                return "H"
+            if goals_a > goals_h + rem_h:
+                return "A"
+            return None
+        if kicks_h == kicks_a:
+            if goals_h > goals_a:
+                return "H"
+            if goals_a > goals_h:
+                return "A"
+        return None
+
+    def penalty_next_team(self):
+        if not self.penalty_state or not self.penalty_state.get("shootout_mode"):
+            return None
+        current = self.penalty_state.get("attacking_team", "H")
+        return "A" if current == "H" else "H"
+
+    def build_penalty_order(self, team_code):
+        squad = self.home if team_code == "H" else self.away
+        takers = [p for p in squad if p.role != "GK" and not getattr(p, "sent_off", False)]
+        if not takers:
+            takers = [p for p in squad if not getattr(p, "sent_off", False)]
+        takers = sorted(
+            takers,
+            key=lambda p: (
+                self.penalty_player_profile(p).get("penalty", 0),
+                self.penalty_player_profile(p).get("composure", 0),
+                getattr(p, "rating", 0),
+            ),
+            reverse=True,
+        )
+        return takers[: max(5, len(takers))]
+
+    def recommended_penalty_order(self, team_code, strategy="best_first"):
+        ranked = self.build_penalty_order(team_code)
+        if not ranked:
+            return []
+        top = ranked[:5]
+        if strategy == "best_fifth" and len(top) >= 5:
+            return [top[1], top[2], top[3], top[4], top[0]]
+        return top
+
+    def open_penalty_shootout_intro(self):
+        user_team_code = "H" if self.user_is_home else "A"
+        opp_team_code = "A" if user_team_code == "H" else "H"
+        contest = self.fantasy_competitions.get("penalty_shootout", {})
+        self.penalty_shootout_setup = {
+            "fixture": (self.current_home, self.current_away),
+            "user_team_code": user_team_code,
+            "opponent_team_code": opp_team_code,
+            "reward_coins": contest.get("reward_coins", 140),
+            "target": contest.get("target", 3),
+            "streak": contest.get("streak", 0),
+            "wins": contest.get("wins", 0),
+            "strategy": self.penalty_order_strategy,
+            "user_pool": self.build_penalty_order(user_team_code),
+            "user_order": self.recommended_penalty_order(user_team_code, self.penalty_order_strategy),
+            "opponent_order": self.recommended_penalty_order(opp_team_code, "best_fifth"),
+        }
+        self.penalty_order_focus = "pool"
+        self.penalty_order_pool_index = 0
+        self.penalty_order_slot_index = 0
+        self.state = "PENALTY_SHOOTOUT_INTRO"
+
+    def apply_penalty_order_strategy(self, strategy):
+        self.penalty_order_strategy = strategy
+        if not self.penalty_shootout_setup:
+            return
+        self.penalty_shootout_setup["strategy"] = strategy
+        self.penalty_shootout_setup["user_order"] = self.recommended_penalty_order(
+            self.penalty_shootout_setup.get("user_team_code", "H"),
+            strategy,
+        )
+
+    def assign_penalty_order_player(self):
+        if not self.penalty_shootout_setup:
+            return
+        pool = self.penalty_shootout_setup.get("user_pool", [])
+        if not pool:
+            return
+        self.penalty_order_pool_index = max(0, min(self.penalty_order_pool_index, len(pool) - 1))
+        player = pool[self.penalty_order_pool_index]
+        order = list(self.penalty_shootout_setup.get("user_order", []))
+        while len(order) < 5:
+            order.append(None)
+        order = [slot for slot in order if slot is not player]
+        while len(order) < 5:
+            order.append(None)
+        order[self.penalty_order_slot_index] = player
+        self.penalty_shootout_setup["user_order"] = order[:5]
+        self.penalty_order_slot_index = min(4, self.penalty_order_slot_index + 1)
+
+    def start_configured_penalty_shootout(self):
+        if not self.penalty_shootout_setup:
+            return
+        user_code = self.penalty_shootout_setup.get("user_team_code", "H")
+        opp_code = self.penalty_shootout_setup.get("opponent_team_code", "A")
+        user_order = [p for p in self.penalty_shootout_setup.get("user_order", []) if p]
+        if len(user_order) < 5:
+            fallback = self.recommended_penalty_order(user_code, self.penalty_order_strategy)
+            for player in fallback:
+                if player not in user_order:
+                    user_order.append(player)
+                if len(user_order) >= 5:
+                    break
+        opponent_order = [p for p in self.penalty_shootout_setup.get("opponent_order", []) if p]
+        if len(opponent_order) < 5:
+            opponent_order = self.recommended_penalty_order(opp_code, "best_fifth")
+        self.begin_penalty_scene(user_code, competition_mode=True)
+        if self.penalty_state:
+            self.penalty_state["order"][user_code] = user_order
+            self.penalty_state["order"][opp_code] = opponent_order
+            self.prepare_penalty_attempt(user_code)
+
+    def open_penalty_result_scene(self, won, user_goals, opp_goals, reward_coins, old_wins, new_wins, old_streak, new_streak, target):
+        self.penalty_result_state = {
+            "won": won,
+            "fixture": self.penalty_shootout_setup.get("fixture", (self.current_home, self.current_away)),
+            "user_goals": user_goals,
+            "opp_goals": opp_goals,
+            "reward_coins": reward_coins,
+            "coins_display": 0.0,
+            "coins_target": reward_coins,
+            "old_wins": old_wins,
+            "new_wins": new_wins,
+            "old_streak": old_streak,
+            "new_streak": new_streak,
+            "target": target,
+            "timer": 0.0,
+        }
+        self.state = "PENALTY_RESULT"
+
+    def prepare_penalty_attempt(self, attacking_team):
+        if not self.penalty_state:
+            return
+        defending_team = "A" if attacking_team == "H" else "H"
+        order = self.penalty_state.setdefault("order", {})
+        if attacking_team not in order:
+            order[attacking_team] = self.build_penalty_order(attacking_team)
+        attempts = len(self.penalty_state.setdefault("history", {}).setdefault(attacking_team, []))
+        takers = order.get(attacking_team) or self.build_penalty_order(attacking_team)
+        taker = takers[attempts % len(takers)]
+        keeper = next((p for p in (self.away if attacking_team == "H" else self.home) if p.role == "GK" and not getattr(p, "sent_off", False)), None)
+        if not keeper:
+            keeper_pool = [p for p in (self.away if attacking_team == "H" else self.home) if not getattr(p, "sent_off", False)]
+            keeper = max(keeper_pool, key=lambda p: p.rating) if keeper_pool else taker
+        pressure = 0.12
+        history = self.penalty_state.get("history", {})
+        if self.penalty_state.get("shootout_mode"):
+            goals_h = sum(1 for ok in history.get("H", []) if ok)
+            goals_a = sum(1 for ok in history.get("A", []) if ok)
+            score_diff = (goals_h - goals_a) if attacking_team == "H" else (goals_a - goals_h)
+            attempt_no = len(history.get(attacking_team, [])) + 1
+            pressure = clamp(0.12 + max(0, attempt_no - 2) * 0.06 + (-score_diff) * 0.05, 0.10, 0.52)
+        user_team_code = "H" if self.user_is_home else "A"
+        user_mode = "shooter" if attacking_team == user_team_code else "keeper" if self.user_team else "ai"
+        self.penalty_state.update(
+            {
+                "attacking_team": attacking_team,
+                "taker": taker,
+                "keeper": keeper,
+                "aim_x": 0.0,
+                "aim_y": 0.0,
+                "dive_x": 0.0,
+                "dive_y": 0.0,
+                "shot_target": None,
+                "dive_target": None,
+                "anim_start": None,
+                "anim_mid": None,
+                "anim_end": None,
+                "anim_progress": 0.0,
+                "resolved": False,
+                "result": "",
+                "timer": 6.0 if user_mode != "ai" else 2.4,
+                "power": 0.56,
+                "power_dir": 1,
+                "runup_offset": 0.0,
+                "pressure": pressure,
+                "shooter_profile": self.penalty_player_profile(taker),
+                "keeper_profile": self.penalty_player_profile(keeper, keeper_mode=True),
+                "rebound_mode": None,
+                "corner_team": None,
+            }
+        )
 
     def award_player(self, name, award):
         if not name:
@@ -4127,6 +4457,41 @@ class Game:
         if self.user_team:
             self.reset_champions_bracket()
         self.roll_pack_event()
+
+    def ensure_fantasy_competitions_defaults(self):
+        defaults_theme = self.current_theme or random.choice(["Premier Pulse", "Counter Kings", "Clean Sheet Club", "North London Heat", "Power Finish"])
+        default_competitions = {
+            "division": {"tier": 10, "points": 0, "played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "reward": 120, "reward_type": "coins"},
+            "ladder": {"week": 1, "points": 0, "played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "streak": 0, "target": 6, "reward_pack": "elite", "reward_coins": 160, "reward_type": "hybrid"},
+            "cup": {"round": 1, "alive": True, "played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "reward_pack": "elite", "reward_type": "pack"},
+            "weekend": {"played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 5, "reward_pack": "gold", "reward_coins": 80, "active": True, "reward_type": "hybrid"},
+            "penalty_shootout": {"played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 3, "reward_coins": 140, "reward_type": "coins", "streak": 0},
+            "theme": {"name": defaults_theme, "progress": 0, "played": 0, "wins": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 3, "reward_type": "pick", "pick_count": 3, "pick_band": "Mythic"},
+            "draft": {"wins": 0, "losses": 0, "target": 4, "max_losses": 2, "reward_type": "bundle", "reward_pack": "omega", "reward_coins": 260, "pick_count": 3, "pick_band": "Legend", "ready": False},
+            "champions": {
+                "round": 0,
+                "reward_pack": "transcendent",
+                "reward_coins": 240,
+                "reward_type": "hybrid",
+                "bracket": ["Round of 16", "Quarter Final", "Semi Final", "Final", "Champions"],
+                "pairings": [[], [], [], []],
+                "winners": [[], [], [], []],
+                "champion": None,
+            },
+            "silver": {"wins": 0, "played": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 3, "reward_pack": "silver", "reward_type": "pack", "alive": True},
+            "promo": {"wins": 0, "played": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 3, "reward_pack": "event", "reward_type": "pack", "alive": True},
+            "signature": {"wins": 0, "played": 0, "draws": 0, "losses": 0, "goals_for": 0, "goals_against": 0, "target": 2, "reward_type": "pick", "pick_count": 2, "pick_band": "signature", "alive": True},
+        }
+        comps = self.fantasy_competitions if isinstance(self.fantasy_competitions, dict) else {}
+        for key, defaults in default_competitions.items():
+            current = comps.get(key)
+            if not isinstance(current, dict):
+                comps[key] = defaults.copy()
+                continue
+            for field, value in defaults.items():
+                if field not in current:
+                    current[field] = value.copy() if isinstance(value, list) else value.copy() if isinstance(value, dict) else value
+        self.fantasy_competitions = comps
 
     def pack_event_catalog(self):
         promo_entries = [
@@ -5866,6 +6231,7 @@ class Game:
     def update_fantasy_competitions(self, won, drew, competition_key=None, user_goals=0, opp_goals=0):
         if self.game_mode != "FANTASY":
             return
+        self.ensure_fantasy_competitions_defaults()
         comps = self.fantasy_competitions
         if competition_key == "division":
             div = comps.get("division", {})
@@ -7988,6 +8354,171 @@ class Game:
             self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (panel.right - 110, panel.bottom - 26))
         self.draw_fc_bottom_nav([("O", "COMPETE"), ("D", "DRAFT"), ("L", "LINEUP"), ("P/M", "STORE"), ("ESC", "BACK")], active_index=0)
 
+    def draw_penalty_shootout_intro_page(self):
+        setup = self.penalty_shootout_setup or {}
+        contest = self.fantasy_competitions.get("penalty_shootout", {})
+        self.draw_modern_backdrop((244, 206, 84), (255, 92, 92))
+        self.draw_fc_top_bar("Penalty Shootout", "Coin event", counters=[((244, 206, 84), contest.get("reward_coins", 140))], accent=(244, 206, 84))
+        self.draw_hero_header("Penalty Shootout Night", "Pick your taker order, chase a streak, and win coins in a dedicated shootout event.", accent=(244, 206, 84), accent_two=(255, 92, 92), right_text=f"{setup.get('wins', 0)}/{setup.get('target', 3)} WINS")
+        self.screen.blit(self.small.render("ENTER continue | T toggle strategy | ESC back", True, (196, 210, 228)), (36, 170))
+        left = pygame.Rect(40, 214, 520, 520)
+        right = pygame.Rect(590, 214, 570, 520)
+        self.draw_glass_panel(left, accent=(244, 206, 84), radius=24)
+        self.draw_glass_panel(right, accent=(255, 92, 92), radius=24)
+
+        self.screen.blit(self.font.render("Event Briefing", True, WHITE), (left.x + 18, left.y + 18))
+        fixture = setup.get("fixture", ("Your Club", "Opponent"))
+        self.screen.blit(self.big.render(f"{fixture[0]} vs {fixture[1]}", True, WHITE), (left.x + 18, left.y + 56))
+        streak_box = pygame.Rect(left.x + 18, left.y + 108, left.w - 36, 92)
+        self.draw_glass_panel(streak_box, accent=(86, 170, 255), radius=18, fill=(18, 26, 38, 220), shine=False)
+        self.screen.blit(self.small.render("Current Streak", True, (196, 210, 228)), (streak_box.x + 16, streak_box.y + 14))
+        self.screen.blit(self.big.render(str(setup.get("streak", 0)), True, WHITE), (streak_box.x + 18, streak_box.y + 34))
+        self.screen.blit(self.small.render(f"Wins this run: {setup.get('wins', 0)} / {setup.get('target', 3)}", True, LIGHT_GREEN), (streak_box.x + 100, streak_box.y + 48))
+
+        reward_box = pygame.Rect(left.x + 18, left.y + 218, left.w - 36, 120)
+        self.draw_glass_panel(reward_box, accent=(244, 206, 84), radius=18, fill=(18, 26, 38, 220), shine=False)
+        self.screen.blit(self.small.render("Reward Banner", True, (244, 206, 84)), (reward_box.x + 16, reward_box.y + 14))
+        self.screen.blit(self.big.render(f"{setup.get('reward_coins', 140)} COINS", True, WHITE), (reward_box.x + 16, reward_box.y + 42))
+        self.screen.blit(self.small.render("Win the target streak to claim the payout and reset the run.", True, (196, 210, 228)), (reward_box.x + 16, reward_box.y + 84))
+
+        strategy_box = pygame.Rect(left.x + 18, left.y + 356, left.w - 36, 136)
+        self.draw_glass_panel(strategy_box, accent=(255, 92, 92), radius=18, fill=(18, 26, 38, 220), shine=False)
+        strategy = setup.get("strategy", "best_first")
+        strategy_name = "Best Taker First" if strategy == "best_first" else "Best Taker Fifth"
+        self.screen.blit(self.small.render("Order Strategy", True, (255, 92, 92)), (strategy_box.x + 16, strategy_box.y + 14))
+        self.screen.blit(self.font.render(strategy_name, True, WHITE), (strategy_box.x + 16, strategy_box.y + 42))
+        self.screen.blit(self.small.render("Use T to switch strategy before choosing the exact five-kick order.", True, (196, 210, 228)), (strategy_box.x + 16, strategy_box.y + 80))
+
+        self.screen.blit(self.font.render("Featured Shooters", True, WHITE), (right.x + 18, right.y + 18))
+        preview = [p for p in setup.get("user_order", []) if p][:5]
+        if not preview:
+            preview = setup.get("user_pool", [])[:5]
+        y = right.y + 64
+        for idx, player in enumerate(preview):
+            row = pygame.Rect(right.x + 18, y, right.w - 36, 72)
+            self.draw_glass_panel(row, accent=(244, 206, 84), radius=16, fill=(24, 32, 46, 220), shine=False)
+            profile = self.penalty_player_profile(player)
+            self.screen.blit(self.font.render(f"{idx + 1}. {player.name[:22]}", True, WHITE), (row.x + 16, row.y + 12))
+            detail = f"Pen {profile['penalty']} | Comp {profile['composure']} | Pow {profile['power']}"
+            self.screen.blit(self.small.render(detail, True, (196, 210, 228)), (row.x + 16, row.y + 44))
+            y += 84
+        self.draw_fc_bottom_nav([("ENTER", "ORDER"), ("T", "STRATEGY"), ("ESC", "BACK")], active_index=0)
+
+    def draw_penalty_order_page(self):
+        setup = self.penalty_shootout_setup or {}
+        self.draw_modern_backdrop((244, 206, 84), (86, 170, 255))
+        self.draw_fc_top_bar("Shootout Order", "Choose five takers", counters=[((244, 206, 84), setup.get("reward_coins", 140))], accent=(86, 170, 255))
+        self.draw_hero_header("Taker Order", "Set the exact penalty sequence. Left/right changes panel, up/down moves, enter assigns.", accent=(86, 170, 255), accent_two=(244, 206, 84), right_text=("Best Fifth" if setup.get("strategy") == "best_fifth" else "Best First"))
+        self.screen.blit(self.small.render("LEFT/RIGHT switch | UP/DOWN move | ENTER assign | BKSP clear | T toggle | SPACE start | ESC back", True, (196, 210, 228)), (36, 170))
+        pool_panel = pygame.Rect(40, 214, 470, 520)
+        order_panel = pygame.Rect(550, 214, 610, 520)
+        self.draw_glass_panel(pool_panel, accent=(86, 170, 255), radius=24)
+        self.draw_glass_panel(order_panel, accent=(244, 206, 84), radius=24)
+        self.screen.blit(self.font.render("Available Takers", True, WHITE), (pool_panel.x + 18, pool_panel.y + 18))
+        self.screen.blit(self.font.render("Shootout Order", True, WHITE), (order_panel.x + 18, order_panel.y + 18))
+
+        pool = setup.get("user_pool", [])
+        order = list(setup.get("user_order", []))
+        while len(order) < 5:
+            order.append(None)
+        self.penalty_order_pool_index = max(0, min(self.penalty_order_pool_index, max(0, len(pool) - 1)))
+        self.penalty_order_slot_index = max(0, min(self.penalty_order_slot_index, 4))
+        pool_start = max(0, min(self.penalty_order_pool_index - 3, max(0, len(pool) - 6)))
+        y = pool_panel.y + 58
+        for idx in range(pool_start, min(len(pool), pool_start + 6)):
+            player = pool[idx]
+            row = pygame.Rect(pool_panel.x + 18, y, pool_panel.w - 36, 66)
+            active = self.penalty_order_focus == "pool" and idx == self.penalty_order_pool_index
+            selected = player in order
+            self.draw_glass_panel(row, accent=YELLOW if active else (86, 170, 255), radius=16, fill=(44, 56, 78, 230) if active else (24, 30, 44, 218), shine=False)
+            profile = self.penalty_player_profile(player)
+            self.screen.blit(self.font.render(player.name[:22], True, WHITE), (row.x + 14, row.y + 10))
+            text = f"Pen {profile['penalty']} | Comp {profile['composure']} | Pow {profile['power']}"
+            self.screen.blit(self.small.render(text, True, (196, 210, 228)), (row.x + 14, row.y + 40))
+            if selected:
+                self.screen.blit(self.small.render("IN ORDER", True, LIGHT_GREEN), (row.right - 74, row.y + 22))
+            y += 76
+
+        slot_y = order_panel.y + 70
+        for idx in range(5):
+            slot = pygame.Rect(order_panel.x + 18, slot_y, order_panel.w - 36, 74)
+            active = self.penalty_order_focus == "slots" and idx == self.penalty_order_slot_index
+            self.draw_glass_panel(slot, accent=YELLOW if active else (244, 206, 84), radius=18, fill=(44, 56, 78, 230) if active else (24, 30, 44, 218), shine=False)
+            label = f"KICK {idx + 1}"
+            self.screen.blit(self.small.render(label, True, (244, 206, 84)), (slot.x + 14, slot.y + 12))
+            player = order[idx]
+            if player:
+                profile = self.penalty_player_profile(player)
+                self.screen.blit(self.font.render(player.name[:22], True, WHITE), (slot.x + 14, slot.y + 28))
+                info = f"Pen {profile['penalty']} | Comp {profile['composure']} | Power {profile['power']}"
+                self.screen.blit(self.small.render(info, True, (196, 210, 228)), (slot.x + 240, slot.y + 32))
+            else:
+                self.screen.blit(self.font.render("Empty Slot", True, (180, 190, 205)), (slot.x + 14, slot.y + 28))
+            slot_y += 88
+        self.draw_fc_bottom_nav([("ENTER", "ASSIGN"), ("T", "STRATEGY"), ("SPACE", "START"), ("BKSP", "CLEAR"), ("ESC", "BACK")], active_index=0)
+
+    def draw_penalty_result_page(self):
+        result = self.penalty_result_state or {}
+        self.draw_modern_backdrop((244, 206, 84), (255, 92, 92))
+        accent = (52, 244, 116) if result.get("won") else (255, 92, 92)
+        self.draw_fc_top_bar("Shootout Result", "Competition payout", counters=[(accent, int(result.get("coins_display", 0)))], accent=accent)
+        title = "Shootout Won" if result.get("won") else "Shootout Lost"
+        subtitle = "Your streak climbs and coins are paid out." if result.get("won") else "The run ends here. Reset and go again."
+        self.draw_hero_header(title, subtitle, accent=accent, accent_two=(244, 206, 84), right_text=f"{result.get('user_goals', 0)}-{result.get('opp_goals', 0)}")
+        self.screen.blit(self.small.render("ENTER or SPACE continue | ESC back", True, (196, 210, 228)), (36, 170))
+
+        left = pygame.Rect(40, 214, 420, 520)
+        center = pygame.Rect(490, 214, 320, 520)
+        right = pygame.Rect(840, 214, 320, 520)
+        self.draw_glass_panel(left, accent=accent, radius=24)
+        self.draw_glass_panel(center, accent=(244, 206, 84), radius=24)
+        self.draw_glass_panel(right, accent=(86, 170, 255), radius=24)
+
+        fixture = result.get("fixture", (self.current_home, self.current_away))
+        self.screen.blit(self.font.render("Final Score", True, WHITE), (left.x + 18, left.y + 18))
+        self.screen.blit(self.big.render(f"{fixture[0]}", True, WHITE), (left.x + 18, left.y + 62))
+        self.screen.blit(self.big.render(f"{result.get('user_goals', 0)} - {result.get('opp_goals', 0)}", True, accent), (left.x + 18, left.y + 112))
+        self.screen.blit(self.big.render(f"{fixture[1]}", True, WHITE), (left.x + 18, left.y + 162))
+        lines = [
+            f"Result: {'Win' if result.get('won') else 'Loss'}",
+            f"Streak: {result.get('old_streak', 0)} -> {result.get('new_streak', 0)}",
+            f"Progress: {result.get('old_wins', 0)} -> {result.get('new_wins', 0)} / {result.get('target', 3)}",
+        ]
+        y = left.y + 252
+        for line in lines:
+            self.screen.blit(self.font.render(line, True, WHITE), (left.x + 18, y))
+            y += 40
+
+        self.screen.blit(self.font.render("Coin Payout", True, WHITE), (center.x + 18, center.y + 18))
+        payout = int(result.get("reward_coins", 0))
+        displayed = int(result.get("coins_display", 0))
+        payout_box = pygame.Rect(center.x + 18, center.y + 64, center.w - 36, 150)
+        self.draw_glass_panel(payout_box, accent=(244, 206, 84), radius=20, fill=(18, 26, 38, 224), shine=False)
+        self.screen.blit(self.big.render(f"+{displayed}", True, (244, 206, 84)), (payout_box.x + 26, payout_box.y + 48))
+        self.screen.blit(self.small.render(f"Final payout {'ready' if displayed >= payout else 'counting up'}", True, (196, 210, 228)), (payout_box.x + 26, payout_box.y + 108))
+        bar = pygame.Rect(payout_box.x + 24, payout_box.bottom - 30, payout_box.w - 48, 12)
+        pygame.draw.rect(self.screen, (40, 46, 62), bar, 0, border_radius=6)
+        fill_w = 0 if payout <= 0 else int(bar.w * min(1.0, displayed / max(1, payout)))
+        pygame.draw.rect(self.screen, (244, 206, 84), (bar.x, bar.y, fill_w, bar.h), 0, border_radius=6)
+
+        streak_panel = pygame.Rect(right.x + 18, right.y + 64, right.w - 36, 186)
+        self.draw_glass_panel(streak_panel, accent=(255, 92, 92), radius=20, fill=(18, 26, 38, 224), shine=False)
+        self.screen.blit(self.font.render("Streak Tracker", True, WHITE), (streak_panel.x + 18, streak_panel.y + 18))
+        self.screen.blit(self.big.render(str(result.get("new_streak", 0)), True, accent), (streak_panel.x + 18, streak_panel.y + 64))
+        self.screen.blit(self.small.render("Current streak after this shootout", True, (196, 210, 228)), (streak_panel.x + 18, streak_panel.y + 118))
+        chip_y = streak_panel.bottom + 18
+        for idx in range(max(3, int(result.get("target", 3)))):
+            color = LIGHT_GREEN if idx < result.get("new_wins", 0) else (70, 80, 96)
+            pygame.draw.circle(self.screen, color, (right.x + 44 + idx * 34, chip_y), 10)
+            pygame.draw.circle(self.screen, (245, 245, 245), (right.x + 44 + idx * 34, chip_y), 10, 1)
+        footer = pygame.Rect(right.x + 18, right.bottom - 124, right.w - 36, 88)
+        self.draw_glass_panel(footer, accent=accent, radius=18, fill=(18, 26, 38, 224), shine=False)
+        footer_text = "Target reached. Coins paid and the run resets." if payout > 0 else "Keep the streak alive to reach the payout target."
+        if not result.get("won"):
+            footer_text = "The streak resets on a miss. Re-enter the event to start a fresh run."
+        self.screen.blit(self.small.render(footer_text[:64], True, (196, 210, 228)), (footer.x + 14, footer.y + 18))
+        self.draw_fc_bottom_nav([("ENTER", "CONTINUE"), ("SPACE", "CONTINUE"), ("ESC", "BACK")], active_index=0)
+
     def draw_fantasy_club_page(self):
         self.draw_modern_backdrop((244, 206, 84), (12, 220, 190))
         self.ensure_fantasy_club_defaults()
@@ -9011,9 +9542,7 @@ class Game:
         self.ball_free_ticks = 0
         self.match_probabilities = None
         self.reset_positions(kickoff=True)
-        self.begin_penalty_scene("H" if self.user_is_home else "A")
-        if self.penalty_state:
-            self.penalty_state["competition_mode"] = True
+        self.open_penalty_shootout_intro()
 
     def get_lineup_list(self, col):
         if col == 0:
@@ -9954,7 +10483,7 @@ class Game:
         self.set_piece_type = "freekick"
         self.add_commentary(f"Free kick to {'Home' if attacking_team == 'H' else 'Away'}")
 
-    def begin_penalty_scene(self, attacking_team):
+    def begin_penalty_scene(self, attacking_team, competition_mode=False):
         attackers = [p for p in (self.home if attacking_team == "H" else self.away) if p.role != "GK" and not getattr(p, "sent_off", False)]
         defenders = self.away if attacking_team == "H" else self.home
         keeper = next((p for p in defenders if p.role == "GK" and not getattr(p, "sent_off", False)), None)
@@ -9963,17 +10492,12 @@ class Game:
         taker = max(attackers, key=lambda p: p.rating)
         self.state = "PENALTY_SCENE"
         self.penalty_state = {
-            "attacking_team": attacking_team,
-            "taker": taker,
-            "keeper": keeper,
-            "aim_x": 0.0,
-            "aim_y": 0.0,
-            "dive_x": 0.0,
-            "dive_y": 0.0,
-            "resolved": False,
-            "result": "",
-            "timer": 1.1,
+            "competition_mode": competition_mode,
+            "shootout_mode": competition_mode,
+            "history": {"H": [], "A": []},
+            "order": {"H": self.build_penalty_order("H"), "A": self.build_penalty_order("A")},
         }
+        self.prepare_penalty_attempt(attacking_team)
         self.add_commentary(f"Penalty to {'Home' if attacking_team == 'H' else 'Away'}")
 
     def award_foul(self, defender, carrier, manual=False):
@@ -10013,6 +10537,9 @@ class Game:
         team = self.penalty_state["attacking_team"]
         mode = self.penalty_user_mode()
         traits = self.apply_fantasy_player_traits(taker)
+        shooter_profile = self.penalty_state.get("shooter_profile", self.penalty_player_profile(taker))
+        keeper_profile = self.penalty_state.get("keeper_profile", self.penalty_player_profile(keeper, keeper_mode=True))
+        pressure = self.penalty_state.get("pressure", 0.0)
         aim_x = self.penalty_state.get("aim_x", 0.0)
         aim_y = self.penalty_state.get("aim_y", 0.0)
         if mode == "ai":
@@ -10021,22 +10548,42 @@ class Game:
         dive_x = self.penalty_state.get("dive_x", 0.0)
         dive_y = self.penalty_state.get("dive_y", 0.0)
         if mode != "keeper":
-            keeper_read = clamp(0.12 + (keeper.rating - taker.rating) / 220, 0.06, 0.28)
+            keeper_read = clamp(0.12 + (keeper_profile["nerve"] - shooter_profile["composure"]) / 220, 0.06, 0.34)
             if random.random() < keeper_read:
                 dive_x = aim_x + random.uniform(-0.20, 0.20)
                 dive_y = aim_y + random.uniform(-0.18, 0.18)
             else:
                 dive_x = random.uniform(-0.9, 0.9)
                 dive_y = random.uniform(-0.8, 0.8)
-        accuracy = clamp(0.58 + (taker.rating - 70) / 120, 0.48, 0.95)
+        power = clamp(self.penalty_state.get("power", 0.62), 0.35, 1.0)
+        accuracy = clamp(0.48 + shooter_profile["penalty"] / 160 + shooter_profile["composure"] / 260 - pressure * 0.18, 0.34, 0.95)
         if "Finesse Shot" in traits:
             accuracy = min(0.98, accuracy + 0.08)
-        power = clamp(0.60 + (taker.rating - 70) / 90, 0.58, 1.0)
-        if abs(aim_x) > 0.70 or abs(aim_y) > 0.70:
-            accuracy -= 0.08
-        save_window = clamp(0.18 + (keeper.rating - taker.rating) / 250, 0.12, 0.30)
-        save_distance = math.hypot(aim_x - dive_x, aim_y - dive_y)
-        scored = random.random() < accuracy and save_distance > save_window
+        risk = max(abs(aim_x), abs(aim_y)) * 0.14 + abs(power - 0.72) * 0.26
+        final_x = clamp(aim_x + random.uniform(-0.24, 0.24) * (1.0 - accuracy + risk), -1.05, 1.05)
+        final_y = clamp(aim_y + random.uniform(-0.22, 0.22) * (1.0 - accuracy + risk), -0.92, 0.92)
+        self.penalty_state["shot_target"] = (WIDTH // 2 + int(final_x * 124), 164 + int(final_y * 26))
+        self.penalty_state["dive_target"] = (WIDTH // 2 + int(dive_x * 124), 164 + int(dive_y * 26))
+        miss_chance = clamp(0.05 + risk * 0.55 + pressure * 0.10 - accuracy * 0.05, 0.02, 0.38)
+        save_window = clamp(0.14 + keeper_profile["reach"] / 420 - shooter_profile["penalty"] / 520 + pressure * 0.10, 0.10, 0.34)
+        save_distance = math.hypot(final_x - dive_x, final_y - dive_y)
+        outcome = "goal"
+        if random.random() < miss_chance and (abs(final_x) > 0.88 or abs(final_y) > 0.74):
+            outcome = random.choice(["miss_wide", "crossbar"])
+        elif save_distance <= save_window and random.random() < clamp(0.34 + keeper_profile["reflex"] / 180 - power * 0.16, 0.18, 0.88):
+            save_roll = random.random()
+            if save_roll < 0.34:
+                outcome = "save_hold"
+            elif save_roll < 0.64:
+                outcome = "save_spill"
+            else:
+                outcome = "save_wide"
+        elif abs(final_x) > 0.96 or abs(final_y) > 0.82:
+            outcome = random.choice(["miss_wide", "post_rebound"])
+        scored = outcome == "goal"
+        anim_start = (WIDTH // 2, HEIGHT - 222)
+        anim_mid = self.penalty_state["shot_target"]
+        anim_end = anim_mid
         if scored:
             if team == "H":
                 self.score_h += 1
@@ -10046,18 +10593,88 @@ class Game:
             self.penalty_state["result"] = f"Penalty scored by {taker.name}"
             self.say("goal", a=taker.name, t=self.current_home if team == "H" else self.current_away)
         else:
-            self.penalty_state["result"] = f"{keeper.name} saves the penalty" if save_distance <= save_window else f"{taker.name} misses the penalty"
+            if outcome == "save_hold":
+                self.penalty_state["result"] = f"{keeper.name} holds the penalty"
+                anim_end = self.penalty_state["dive_target"]
+            elif outcome == "save_spill":
+                self.penalty_state["result"] = f"{keeper.name} spills it back into play"
+                self.penalty_state["rebound_mode"] = "spill"
+                anim_end = (int(self.penalty_state["dive_target"][0] + (-34 if team == "A" else 34)), int(self.penalty_state["dive_target"][1] + 26))
+            elif outcome == "save_wide":
+                self.penalty_state["result"] = f"{keeper.name} palms it behind for a corner"
+                self.penalty_state["corner_team"] = team
+                anim_end = (32 if team == "A" else WIDTH - 32, 128 if final_y < 0 else 246)
+            elif outcome == "post_rebound":
+                self.penalty_state["result"] = f"{taker.name} hits the post and it stays alive"
+                self.penalty_state["rebound_mode"] = "post"
+                post_x = WIDTH // 2 - 152 if final_x < 0 else WIDTH // 2 + 152
+                anim_mid = (post_x, anim_mid[1])
+                anim_end = (post_x + (28 if final_x < 0 else -28), anim_mid[1] + 54)
+            elif outcome == "crossbar":
+                self.penalty_state["result"] = f"{taker.name} rattles the crossbar"
+                self.penalty_state["rebound_mode"] = None if self.penalty_state.get("shootout_mode") else "bar"
+                anim_mid = (anim_mid[0], 128)
+                anim_end = (anim_mid[0] + random.randint(-20, 20), 164)
+            else:
+                self.penalty_state["result"] = f"{taker.name} misses the penalty"
+                anim_end = (anim_mid[0] + (54 if final_x >= 0 else -54), anim_mid[1] - 24)
             self.add_commentary(self.penalty_state["result"])
+        if self.penalty_state.get("shootout_mode"):
+            self.penalty_state.setdefault("history", {}).setdefault(team, []).append(scored)
+        self.penalty_state["shot_outcome"] = outcome
+        self.penalty_state["anim_start"] = anim_start
+        self.penalty_state["anim_mid"] = anim_mid
+        self.penalty_state["anim_end"] = anim_end
+        self.penalty_state["anim_progress"] = 0.0
         self.penalty_state["resolved"] = True
-        self.penalty_state["timer"] = 1.6
+        self.penalty_state["timer"] = 1.8
 
     def finish_penalty_scene(self):
         if not self.penalty_state:
             self.state = "LIVE"
             return
         competition_mode = self.penalty_state.get("competition_mode", False)
+        shootout_mode = self.penalty_state.get("shootout_mode", False)
         attacking_team = self.penalty_state.get("attacking_team", "H")
         scored = str(self.penalty_state.get("result", "")).lower().startswith("penalty scored")
+        if shootout_mode:
+            winner = self.penalty_shootout_winner()
+            if winner is None:
+                self.prepare_penalty_attempt(self.penalty_next_team())
+                return
+            history = self.penalty_state.get("history", {"H": [], "A": []})
+            user_team_code = "H" if self.user_is_home else "A"
+            user_won = winner == user_team_code
+            user_goals = sum(1 for ok in history.get(user_team_code, []) if ok)
+            opp_code = "A" if user_team_code == "H" else "H"
+            opp_goals = sum(1 for ok in history.get(opp_code, []) if ok)
+            self.penalty_state = {}
+            if competition_mode:
+                contest_before = dict(self.fantasy_competitions.get("penalty_shootout", {}))
+                coins_before = self.fantasy_coins
+                self.update_fantasy_competitions(user_won, False, "penalty_shootout", user_goals, opp_goals)
+                contest_after = self.fantasy_competitions.get("penalty_shootout", {})
+                payout = max(0, self.fantasy_coins - coins_before)
+                self.kickoff_pending = True
+                self.pending_fixture = None
+                self.save_active_profile()
+                self.open_penalty_result_scene(
+                    user_won,
+                    user_goals,
+                    opp_goals,
+                    payout,
+                    contest_before.get("wins", 0),
+                    contest_after.get("wins", 0),
+                    contest_before.get("streak", 0),
+                    contest_after.get("streak", 0),
+                    contest_after.get("target", contest_before.get("target", 3)),
+                )
+                return
+            self.state = "LIVE"
+            self.kickoff_pending = True
+            return
+        rebound_mode = self.penalty_state.get("rebound_mode")
+        corner_team = self.penalty_state.get("corner_team")
         self.penalty_state = {}
         if competition_mode:
             self.update_fantasy_competitions(scored, False, "penalty_shootout", 1 if scored else 0, 0 if scored else 1)
@@ -10066,6 +10683,52 @@ class Game:
             self.pending_fixture = None
             self.save_active_profile()
             return
+        if rebound_mode:
+            attack_team = self.home if attacking_team == "H" else self.away
+            defend_team = self.away if attacking_team == "H" else self.home
+            keeper = next((p for p in defend_team if p.role == "GK" and not getattr(p, "sent_off", False)), None)
+            rebound_x = FIELD_MARGIN + 88 if attacking_team == "A" else WIDTH - FIELD_MARGIN - 88
+            if keeper:
+                if rebound_mode == "spill":
+                    self.ball.x = keeper.x + (-28 if attacking_team == "A" else 28)
+                    self.ball.y = keeper.y + random.randint(-18, 18)
+                    keeper.has_ball = False
+                else:
+                    self.ball.x = rebound_x
+                    self.ball.y = HEIGHT / 2 + random.randint(-48, 48)
+                self.ball.vx = 0
+                self.ball.vy = 0
+                self.ball_free_ticks = 0
+                for p in self.home + self.away:
+                    p.has_ball = False
+                chasers = self.closest_players(attack_team + defend_team, self.ball.x, self.ball.y, 1)
+                if chasers:
+                    chasers[0].has_ball = True
+                self.kickoff_pending = False
+                self.state = "LIVE"
+                return
+        if corner_team:
+            left_goal = attacking_team == "A"
+            self.penalty_state = {}
+            self.state = "LIVE"
+            self.kickoff_pending = False
+            self.trigger_corner("A" if corner_team == "H" else "H", left_goal, HEIGHT / 2)
+            return
+        if not scored:
+            defending_team = self.away if attacking_team == "H" else self.home
+            keeper = next((p for p in defending_team if p.role == "GK" and not getattr(p, "sent_off", False)), None)
+            if keeper:
+                for p in self.home + self.away:
+                    p.has_ball = False
+                keeper.has_ball = True
+                self.ball.x = keeper.x
+                self.ball.y = keeper.y
+                self.ball.vx = 0
+                self.ball.vy = 0
+                self.ball_free_ticks = 0
+                self.kickoff_pending = False
+                self.state = "LIVE"
+                return
         self.kickoff_pending = True
         self.kickoff_team = "A" if attacking_team == "H" else "H"
         self.reset_positions(kickoff=True)
@@ -11633,6 +12296,53 @@ class Game:
                     elif event.key == pygame.K_d:
                         self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                     elif event.key == pygame.K_ESCAPE:
+                        self.state = "LEAGUE"
+                    continue
+                if self.state == "PENALTY_SHOOTOUT_INTRO":
+                    if event.key == pygame.K_t:
+                        self.apply_penalty_order_strategy("best_fifth" if self.penalty_order_strategy == "best_first" else "best_first")
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        self.state = "PENALTY_ORDER"
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "FANTASY_COMPETITIONS"
+                    continue
+                if self.state == "PENALTY_ORDER":
+                    pool = self.penalty_shootout_setup.get("user_pool", [])
+                    if event.key == pygame.K_LEFT:
+                        self.penalty_order_focus = "pool"
+                    elif event.key == pygame.K_RIGHT:
+                        self.penalty_order_focus = "slots"
+                    elif event.key == pygame.K_UP:
+                        if self.penalty_order_focus == "pool" and pool:
+                            self.penalty_order_pool_index = max(0, self.penalty_order_pool_index - 1)
+                        else:
+                            self.penalty_order_slot_index = max(0, self.penalty_order_slot_index - 1)
+                    elif event.key == pygame.K_DOWN:
+                        if self.penalty_order_focus == "pool" and pool:
+                            self.penalty_order_pool_index = min(len(pool) - 1, self.penalty_order_pool_index + 1)
+                        else:
+                            self.penalty_order_slot_index = min(4, self.penalty_order_slot_index + 1)
+                    elif event.key == pygame.K_t:
+                        self.apply_penalty_order_strategy("best_fifth" if self.penalty_order_strategy == "best_first" else "best_first")
+                    elif event.key == pygame.K_BACKSPACE:
+                        order = list(self.penalty_shootout_setup.get("user_order", []))
+                        while len(order) < 5:
+                            order.append(None)
+                        order[self.penalty_order_slot_index] = None
+                        self.penalty_shootout_setup["user_order"] = order[:5]
+                    elif event.key == pygame.K_RETURN:
+                        self.assign_penalty_order_player()
+                    elif event.key == pygame.K_a:
+                        self.apply_penalty_order_strategy(self.penalty_order_strategy)
+                    elif event.key == pygame.K_SPACE:
+                        self.start_configured_penalty_shootout()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "PENALTY_SHOOTOUT_INTRO"
+                    continue
+                if self.state == "PENALTY_RESULT":
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+                        self.penalty_result_state = {}
+                        self.penalty_shootout_setup = {}
                         self.state = "LEAGUE"
                     continue
                 if self.state == "FANTASY_CLUB":
@@ -13980,12 +14690,28 @@ class Game:
             if self.penalty_state:
                 self.penalty_state["timer"] = max(0.0, self.penalty_state.get("timer", 0.0) - dt)
                 if not self.penalty_state.get("resolved"):
-                    if self.penalty_user_mode() != "shooter" and self.penalty_state["timer"] <= 0:
-                        self.resolve_penalty_scene()
-                    elif self.penalty_user_mode() == "shooter" and self.penalty_state["timer"] <= 0:
+                    swing = dt * 0.75 * self.penalty_state.get("power_dir", 1)
+                    self.penalty_state["power"] = self.penalty_state.get("power", 0.56) + swing
+                    if self.penalty_state["power"] >= 1.0:
+                        self.penalty_state["power"] = 1.0
+                        self.penalty_state["power_dir"] = -1
+                    elif self.penalty_state["power"] <= 0.35:
+                        self.penalty_state["power"] = 0.35
+                        self.penalty_state["power_dir"] = 1
+                    self.penalty_state["runup_offset"] = math.sin(pygame.time.get_ticks() * 0.01) * 6
+                    if self.penalty_state["timer"] <= 0:
                         self.resolve_penalty_scene()
                 elif self.penalty_state["timer"] <= 0:
                     self.finish_penalty_scene()
+                else:
+                    self.penalty_state["anim_progress"] = min(1.0, self.penalty_state.get("anim_progress", 0.0) + dt * 1.7)
+        if self.state == "PENALTY_RESULT" and self.penalty_result_state:
+            self.penalty_result_state["timer"] = self.penalty_result_state.get("timer", 0.0) + dt
+            current = float(self.penalty_result_state.get("coins_display", 0.0))
+            target = float(self.penalty_result_state.get("coins_target", 0.0))
+            if current < target:
+                speed = max(18.0, target * 1.8) * dt
+                self.penalty_result_state["coins_display"] = min(target, current + speed)
 
         if self.state == "LIVE":
             if self.full_time_pending:
@@ -14078,6 +14804,12 @@ class Game:
             self.draw_match_scene()
         elif self.state == "PENALTY_SCENE":
             self.draw_penalty_scene()
+        elif self.state == "PENALTY_RESULT":
+            self.draw_penalty_result_page()
+        elif self.state == "PENALTY_SHOOTOUT_INTRO":
+            self.draw_penalty_shootout_intro_page()
+        elif self.state == "PENALTY_ORDER":
+            self.draw_penalty_order_page()
         elif self.state == "FANTASY_SBC":
             self.draw_fantasy_sbc_page()
         elif self.state == "FANTASY_SBC_BUILD":
