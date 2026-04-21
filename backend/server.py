@@ -9,6 +9,8 @@ import threading
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import parse_qs, urlparse
 
 
@@ -26,6 +28,9 @@ PBKDF2_ROUNDS = 200_000
 ONLINE_DIVISION_MATCHES_PER_CYCLE = 5
 ONLINE_TOURNAMENT_TARGET_WINS = 3
 ONLINE_TOURNAMENT_MAX_LOSSES = 2
+FOOTBALL_DATA_BASE = os.environ.get("FC_FOOTBALL_DATA_BASE", "https://api.football-data.org/v4").rstrip("/")
+FOOTBALL_DATA_TOKEN = os.environ.get("FC_FOOTBALL_DATA_TOKEN", "").strip()
+WEEKLY_FANTASY_COMPETITION = os.environ.get("FC_WEEKLY_FANTASY_COMPETITION", "PL").strip().upper() or "PL"
 DEFAULT_ADMIN_SETTINGS = {
     "announcement": "",
     "maintenance_mode": False,
@@ -54,6 +59,55 @@ def parse_iso(value):
 
 def clamp(value, low, high):
     return max(low, min(high, value))
+
+
+def normalize_person_name(value):
+    if not value:
+        return ""
+    text = "".join(ch.lower() if ch.isalnum() else " " for ch in str(value))
+    return " ".join(text.split())
+
+
+def normalize_team_name(value):
+    text = normalize_person_name(value)
+    aliases = {
+        "manchester city fc": "manchester city",
+        "manchester city": "manchester city",
+        "manchester united fc": "manchester united",
+        "manchester united": "manchester united",
+        "tottenham hotspur fc": "tottenham hotspur",
+        "tottenham hotspur": "tottenham hotspur",
+        "tottenham": "tottenham hotspur",
+        "west ham united fc": "west ham united",
+        "west ham united": "west ham united",
+        "leicester city fc": "leicester city",
+        "leicester city": "leicester city",
+        "liverpool fc": "liverpool",
+        "liverpool": "liverpool",
+        "chelsea fc": "chelsea",
+        "chelsea": "chelsea",
+        "arsenal fc": "arsenal",
+        "arsenal": "arsenal",
+        "everton fc": "everton",
+        "everton": "everton",
+        "sunderland afc": "sunderland",
+        "sunderland": "sunderland",
+    }
+    return aliases.get(text, text)
+
+
+def iso_week_key(moment=None):
+    target = moment or utc_now()
+    year, week_num, _ = target.isocalendar()
+    return f"{year}-W{week_num:02d}"
+
+
+def iso_week_window(moment=None):
+    target = moment or utc_now()
+    week_start = target - timedelta(days=target.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=6)
+    return week_start, week_end
 
 
 def valid_username(value):
@@ -145,6 +199,22 @@ class CloudStore:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS weekly_fantasy (
+                    user_id INTEGER NOT NULL,
+                    week_key TEXT NOT NULL,
+                    squad_json TEXT,
+                    points INTEGER NOT NULL DEFAULT 0,
+                    breakdown_json TEXT NOT NULL DEFAULT '{}',
+                    top_card_key TEXT,
+                    reward_json TEXT NOT NULL DEFAULT '{}',
+                    reward_claimed INTEGER NOT NULL DEFAULT 0,
+                    synced_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, week_key),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
                 """
             )
             self._ensure_schema(conn)
@@ -199,10 +269,22 @@ class CloudStore:
             """
         )
         online_tournaments = [dict(row) for row in cursor.fetchall()]
+        weekly_fantasy = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT user_id, week_key, squad_json, points, breakdown_json, top_card_key,
+                       reward_json, reward_claimed, synced_at, created_at, updated_at
+                FROM weekly_fantasy
+                ORDER BY user_id, week_key
+                """
+            ).fetchall()
+        ]
         payload = {
             "users": users,
             "online_divisions": online_divisions,
             "online_tournaments": online_tournaments,
+            "weekly_fantasy": weekly_fantasy,
             "backed_up_at": utc_iso(utc_now()),
         }
         tmp_path = BACKUP_PATH + ".tmp"
@@ -221,6 +303,7 @@ class CloudStore:
             return
         users = payload.get("users", []) if isinstance(payload, dict) else []
         online_divisions = payload.get("online_divisions", []) if isinstance(payload, dict) else []
+        weekly_fantasy = payload.get("weekly_fantasy", []) if isinstance(payload, dict) else []
         for row in users:
             conn.execute(
                 """
@@ -272,6 +355,28 @@ class CloudStore:
                     row.get("submitted_squad"),
                     row.get("recent_results", "[]"),
                     row.get("submitted_at"),
+                    row.get("updated_at", utc_iso(utc_now())),
+                ),
+            )
+        for row in weekly_fantasy:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO weekly_fantasy (
+                    user_id, week_key, squad_json, points, breakdown_json, top_card_key,
+                    reward_json, reward_claimed, synced_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.get("user_id"),
+                    row.get("week_key"),
+                    row.get("squad_json"),
+                    row.get("points", 0),
+                    row.get("breakdown_json", "{}"),
+                    row.get("top_card_key"),
+                    row.get("reward_json", "{}"),
+                    row.get("reward_claimed", 0),
+                    row.get("synced_at"),
+                    row.get("created_at", utc_iso(utc_now())),
                     row.get("updated_at", utc_iso(utc_now())),
                 ),
             )
@@ -373,6 +478,335 @@ class CloudStore:
             payload["career_snapshot"] = json.loads(row["career_snapshot"]) if row["career_snapshot"] else None
             payload["fantasy_snapshot"] = json.loads(row["fantasy_snapshot"]) if row["fantasy_snapshot"] else None
         return payload
+
+    def _football_data_json(self, path):
+        if not FOOTBALL_DATA_TOKEN:
+            raise ValueError("Weekly Fantasy requires FC_FOOTBALL_DATA_TOKEN on the cloud server.")
+        req = urllib_request.Request(
+            f"{FOOTBALL_DATA_BASE}{path}",
+            headers={"X-Auth-Token": FOOTBALL_DATA_TOKEN},
+            method="GET",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=12) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw else {}
+        except urllib_error.HTTPError as exc:
+            raw = exc.read().decode("utf-8")
+            try:
+                payload = json.loads(raw) if raw else {}
+            except Exception:
+                payload = {}
+            raise ValueError(payload.get("message") or payload.get("error") or f"football-data HTTP {exc.code}")
+        except (urllib_error.URLError, TimeoutError):
+            raise ValueError("football-data service unavailable.")
+
+    def _ensure_weekly_fantasy_entry(self, user_id, week_key=None):
+        target_week = week_key or iso_week_key()
+        timestamp = utc_iso(utc_now())
+        with self.lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO weekly_fantasy (
+                    user_id, week_key, breakdown_json, reward_json, created_at, updated_at
+                ) VALUES (?, ?, '{}', '{}', ?, ?)
+                """,
+                (user_id, target_week, timestamp, timestamp),
+            )
+            conn.commit()
+            return conn.execute(
+                "SELECT * FROM weekly_fantasy WHERE user_id = ? AND week_key = ?",
+                (user_id, target_week),
+            ).fetchone()
+
+    def _serialize_weekly_fantasy_entry(self, row):
+        if not row:
+            return {}
+        try:
+            squad = json.loads(row["squad_json"]) if row["squad_json"] else []
+        except Exception:
+            squad = []
+        try:
+            breakdown = json.loads(row["breakdown_json"] or "{}")
+        except Exception:
+            breakdown = {}
+        try:
+            reward = json.loads(row["reward_json"] or "{}")
+        except Exception:
+            reward = {}
+        week_start, week_end = iso_week_window()
+        return {
+            "week_key": row["week_key"],
+            "week_start": week_start.date().isoformat(),
+            "week_end": week_end.date().isoformat(),
+            "squad": squad,
+            "locked": bool(squad),
+            "points": int(row["points"] or 0),
+            "breakdown": breakdown,
+            "top_card_key": row["top_card_key"],
+            "reward": reward,
+            "reward_claimed": bool(row["reward_claimed"]),
+            "synced_at": row["synced_at"],
+        }
+
+    def _weekly_slot_accepts(self, slot_name, card):
+        position = str(card.get("position", "")).upper()
+        if slot_name == "GK":
+            return position == "GK"
+        if slot_name == "DEF":
+            return position in ("RB", "CB", "LB", "RWB", "LWB")
+        if slot_name == "MID":
+            return position in ("CDM", "CM", "CAM", "LM", "RM")
+        if slot_name == "ATT":
+            return position in ("LW", "RW", "ST", "CF")
+        return True
+
+    def _validate_weekly_squad(self, squad):
+        if not isinstance(squad, list) or len(squad) != 5:
+            raise ValueError("Weekly Fantasy needs exactly 5 selected cards.")
+        required_slots = ["GK", "DEF", "MID", "ATT", "FLEX"]
+        seen_keys = set()
+        for idx, slot_name in enumerate(required_slots):
+            item = squad[idx] if idx < len(squad) else None
+            if not isinstance(item, dict):
+                raise ValueError("Weekly Fantasy squad entry is invalid.")
+            if item.get("slot") != slot_name:
+                raise ValueError("Weekly Fantasy squad slots are out of order.")
+            if not item.get("card_key") or item["card_key"] in seen_keys:
+                raise ValueError("Weekly Fantasy squad cannot use duplicate cards.")
+            if not self._weekly_slot_accepts(slot_name, item):
+                raise ValueError(f"{item.get('name', 'Card')} does not fit the {slot_name} slot.")
+            seen_keys.add(item["card_key"])
+
+    def _empty_weekly_stats(self):
+        return {"appearances": 0, "goals": 0, "assists": 0, "yellow": 0, "red": 0, "clean_sheet": 0, "conceded": 0, "win": 0}
+
+    def _extract_match_lineup_names(self, match, side):
+        names = []
+        lineups = match.get("lineups")
+        if isinstance(lineups, dict):
+            source = lineups.get(side) or []
+            if isinstance(source, list):
+                for item in source:
+                    person = item.get("player") if isinstance(item, dict) else None
+                    name = (person or item).get("name") if isinstance(person or item, dict) else None
+                    if name:
+                        names.append(name)
+        team_blob = match.get(f"{side}Team") or {}
+        source = team_blob.get("lineup") or team_blob.get("startingXI") or []
+        if isinstance(source, list):
+            for item in source:
+                person = item.get("player") if isinstance(item, dict) else None
+                name = (person or item).get("name") if isinstance(person or item, dict) else None
+                if name:
+                    names.append(name)
+        return names
+
+    def _weekly_stats_from_matches(self, matches):
+        stats = {}
+
+        def ensure_player(name, team):
+            key = f"{normalize_person_name(name)}|{normalize_team_name(team)}"
+            if key not in stats:
+                stats[key] = self._empty_weekly_stats()
+            return key
+
+        for match in matches:
+            home_team = ((match.get("homeTeam") or {}).get("name")) or ""
+            away_team = ((match.get("awayTeam") or {}).get("name")) or ""
+            full_time = (match.get("score") or {}).get("fullTime") or {}
+            home_goals = int(full_time.get("home") or 0)
+            away_goals = int(full_time.get("away") or 0)
+
+            for name in self._extract_match_lineup_names(match, "home"):
+                key = ensure_player(name, home_team)
+                stats[key]["appearances"] += 1
+                stats[key]["clean_sheet"] += 1 if away_goals == 0 else 0
+                stats[key]["conceded"] += away_goals
+                stats[key]["win"] += 1 if home_goals > away_goals else 0
+            for name in self._extract_match_lineup_names(match, "away"):
+                key = ensure_player(name, away_team)
+                stats[key]["appearances"] += 1
+                stats[key]["clean_sheet"] += 1 if home_goals == 0 else 0
+                stats[key]["conceded"] += home_goals
+                stats[key]["win"] += 1 if away_goals > home_goals else 0
+
+            for goal in match.get("goals") or match.get("scorers") or []:
+                scorer = goal.get("scorer") if isinstance(goal, dict) else None
+                assist = goal.get("assist") if isinstance(goal, dict) else None
+                team_name = ((goal.get("team") or {}).get("name")) if isinstance(goal, dict) else ""
+                scorer_name = scorer.get("name") if isinstance(scorer, dict) else goal.get("scorer") if isinstance(goal, dict) else None
+                assist_name = assist.get("name") if isinstance(assist, dict) else None
+                if scorer_name:
+                    if not team_name:
+                        team_name = home_team if normalize_person_name(scorer_name) in [normalize_person_name(n) for n in self._extract_match_lineup_names(match, "home")] else away_team
+                    stats[ensure_player(scorer_name, team_name)]["goals"] += 1
+                if assist_name:
+                    if not team_name:
+                        team_name = home_team if normalize_person_name(assist_name) in [normalize_person_name(n) for n in self._extract_match_lineup_names(match, "home")] else away_team
+                    stats[ensure_player(assist_name, team_name)]["assists"] += 1
+
+            for booking in match.get("bookings") or []:
+                player = booking.get("player") if isinstance(booking, dict) else None
+                player_name = player.get("name") if isinstance(player, dict) else None
+                team_name = ((booking.get("team") or {}).get("name")) if isinstance(booking, dict) else ""
+                card_type = str(booking.get("card") or booking.get("cardType") or "").lower()
+                if player_name:
+                    target = stats[ensure_player(player_name, team_name)]
+                    if "red" in card_type:
+                        target["red"] += 1
+                    else:
+                        target["yellow"] += 1
+        return stats
+
+    def _score_weekly_card(self, card, stats):
+        position = str(card.get("position", "ST")).upper()
+        points = 0
+        if stats["appearances"] > 0:
+            points += 2
+        if position == "GK" or position in ("RB", "CB", "LB", "RWB", "LWB"):
+            points += stats["goals"] * 12
+        elif position in ("CDM", "CM", "CAM", "LM", "RM"):
+            points += stats["goals"] * 10
+        else:
+            points += stats["goals"] * 8
+        points += stats["assists"] * 6
+        if position == "GK" or position in ("RB", "CB", "LB", "RWB", "LWB"):
+            points += stats["clean_sheet"] * 4
+            points -= (stats["conceded"] // 2)
+        points += stats["win"] * 2
+        points -= stats["yellow"] * 3
+        points -= stats["red"] * 8
+        return points
+
+    def _weekly_reward_for_points(self, points, squad_breakdown):
+        top_card_key = None
+        if squad_breakdown:
+            top_card_key = max(squad_breakdown, key=lambda item: item.get("points", 0)).get("card_key")
+        if points >= 95:
+            return {"coins": 240, "pack_id": "elite_pick", "upgrade_delta": 3, "upgrade_card_key": top_card_key}
+        if points >= 70:
+            return {"coins": 160, "pack_id": "elite", "upgrade_delta": 2, "upgrade_card_key": top_card_key}
+        if points >= 45:
+            return {"coins": 100, "pack_id": "gold", "upgrade_delta": 1, "upgrade_card_key": top_card_key}
+        return {"coins": 40, "pack_id": "", "upgrade_delta": 0, "upgrade_card_key": None}
+
+    def get_weekly_fantasy_status(self, token):
+        user_row = self.get_user_by_token(token)
+        if not user_row:
+            raise PermissionError("Invalid or expired session.")
+        entry = self._ensure_weekly_fantasy_entry(user_row["id"])
+        return {
+            "entry": self._serialize_weekly_fantasy_entry(entry),
+            "provider_ready": bool(FOOTBALL_DATA_TOKEN),
+            "provider_name": "football-data.org",
+        }
+
+    def submit_weekly_fantasy_squad(self, token, squad):
+        user_row = self.get_user_by_token(token)
+        if not user_row:
+            raise PermissionError("Invalid or expired session.")
+        self._validate_weekly_squad(squad)
+        entry = self._ensure_weekly_fantasy_entry(user_row["id"])
+        if entry["squad_json"]:
+            raise ValueError("Weekly Fantasy squad already locked for this week.")
+        timestamp = utc_iso(utc_now())
+        with self.lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE weekly_fantasy
+                SET squad_json = ?, updated_at = ?
+                WHERE user_id = ? AND week_key = ?
+                """,
+                (json.dumps(squad), timestamp, user_row["id"], iso_week_key()),
+            )
+            conn.commit()
+            self._write_backup(conn)
+        return self.get_weekly_fantasy_status(token)
+
+    def sync_weekly_fantasy_score(self, token):
+        user_row = self.get_user_by_token(token)
+        if not user_row:
+            raise PermissionError("Invalid or expired session.")
+        entry = self._ensure_weekly_fantasy_entry(user_row["id"])
+        if not entry["squad_json"]:
+            raise ValueError("Submit your Weekly Fantasy squad first.")
+        squad = json.loads(entry["squad_json"])
+        week_start, week_end = iso_week_window()
+        matches = self._football_data_json(
+            f"/competitions/{WEEKLY_FANTASY_COMPETITION}/matches?status=FINISHED&dateFrom={week_start.date().isoformat()}&dateTo={week_end.date().isoformat()}"
+        ).get("matches", [])
+        stats_map = self._weekly_stats_from_matches(matches)
+        breakdown = []
+        total_points = 0
+        for item in squad:
+            stat_key = f"{normalize_person_name(item.get('name'))}|{normalize_team_name(item.get('team'))}"
+            player_stats = stats_map.get(stat_key, self._empty_weekly_stats())
+            points = self._score_weekly_card(item, player_stats)
+            total_points += points
+            breakdown.append(
+                {
+                    "card_key": item.get("card_key"),
+                    "name": item.get("name"),
+                    "team": item.get("team"),
+                    "slot": item.get("slot"),
+                    "points": points,
+                    "stats": player_stats,
+                }
+            )
+        reward = self._weekly_reward_for_points(total_points, breakdown)
+        timestamp = utc_iso(utc_now())
+        with self.lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE weekly_fantasy
+                SET points = ?, breakdown_json = ?, top_card_key = ?, reward_json = ?, synced_at = ?, updated_at = ?
+                WHERE user_id = ? AND week_key = ?
+                """,
+                (
+                    total_points,
+                    json.dumps({"players": breakdown}),
+                    reward.get("upgrade_card_key"),
+                    json.dumps(reward),
+                    timestamp,
+                    timestamp,
+                    user_row["id"],
+                    iso_week_key(),
+                ),
+            )
+            conn.commit()
+            self._write_backup(conn)
+        return self.get_weekly_fantasy_status(token)
+
+    def claim_weekly_fantasy_reward(self, token):
+        user_row = self.get_user_by_token(token)
+        if not user_row:
+            raise PermissionError("Invalid or expired session.")
+        entry = self._ensure_weekly_fantasy_entry(user_row["id"])
+        if not entry["squad_json"]:
+            raise ValueError("Submit your Weekly Fantasy squad first.")
+        if entry["reward_claimed"]:
+            raise ValueError("Weekly Fantasy reward already claimed.")
+        try:
+            reward = json.loads(entry["reward_json"] or "{}")
+        except Exception:
+            reward = {}
+        if not reward:
+            raise ValueError("Sync Weekly Fantasy points before claiming rewards.")
+        timestamp = utc_iso(utc_now())
+        with self.lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE weekly_fantasy
+                SET reward_claimed = 1, updated_at = ?
+                WHERE user_id = ? AND week_key = ?
+                """,
+                (timestamp, user_row["id"], iso_week_key()),
+            )
+            conn.commit()
+            self._write_backup(conn)
+        status = self.get_weekly_fantasy_status(token)
+        return {"reward": reward, **status}
 
     def _ensure_online_entry(self, user_id):
         timestamp = utc_iso(utc_now())
@@ -1303,6 +1737,9 @@ class CloudStore:
             "announcement": settings.get("announcement", ""),
             "maintenance_mode": bool(settings.get("maintenance_mode")),
             "disabled_modes": settings.get("disabled_modes", {}),
+            "weekly_fantasy_provider": "football-data.org",
+            "weekly_fantasy_enabled": True,
+            "weekly_fantasy_provider_ready": bool(FOOTBALL_DATA_TOKEN),
         }
 
     def admin_status(self, token):
@@ -1596,6 +2033,11 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
                 payload = STORE.get_online_tournament_status(token)
                 self._send_json(HTTPStatus.OK, payload)
                 return
+            if parsed.path == "/api/weekly-fantasy":
+                token = self._bearer_token()
+                payload = STORE.get_weekly_fantasy_status(token)
+                self._send_json(HTTPStatus.OK, payload)
+                return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
         except PermissionError as exc:
             self._send_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
@@ -1644,6 +2086,21 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/online-tournaments/claim":
                 token = self._bearer_token()
                 payload = STORE.claim_online_tournament_reward(token)
+                self._send_json(HTTPStatus.OK, payload)
+                return
+            if parsed.path == "/api/weekly-fantasy/submit":
+                token = self._bearer_token()
+                payload = STORE.submit_weekly_fantasy_squad(token, body.get("squad"))
+                self._send_json(HTTPStatus.OK, payload)
+                return
+            if parsed.path == "/api/weekly-fantasy/sync":
+                token = self._bearer_token()
+                payload = STORE.sync_weekly_fantasy_score(token)
+                self._send_json(HTTPStatus.OK, payload)
+                return
+            if parsed.path == "/api/weekly-fantasy/claim":
+                token = self._bearer_token()
+                payload = STORE.claim_weekly_fantasy_reward(token)
                 self._send_json(HTTPStatus.OK, payload)
                 return
             if parsed.path == "/api/admin/user-action":

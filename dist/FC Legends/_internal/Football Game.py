@@ -174,6 +174,31 @@ SIGNATURE_PLAYERS = [
     {"name": "Jamal Musiala", "team": "Bayern Munich", "rating": 97, "position": "CAM"},
 ]
 
+WONDERKID_PLAYERS = [
+    {"name": "Dennis Seimen", "team": "Chelsea", "rating": 74, "position": "GK"},
+    {"name": "Spike Brits", "team": "Manchester City", "rating": 72, "position": "GK"},
+    {"name": "Josh Acheampong", "team": "Chelsea", "rating": 74, "position": "RB"},
+    {"name": "Trent Kone-Doherty", "team": "Liverpool", "rating": 73, "position": "RB"},
+    {"name": "Leny Yoro", "team": "Manchester United", "rating": 82, "position": "CB"},
+    {"name": "Luka Vuskovic", "team": "Tottenham Hotspur", "rating": 78, "position": "CB"},
+    {"name": "Godwill Kukonki", "team": "Manchester United", "rating": 72, "position": "CB"},
+    {"name": "Max Alleyne", "team": "Manchester City", "rating": 71, "position": "CB"},
+    {"name": "Myles Lewis-Skelly", "team": "Arsenal", "rating": 79, "position": "LB"},
+    {"name": "Harry Amass", "team": "Manchester United", "rating": 75, "position": "LB"},
+    {"name": "Archie Gray", "team": "Tottenham Hotspur", "rating": 80, "position": "CDM"},
+    {"name": "Kobbie Mainoo", "team": "Manchester United", "rating": 83, "position": "CDM"},
+    {"name": "Chris Rigg", "team": "Sunderland", "rating": 77, "position": "CM"},
+    {"name": "Tyler Dibling", "team": "Everton", "rating": 76, "position": "CM"},
+    {"name": "Ethan Nwaneri", "team": "Arsenal", "rating": 82, "position": "CAM"},
+    {"name": "Shea Lacey", "team": "Manchester United", "rating": 76, "position": "CAM"},
+    {"name": "Estevao Willian", "team": "Chelsea", "rating": 81, "position": "RW"},
+    {"name": "Finley Gorman", "team": "Manchester City", "rating": 73, "position": "RW"},
+    {"name": "Rio Ngumoha", "team": "Liverpool", "rating": 75, "position": "LW"},
+    {"name": "Jeremy Monga", "team": "Leicester City", "rating": 74, "position": "LW"},
+    {"name": "Chido Obi-Martin", "team": "Manchester United", "rating": 79, "position": "ST"},
+    {"name": "Divin Mubama", "team": "West Ham United", "rating": 77, "position": "ST"},
+]
+
 WORLD_LEAGUE_PLAYERS = [
     {"name": "Kylian Mbappe", "team": "Real Madrid", "rating": 94, "position": "ST"},
     {"name": "Vinicius Junior", "team": "Real Madrid", "rating": 92, "position": "LW"},
@@ -1716,6 +1741,12 @@ class Game:
         self.fantasy_competition_index = 0
         self.fantasy_active_competition = "division"
         self.fantasy_match_competition = "division"
+        self.weekly_fantasy_data = {"entry": {}, "provider_ready": False, "provider_name": "football-data.org"}
+        self.weekly_fantasy_pool_index = 0
+        self.weekly_fantasy_slot_index = 0
+        self.weekly_fantasy_focus = "pool"
+        self.weekly_fantasy_slots = [None, None, None, None, None]
+        self.weekly_fantasy_message = ""
         self.penalty_shootout_setup = {}
         self.penalty_order_strategy = "best_first"
         self.penalty_order_focus = "pool"
@@ -2836,6 +2867,172 @@ class Game:
         except RuntimeError as exc:
             self.online_tournament_message = str(exc)
             return None
+
+    def weekly_fantasy_available(self):
+        if self.account_storage_mode == "LOCAL" or not self.cloud_token:
+            self.weekly_fantasy_message = "Weekly Fantasy requires a cloud account session"
+            self.account_message = "Sign in with cloud access to use Weekly Fantasy"
+            self.cloud_status_label = "Using Local Fallback" if self.account_storage_mode == "LOCAL" else "Cloud Auth Required"
+            return False
+        return True
+
+    def weekly_fantasy_slot_defs(self):
+        return [("GK", "Goalkeeper"), ("DEF", "Defender"), ("MID", "Midfielder"), ("ATT", "Attacker"), ("FLEX", "Free Pick")]
+
+    def weekly_fantasy_slot_accepts(self, slot_name, card):
+        position = str(card.get("position", "")).upper()
+        if slot_name == "GK":
+            return position == "GK"
+        if slot_name == "DEF":
+            return position in ("RB", "CB", "LB", "RWB", "LWB")
+        if slot_name == "MID":
+            return position in ("CDM", "CM", "CAM", "LM", "RM")
+        if slot_name == "ATT":
+            return position in ("LW", "RW", "ST", "CF")
+        return True
+
+    def weekly_fantasy_candidate_pool(self):
+        return sorted(self.fantasy_roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
+
+    def weekly_fantasy_locked(self):
+        return bool((self.weekly_fantasy_data or {}).get("entry", {}).get("locked"))
+
+    def find_fantasy_card_by_key(self, card_key):
+        if not card_key:
+            return None
+        for card in self.fantasy_roster:
+            if card.get("card_key") == card_key:
+                return card
+        return None
+
+    def hydrate_weekly_fantasy_slots(self, squad):
+        slots = [None, None, None, None, None]
+        slot_lookup = {name: idx for idx, (name, _) in enumerate(self.weekly_fantasy_slot_defs())}
+        for item in squad or []:
+            if not isinstance(item, dict):
+                continue
+            idx = slot_lookup.get(item.get("slot"))
+            if idx is None:
+                continue
+            slots[idx] = self.find_fantasy_card_by_key(item.get("card_key")) or item.copy()
+        self.weekly_fantasy_slots = slots
+
+    def fetch_weekly_fantasy_status(self):
+        if not self.weekly_fantasy_available():
+            return None
+        try:
+            data = self.cloud_request("GET", "/api/weekly-fantasy", needs_auth=True)
+            self.weekly_fantasy_data = data if isinstance(data, dict) else {"entry": {}}
+            self.hydrate_weekly_fantasy_slots((self.weekly_fantasy_data.get("entry") or {}).get("squad") or [])
+            entry = self.weekly_fantasy_data.get("entry", {})
+            self.weekly_fantasy_message = f"{entry.get('week_key', 'Week')} | {entry.get('points', 0)} pts | {'Locked' if entry.get('locked') else 'Editable'}"
+            return data
+        except RuntimeError as exc:
+            self.weekly_fantasy_message = str(exc)
+            return None
+
+    def open_weekly_fantasy_mode(self):
+        self.fetch_weekly_fantasy_status()
+        self.weekly_fantasy_focus = "pool"
+        self.weekly_fantasy_pool_index = 0
+        self.weekly_fantasy_slot_index = 0
+        self.state = "WEEKLY_FANTASY"
+
+    def assign_weekly_fantasy_card(self):
+        if self.weekly_fantasy_locked():
+            self.weekly_fantasy_message = "Weekly Fantasy squad is already locked for this week"
+            return
+        pool = self.weekly_fantasy_candidate_pool()
+        if not pool:
+            self.weekly_fantasy_message = "No cards available"
+            return
+        card = pool[max(0, min(self.weekly_fantasy_pool_index, len(pool) - 1))]
+        slot_name = self.weekly_fantasy_slot_defs()[self.weekly_fantasy_slot_index][0]
+        if not self.weekly_fantasy_slot_accepts(slot_name, card):
+            self.weekly_fantasy_message = f"{card.get('name')} does not fit the {slot_name} slot"
+            return
+        for existing_idx, existing in enumerate(self.weekly_fantasy_slots):
+            if existing and existing.get("card_key") == card.get("card_key"):
+                if existing_idx == self.weekly_fantasy_slot_index:
+                    return
+                self.weekly_fantasy_slots[existing_idx] = None
+        self.weekly_fantasy_slots[self.weekly_fantasy_slot_index] = card
+        self.weekly_fantasy_message = f"Assigned {card.get('name')} to {slot_name}"
+
+    def clear_weekly_fantasy_slot(self):
+        if self.weekly_fantasy_locked():
+            self.weekly_fantasy_message = "Weekly Fantasy squad is already locked for this week"
+            return
+        self.weekly_fantasy_slots[self.weekly_fantasy_slot_index] = None
+        self.weekly_fantasy_message = "Slot cleared"
+
+    def submit_weekly_fantasy_squad(self):
+        if not self.weekly_fantasy_available():
+            return
+        if self.weekly_fantasy_locked():
+            self.weekly_fantasy_message = "Weekly Fantasy squad is already locked for this week"
+            return
+        if any(slot is None for slot in self.weekly_fantasy_slots):
+            self.weekly_fantasy_message = "Fill all 5 Weekly Fantasy slots first"
+            return
+        squad = []
+        for idx, slot_card in enumerate(self.weekly_fantasy_slots):
+            slot_name = self.weekly_fantasy_slot_defs()[idx][0]
+            squad.append(
+                {
+                    "slot": slot_name,
+                    "card_key": slot_card.get("card_key"),
+                    "name": slot_card.get("name"),
+                    "team": slot_card.get("team"),
+                    "position": slot_card.get("position"),
+                    "rating": slot_card.get("rating"),
+                }
+            )
+        try:
+            data = self.cloud_request("POST", "/api/weekly-fantasy/submit", {"squad": squad}, needs_auth=True)
+            self.weekly_fantasy_data = data if isinstance(data, dict) else self.weekly_fantasy_data
+            self.hydrate_weekly_fantasy_slots((self.weekly_fantasy_data.get("entry") or {}).get("squad") or [])
+            self.weekly_fantasy_message = "Weekly Fantasy squad locked for this week"
+        except RuntimeError as exc:
+            self.weekly_fantasy_message = str(exc)
+
+    def sync_weekly_fantasy_points(self):
+        if not self.weekly_fantasy_available():
+            return
+        try:
+            data = self.cloud_request("POST", "/api/weekly-fantasy/sync", {}, needs_auth=True)
+            self.weekly_fantasy_data = data if isinstance(data, dict) else self.weekly_fantasy_data
+            self.hydrate_weekly_fantasy_slots((self.weekly_fantasy_data.get("entry") or {}).get("squad") or [])
+            entry = self.weekly_fantasy_data.get("entry", {})
+            self.weekly_fantasy_message = f"Weekly Fantasy synced: {entry.get('points', 0)} pts"
+        except RuntimeError as exc:
+            self.weekly_fantasy_message = str(exc)
+
+    def claim_weekly_fantasy_rewards(self):
+        if not self.weekly_fantasy_available():
+            return
+        try:
+            data = self.cloud_request("POST", "/api/weekly-fantasy/claim", {}, needs_auth=True)
+            reward = data.get("reward", {}) if isinstance(data, dict) else {}
+            coins = int(reward.get("coins", 0) or 0)
+            if coins:
+                self.fantasy_coins += coins
+            pack_id = reward.get("pack_id")
+            if pack_id:
+                self.store_pack(pack_id, source="Weekly Fantasy")
+            upgrade_delta = int(reward.get("upgrade_delta", 0) or 0)
+            upgrade_card = self.find_fantasy_card_by_key(reward.get("upgrade_card_key"))
+            if upgrade_card and upgrade_delta > 0:
+                upgrade_card["rating"] += upgrade_delta
+                upgrade_card["rarity"] = self.card_rarity_from_rating(upgrade_card["rating"], upgrade_card.get("promo", "Base"))
+                upgrade_card["card_key"] = f"{upgrade_card['name']}|{upgrade_card.get('promo', 'Base')}|{upgrade_card['rating']}|{upgrade_card.get('position', 'ST')}"
+                self.sync_fantasy_card_rating(upgrade_card)
+            self.weekly_fantasy_data = data if isinstance(data, dict) else self.weekly_fantasy_data
+            self.save_active_profile()
+            entry = self.weekly_fantasy_data.get("entry", {})
+            self.weekly_fantasy_message = f"Claimed Weekly Fantasy rewards | {entry.get('points', 0)} pts"
+        except RuntimeError as exc:
+            self.weekly_fantasy_message = str(exc)
 
     def play_online_tournament_match(self):
         if not self.online_tournaments_available():
@@ -4126,6 +4323,40 @@ class Game:
                 "trait": "Playmaker" if position not in ("GK", "CB", "LB", "RB") else "Interceptor",
             },
         ]
+        if self.is_wonderkid_card(card):
+            academy_goal = max(4, 4 + card.get("evo_level", 0))
+            academy_actions = goals + assists + max(0, tackles // 2) + clean
+            current_rating = card.get("rating", 70)
+            dream_cap = self.wonderkid_evo_cap(card)
+            if current_rating < 100:
+                delta = 8
+                cost = 95 + card.get("evo_level", 0) * 30
+                need_label = f"{academy_goal} goals+assists or {academy_goal + 2} defensive actions"
+            elif current_rating < 125:
+                delta = 7
+                cost = 180 + card.get("evo_level", 0) * 45
+                need_label = f"{academy_goal + 2} goals+assists or {academy_goal + 4} defensive actions"
+            elif current_rating < 145:
+                delta = 6
+                cost = 280 + card.get("evo_level", 0) * 60
+                need_label = f"{academy_goal + 4} goals+assists or {academy_goal + 6} defensive actions"
+            else:
+                delta = 5
+                cost = 420 + card.get("evo_level", 0) * 75
+                need_label = f"{academy_goal + 6} goals+assists or {academy_goal + 8} defensive actions"
+            paths.insert(
+                0,
+                {
+                    "name": "Wonderkids Academy",
+                    "delta": min(delta, max(0, dream_cap - current_rating)),
+                    "cost": cost,
+                    "need_label": need_label,
+                    "ready": academy_actions >= academy_goal or tackles + clean * 2 >= academy_goal + 2,
+                    "trait": "Clutch" if position in ("ST", "LW", "RW", "CAM") else "Press Resist" if position in ("CM", "CDM") else "Interceptor" if position != "GK" else "Aerial",
+                    "promo": "Wonderkids",
+                    "cap_override": dream_cap,
+                },
+            )
         event = self.get_pack_event_by_id(card.get("event_source"))
         if event and self.event_evo_tokens > 0:
             paths.append(
@@ -4158,6 +4389,31 @@ class Game:
             )
         return paths
 
+    def is_wonderkid_card(self, card):
+        if not isinstance(card, dict):
+            return False
+        if card.get("evo_program") == "Wonderkids Academy":
+            return True
+        if card.get("promo") == "Wonderkids":
+            return True
+        wonderkid_names = {player["name"] for player in WONDERKID_PLAYERS}
+        return card.get("name") in wonderkid_names
+
+    def wonderkid_evo_cap(self, card):
+        base_rating = card.get("base_rating", card.get("rating", 70))
+        if base_rating >= 82:
+            return 160
+        if base_rating >= 79:
+            return 158
+        if base_rating >= 76:
+            return 156
+        return 154
+
+    def fantasy_evolution_cap(self, card):
+        if self.is_wonderkid_card(card):
+            return 14
+        return 5
+
     def apply_fantasy_evolution(self, card_ref, choice_idx):
         card = None
         if isinstance(card_ref, dict):
@@ -4177,7 +4433,8 @@ class Game:
         if path.get("requires_event_token") and self.event_evo_tokens <= 0:
             self.add_commentary("Acquire an event evolution token first")
             return
-        if card.get("evo_level", 0) >= 5:
+        evo_cap = self.fantasy_evolution_cap(card)
+        if card.get("evo_level", 0) >= evo_cap:
             self.add_commentary("This card has reached the evolution cap")
             return
         if not path["ready"]:
@@ -4193,7 +4450,17 @@ class Game:
             card["event_evolution"] = path.get("event_name", "Event")
             if path.get("event_colors"):
                 card["event_evo_colors"] = [tuple(path["event_colors"][0]), tuple(path["event_colors"][1])]
-        card["rating"] += path["delta"]
+        if path.get("promo") == "Wonderkids" or self.is_wonderkid_card(card):
+            card["promo"] = "Wonderkids"
+            card["evo_program"] = "Wonderkids Academy"
+        rating_cap = path.get("cap_override")
+        if rating_cap is None and self.is_wonderkid_card(card):
+            rating_cap = self.wonderkid_evo_cap(card)
+        gain = path["delta"] if rating_cap is None else min(path["delta"], max(0, rating_cap - card.get("rating", 70)))
+        if gain <= 0:
+            self.add_commentary("This card has reached its rating ceiling")
+            return
+        card["rating"] += gain
         card["evo_level"] = card.get("evo_level", 0) + 1
         traits = list(card.get("traits", []))
         if path["trait"] not in traits:
@@ -4202,7 +4469,7 @@ class Game:
         card["rarity"] = self.card_rarity_from_rating(card["rating"], card.get("promo", "Base"))
         card["card_key"] = f"{card['name']}|{card.get('promo', 'Base')}|{card['rating']}|{card.get('position', 'ST')}"
         self.sync_fantasy_card_rating(card)
-        self.add_commentary(f"Evolution applied: {card['name']} +{path['delta']}")
+        self.add_commentary(f"Evolution applied: {card['name']} +{gain}")
         self.build_user_squad()
         self.update_fantasy_chemistry()
 
@@ -4400,6 +4667,36 @@ class Game:
             }
             card["card_key"] = f"{card['name']}|Signature|{card['rating']}|{card['position']}"
             pool.append(card)
+        for idx, player in enumerate(WONDERKID_PLAYERS):
+            name = player["name"]
+            team = player["team"]
+            rating = player["rating"]
+            position = player["position"]
+            if name in seen:
+                continue
+            card = {
+                "name": name,
+                "team": team,
+                "league": get_team_league(team),
+                "nation": get_player_nation(name, team),
+                "rating": rating,
+                "base_rating": rating,
+                "price": max(5, int(rating * 0.6)),
+                "number": 220 + idx,
+                "position": position,
+                "rarity": self.card_rarity_from_rating(rating, "Wonderkids"),
+                "promo": "Wonderkids",
+                "evo_program": "Wonderkids Academy",
+                "evo_level": 0,
+                "milestone_level": 0,
+                "form_boost": 0,
+                "pull_count": 1,
+                "duplicate_protected": False,
+                "traits": self.generate_card_traits(position, self.card_rarity_from_rating(rating, "Wonderkids"), "Wonderkids"),
+            }
+            card["card_key"] = f"{name}|Wonderkids|{rating}|{position}"
+            pool.append(card)
+            seen.add(name)
         fantasy_team_names = {name.strip() for name in (self.user_team, self.fantasy_team_name) if isinstance(name, str) and name.strip()}
         if fantasy_team_names:
             pool = [card for card in pool if card.get("team") not in fantasy_team_names]
@@ -4798,6 +5095,7 @@ class Game:
         return [
             ("division", "Division Match", "Win for points and coin promotions"),
             ("ladder", "Weekly Ladder", "Six-match form race with rolling rewards"),
+            ("weekly_fantasy", "Weekly Fantasy Five", "Lock one 5-card squad per week and score from real-life player actions"),
             ("online_tournament", "Online Tournament", "Automatic bracket runs with your live squad"),
             ("cup", "Knockout Cup", "Progress for an Elite Pack reward"),
             ("weekend", "Weekend Challenge", "String wins together for pack and coin rewards"),
@@ -5781,6 +6079,16 @@ class Game:
         }
         return profiles.get(name, {"base": (16, 18, 24), "accent": (255, 214, 112), "glow": (126, 214, 255), "streaks": [(86, 128, 224), (255, 214, 112), (242, 242, 242)]})
 
+    def wonderkid_card_profile(self, player):
+        name = player.get("name", "")
+        profiles = {
+            "Kobbie Mainoo": {"base": (8, 28, 54), "accent": (110, 255, 176), "glow": (104, 214, 255)},
+            "Leny Yoro": {"base": (10, 34, 62), "accent": (132, 255, 198), "glow": (118, 228, 255)},
+            "Ethan Nwaneri": {"base": (8, 36, 48), "accent": (154, 255, 146), "glow": (106, 224, 255)},
+            "Estevao Willian": {"base": (10, 30, 58), "accent": (114, 255, 196), "glow": (116, 232, 255)},
+        }
+        return profiles.get(name, {"base": (8, 30, 54), "accent": (122, 255, 182), "glow": (118, 228, 255)})
+
     def draw_flag_chip(self, x, y, w, h, stripes, border_color):
         chip = pygame.Rect(int(x), int(y), int(w), int(h))
         pygame.draw.rect(self.screen, (12, 14, 20), chip, 0, border_radius=7)
@@ -5799,6 +6107,9 @@ class Game:
             base, accent = profile["base"], profile["accent"]
         elif promo == "Signature":
             profile = self.signature_card_profile(player)
+            base, accent = profile["base"], profile["accent"]
+        elif promo == "Wonderkids":
+            profile = self.wonderkid_card_profile(player)
             base, accent = profile["base"], profile["accent"]
         elif promo == "TOTY":
             base, accent = (10, 28, 92), (244, 206, 84)
@@ -6007,6 +6318,25 @@ class Game:
                     [(0, band_y), (w * 0.52, band_y - h * 0.06), (w, band_y + h * 0.04), (w * 0.42, band_y + h * 0.12)],
                 )
             frame.blit(energy, (0, 0))
+        if promo == "Wonderkids":
+            academy = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            academy_color = self.blend_color(accent, (190, 255, 228), 0.46)
+            for idx in range(5):
+                band_y = int(h * (0.16 + idx * 0.13))
+                pygame.draw.line(academy, (*academy_color, max(36, 90 - idx * 10)), (int(w * 0.14), band_y), (int(w * 0.86), band_y - int(h * 0.04)), 2)
+            academy_badge = pygame.Rect(int(w * 0.38), int(h * 0.87), int(w * 0.24), int(h * 0.055))
+            pygame.draw.rect(academy, (8, 18, 28, 200), academy_badge, 0, border_radius=10)
+            pygame.draw.rect(academy, (*academy_color, 210), academy_badge, 2, border_radius=10)
+            academy_pts = [
+                (w * 0.50, h * 0.10),
+                (w * 0.57, h * 0.16),
+                (w * 0.54, h * 0.22),
+                (w * 0.50, h * 0.19),
+                (w * 0.46, h * 0.22),
+                (w * 0.43, h * 0.16),
+            ]
+            pygame.draw.polygon(academy, (*academy_color, 150), academy_pts, 2)
+            frame.blit(academy, (0, 0))
 
         if face == "back":
             seal = pygame.Rect(int(w * 0.22), int(h * 0.26), int(w * 0.56), int(h * 0.36))
@@ -6501,6 +6831,9 @@ class Game:
             return f"Tier {current.get('tier', 10)} | {current.get('points', 0)}/12 pts | Reward {current.get('reward', 120)} coins"
         if active_key == "ladder":
             return f"Week {current.get('week', 1)} | {current.get('points', 0)} pts in {current.get('played', 0)}/{current.get('target', 6)} matches | Streak {current.get('streak', 0)}"
+        if active_key == "weekly_fantasy":
+            entry = (self.weekly_fantasy_data or {}).get("entry", {})
+            return f"{entry.get('week_key', 'Current Week')} | {entry.get('points', 0)} pts | {'Locked' if entry.get('locked') else 'Build 5-card squad'}"
         if active_key == "cup":
             return f"Round {current.get('round', 1)} | {'Alive' if current.get('alive', True) else 'Reset next match'} | Reward {self.reward_pack_label(current.get('reward_pack', 'elite'))}"
         if active_key == "weekend":
@@ -6580,6 +6913,8 @@ class Game:
             {"id": "ligue_1", "name": "Ligue 1 Pack", "cost": 210, "count": 3, "band": "league:Ligue 1", "guaranteed": 80},
             {"id": "saudi", "name": "Saudi League Pack", "cost": 190, "count": 3, "band": "league:Saudi Pro League", "guaranteed": 82},
         ]
+        if (self.active_account_record() or {}).get("is_developer"):
+            base.insert(24, {"id": "wonderkids", "name": "Wonderkids Pack", "cost": 245, "count": 3, "band": "wonderkids", "guaranteed": 76})
         event_packs = self.active_event_pack_entries()
         if event_packs:
             return event_packs + base
@@ -6867,6 +7202,8 @@ class Game:
         if band == "signature":
             owned_signatures = {p.get("name") for p in self.fantasy_roster if p.get("promo") == "Signature"}
             return [p for p in self.fantasy_pool if p.get("promo") == "Signature" and p.get("name") not in owned_signatures]
+        if band == "wonderkids":
+            return [p for p in self.fantasy_pool if p.get("promo") == "Wonderkids"]
         if band == "promo":
             return [p for p in self.fantasy_pool if p.get("promo") != "Base" and p.get("rarity") != "GOAT" and p.get("promo") != "Signature"]
         if band == "ultimate":
@@ -6950,6 +7287,14 @@ class Game:
             self.fantasy_coins += cost
             self.add_commentary("All Signature cards already owned")
             return
+        if band == "wonderkids" and not self.cards_for_pack_band("wonderkids"):
+            self.fantasy_coins += cost
+            self.add_commentary("No wonderkids available")
+            return
+        if band == "wonderkids" and not (self.active_account_record() or {}).get("is_developer"):
+            self.fantasy_coins += cost
+            self.add_commentary("Wonderkids Pack is developer-only")
+            return
         if pack.get("open_mode") == "pick":
             self.update_objective_progress("packs", 1)
             if grant_xp:
@@ -6979,6 +7324,7 @@ class Game:
             allow_signature = band == "signature" or (band not in ("promo", "signature") and not is_exact_promo_band and random.random() < 0.01)
             allow_goat = band == "GOAT" or (band != "GOAT" and random.random() < 0.00001)
             allow_icon = band == "Icon" or (band != "Icon" and random.random() < 0.0001)
+            allow_wonderkids = band == "wonderkids" or (band not in ("GOAT", "Icon", "signature", "wonderkids") and not is_exact_promo_band and random.random() < 0.02)
             if band in self.rarity_order():
                 min_rating = max(pack["guaranteed"], self.rarity_rating_floor(band))
                 exact_band = self.cards_for_pack_band(band)
@@ -7055,6 +7401,15 @@ class Game:
                     candidates = band_pool[:]
             elif band == "signature":
                 candidates = [p for p in band_pool if p["rating"] >= pack["guaranteed"]] or band_pool[:]
+            elif band == "wonderkids":
+                if pull_idx == 0:
+                    candidates = [p for p in band_pool if p["rating"] >= pack["guaranteed"]] or band_pool[:]
+                elif roll < 0.18:
+                    candidates = [p for p in band_pool if p["rating"] >= 81] or band_pool[:]
+                elif roll < 0.45:
+                    candidates = [p for p in band_pool if p["rating"] >= 78] or band_pool[:]
+                else:
+                    candidates = band_pool[:]
             elif band.startswith("league:"):
                 league_pool = [p for p in band_pool if p["rating"] >= pack["guaranteed"]] or band_pool[:]
                 if pull_idx == 0:
@@ -7089,6 +7444,13 @@ class Game:
                 signature_candidates = self.cards_for_pack_band("signature")
                 if signature_candidates:
                     candidates = signature_candidates
+            elif allow_wonderkids:
+                wonderkid_candidates = self.cards_for_pack_band("wonderkids")
+                if wonderkid_candidates:
+                    if band == "wonderkids" or pull_idx == 0:
+                        candidates = [p for p in wonderkid_candidates if p["rating"] >= max(pack["guaranteed"], 76)] or wonderkid_candidates
+                    else:
+                        candidates = wonderkid_candidates
             elif band == "signature":
                 signature_candidates = self.cards_for_pack_band("signature")
                 if signature_candidates:
@@ -7290,6 +7652,12 @@ class Game:
         for idx in range(5):
             band_y = int(h * (0.18 + idx * 0.13))
             pygame.draw.line(gloss, (255, 255, 255, 8), (0, band_y), (w, band_y - int(h * 0.05)), 2)
+        if promo == "Wonderkids":
+            for idx in range(6):
+                band_y = int(h * (0.12 + idx * 0.12))
+                pygame.draw.line(gloss, (*accent, max(14, 40 - idx * 4)), (int(w * 0.08), band_y), (int(w * 0.92), band_y + int(h * 0.03)), 3)
+            pygame.draw.circle(gloss, (*accent, 26), (int(w * 0.78), int(h * 0.20)), max(18, int(w * 0.12)))
+            pygame.draw.circle(gloss, (255, 255, 255, 18), (int(w * 0.24), int(h * 0.72)), max(16, int(w * 0.10)))
         self.screen.blit(gloss, (x, y))
 
     def draw_icon_star(self, center_x, center_y, color):
@@ -7436,7 +7804,7 @@ class Game:
         title_h = max(18, int(h * 0.070))
         title_rect = pygame.Rect(x + int(w * 0.10), y + int(h * 0.045), w - int(w * 0.20), title_h)
         self.draw_glass_panel(title_rect, accent=accent, radius=max(8, int(title_h * 0.45)), fill=(28, 26, 24, 210), shine=False)
-        promo_label = "GOAT EDITION" if tier == "GOAT" else "ICON EDITION" if border_tier == "Icon" else "SIGNATURE" if promo == "Signature" else promo.upper()
+        promo_label = "GOAT EDITION" if tier == "GOAT" else "ICON EDITION" if border_tier == "Icon" else "SIGNATURE" if promo == "Signature" else "WONDERKIDS" if promo == "Wonderkids" else promo.upper()
         title_font = self.micro if compact else self.small
         title_text = promo_label[:18]
         title_surface = title_font.render(title_text, True, WHITE)
@@ -8271,14 +8639,15 @@ class Game:
             path = paths[idx]
             row = pygame.Rect(path_panel.x + 14, y, path_panel.w - 28, row_h)
             is_selected = idx == self.fantasy_evolution_choice
-            ready = path["ready"] and self.fantasy_coins >= path["cost"] and selected.get("evo_level", 0) < 5
+            evo_cap = self.fantasy_evolution_cap(selected)
+            ready = path["ready"] and self.fantasy_coins >= path["cost"] and selected.get("evo_level", 0) < evo_cap
             self.draw_glass_panel(row, accent=YELLOW if is_selected else (86, 98, 126), radius=18, fill=(42, 52, 72, 228) if is_selected else (28, 34, 48, 214), shine=False)
             self.screen.blit(self.font.render(path["name"], True, WHITE), (row.x + 14, row.y + 12))
             self.screen.blit(self.small.render(f"Upgrade: +{path['delta']} OVR", True, LIGHT_GREEN), (row.x + 14, row.y + 46))
             self.screen.blit(self.small.render(f"Cost: {path['cost']} coins", True, WHITE), (row.x + 14, row.y + 70))
             self.screen.blit(self.small.render(f"Needs: {path['need_label']}", True, (212, 220, 232)), (row.x + 14, row.y + 94))
             self.screen.blit(self.small.render(f"Trait: {path['trait']}", True, (190, 200, 215)), (row.right - 150, row.y + 70))
-            status = "Ready" if ready else "Need coins" if path["ready"] and self.fantasy_coins < path["cost"] else "Maxed" if selected.get("evo_level", 0) >= 5 else "Locked"
+            status = "Ready" if ready else "Need coins" if path["ready"] and self.fantasy_coins < path["cost"] else "Maxed" if selected.get("evo_level", 0) >= evo_cap else "Locked"
             color = LIGHT_GREEN if status == "Ready" else YELLOW if status == "Need coins" else (220, 170, 170)
             self.screen.blit(self.small.render(status, True, color), (row.right - 84, row.y + 14))
             y += row_h + row_gap
@@ -8316,6 +8685,8 @@ class Game:
                 reward_text = f"Reward: {comp.get('reward', 120)} coins on promotion"
             elif key == "ladder":
                 reward_text = self.reward_summary(comp.get("reward_type", "hybrid"), comp.get("reward_pack", "elite"), comp.get("reward_coins", 160))
+            elif key == "weekly_fantasy":
+                reward_text = "Reward: Coins + pack + top-card OVR boost from weekly real-life points"
             elif key == "online":
                 entry = self.online_division_data.get("entry", {})
                 reward_text = f"Reward ready: {entry.get('reward_coins', 0)} coins | Tier {entry.get('division_tier', 10)}"
@@ -8341,6 +8712,10 @@ class Game:
             elif key == "ladder":
                 status_text = f"Week {comp.get('week', 1)} | {comp.get('points', 0)} pts | Streak {comp.get('streak', 0)}"
                 self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
+            elif key == "weekly_fantasy":
+                entry = (self.weekly_fantasy_data or {}).get("entry", {})
+                status_text = f"{entry.get('week_key', 'Current Week')} | {entry.get('points', 0)} pts | {'Locked' if entry.get('locked') else 'Editable'}"
+                self.screen.blit(self.small.render(status_text[:96], True, (190, 200, 215)), (row.x + 16, row.y + 86))
             elif key == "penalty_shootout":
                 status_text = f"{comp.get('wins', 0)}/{comp.get('target', 3)} wins | Streak {comp.get('streak', 0)}"
                 self.screen.blit(self.small.render(status_text, True, (190, 200, 215)), (row.x + 16, row.y + 86))
@@ -8361,6 +8736,90 @@ class Game:
         self.draw_fc_top_bar("Penalty Shootout", "Coin event", counters=[((244, 206, 84), contest.get("reward_coins", 140))], accent=(244, 206, 84))
         self.draw_hero_header("Penalty Shootout Night", "Pick your taker order, chase a streak, and win coins in a dedicated shootout event.", accent=(244, 206, 84), accent_two=(255, 92, 92), right_text=f"{setup.get('wins', 0)}/{setup.get('target', 3)} WINS")
         self.screen.blit(self.small.render("ENTER continue | T toggle strategy | ESC back", True, (196, 210, 228)), (36, 170))
+
+    def draw_weekly_fantasy_page(self):
+        entry = (self.weekly_fantasy_data or {}).get("entry", {})
+        provider_ready = bool((self.weekly_fantasy_data or {}).get("provider_ready"))
+        breakdown_players = ((entry.get("breakdown") or {}).get("players") or [])[:5]
+        self.draw_modern_backdrop((96, 232, 176), (86, 170, 255))
+        self.draw_fc_top_bar("Weekly Fantasy Five", "Real-life scoring mode", counters=[((244, 206, 84), entry.get("points", 0))], accent=(96, 232, 176))
+        self.draw_hero_header("Weekly Fantasy Five", "Pick 1 GK, 1 DEF, 1 MID, 1 ATT, and 1 free slot. Lock once per week, sync real-life Premier League points, then claim rewards.", accent=(96, 232, 176), accent_two=(86, 170, 255), right_text=entry.get("week_key", "Current Week"))
+        self.screen.blit(self.small.render("TAB/LEFT/RIGHT focus | UP/DOWN move | ENTER assign | BACKSPACE clear | S submit | U sync | C claim | ESC back", True, (196, 210, 228)), (36, 170))
+
+        pool_panel = pygame.Rect(40, 212, 360, 512)
+        slot_panel = pygame.Rect(428, 212, 328, 512)
+        info_panel = pygame.Rect(784, 212, 376, 512)
+        for panel in (pool_panel, slot_panel, info_panel):
+            self.draw_glass_panel(panel, accent=(96, 232, 176) if panel != info_panel else (244, 206, 84), radius=24)
+
+        pool = self.weekly_fantasy_candidate_pool()
+        self.screen.blit(self.font.render("Card Pool", True, WHITE), (pool_panel.x + 16, pool_panel.y + 14))
+        start = max(0, min(self.weekly_fantasy_pool_index - 4, max(0, len(pool) - 8)))
+        row_y = pool_panel.y + 52
+        for idx in range(start, min(len(pool), start + 8)):
+            card = pool[idx]
+            row = pygame.Rect(pool_panel.x + 12, row_y, pool_panel.w - 24, 52)
+            selected = self.weekly_fantasy_focus == "pool" and idx == self.weekly_fantasy_pool_index
+            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=12, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
+            tag = f"{card.get('position', 'ST')} {card.get('rating', 0)}"
+            self.screen.blit(self.small.render(card.get("name", "")[:22], True, WHITE), (row.x + 10, row.y + 9))
+            self.screen.blit(self.micro.render(f"{card.get('team', '')[:18]} | {tag}", True, (196, 210, 228)), (row.x + 10, row.y + 31))
+            row_y += 58
+
+        self.screen.blit(self.font.render("Weekly Slots", True, WHITE), (slot_panel.x + 16, slot_panel.y + 14))
+        slot_y = slot_panel.y + 56
+        for idx, (slot_name, slot_label) in enumerate(self.weekly_fantasy_slot_defs()):
+            row = pygame.Rect(slot_panel.x + 14, slot_y, slot_panel.w - 28, 80)
+            selected = self.weekly_fantasy_focus == "slots" and idx == self.weekly_fantasy_slot_index
+            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=16, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
+            card = self.weekly_fantasy_slots[idx]
+            self.screen.blit(self.small.render(f"{slot_name}  {slot_label}", True, WHITE), (row.x + 14, row.y + 10))
+            if card:
+                self.screen.blit(self.small.render(card.get("name", "")[:24], True, (96, 232, 176)), (row.x + 14, row.y + 36))
+                self.screen.blit(self.micro.render(f"{card.get('team', '')[:20]} | {card.get('position', 'ST')} {card.get('rating', 0)}", True, (196, 210, 228)), (row.x + 14, row.y + 58))
+            else:
+                self.screen.blit(self.small.render("Empty slot", True, (196, 210, 228)), (row.x + 14, row.y + 38))
+            slot_y += 90
+
+        self.screen.blit(self.font.render("Week Summary", True, WHITE), (info_panel.x + 16, info_panel.y + 14))
+        provider_text = "Provider ready" if provider_ready else "Set FC_FOOTBALL_DATA_TOKEN on the cloud server"
+        summary_lines = [
+            f"Week: {entry.get('week_key', 'Current Week')}",
+            f"Window: {entry.get('week_start', '-')} to {entry.get('week_end', '-')}",
+            f"Locked: {'Yes' if entry.get('locked') else 'No'}",
+            f"Points: {entry.get('points', 0)}",
+            f"Claimed: {'Yes' if entry.get('reward_claimed') else 'No'}",
+            provider_text,
+        ]
+        text_y = info_panel.y + 54
+        for line in summary_lines:
+            self.screen.blit(self.small.render(line[:40], True, WHITE), (info_panel.x + 16, text_y))
+            text_y += 32
+
+        reward = entry.get("reward") or {}
+        reward_text = f"{int(reward.get('coins', 0) or 0)} coins"
+        if reward.get("pack_id"):
+            reward_text += f" + {reward.get('pack_id')} pack"
+        if int(reward.get("upgrade_delta", 0) or 0) > 0:
+            reward_text += f" + top card +{int(reward.get('upgrade_delta', 0))}"
+        self.screen.blit(self.small.render(f"Reward: {reward_text[:36]}", True, (244, 206, 84)), (info_panel.x + 16, text_y + 10))
+        self.screen.blit(self.small.render("Top Breakdown", True, WHITE), (info_panel.x + 16, text_y + 54))
+        breakdown_y = text_y + 84
+        for item in breakdown_players:
+            self.screen.blit(self.micro.render(f"{item.get('name', '')[:18]}  {item.get('points', 0)} pts", True, (196, 210, 228)), (info_panel.x + 16, breakdown_y))
+            breakdown_y += 24
+
+        preview_card = None
+        if self.weekly_fantasy_focus == "pool" and pool:
+            preview_card = pool[max(0, min(self.weekly_fantasy_pool_index, len(pool) - 1))]
+        elif self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]:
+            preview_card = self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]
+        if preview_card:
+            self.draw_card(info_panel.x + 108, info_panel.bottom - 246, 164, 220, preview_card, face="front")
+
+        footer = pygame.Rect(info_panel.x + 16, info_panel.bottom - 70, info_panel.w - 32, 46)
+        self.draw_glass_panel(footer, accent=(96, 232, 176), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render(self.weekly_fantasy_message[:58], True, WHITE), (footer.x + 12, footer.y + 13))
         left = pygame.Rect(40, 214, 520, 520)
         right = pygame.Rect(590, 214, 570, 520)
         self.draw_glass_panel(left, accent=(244, 206, 84), radius=24)
@@ -10542,7 +11001,7 @@ class Game:
         pressure = self.penalty_state.get("pressure", 0.0)
         aim_x = self.penalty_state.get("aim_x", 0.0)
         aim_y = self.penalty_state.get("aim_y", 0.0)
-        if mode == "ai":
+        if mode != "shooter":
             aim_x = random.uniform(-0.85, 0.85)
             aim_y = random.uniform(-0.80, 0.80)
         dive_x = self.penalty_state.get("dive_x", 0.0)
@@ -12289,6 +12748,8 @@ class Game:
                             data = self.fetch_online_tournament_status()
                             if data is not None:
                                 self.state = "ONLINE_TOURNAMENTS"
+                        elif self.fantasy_active_competition == "weekly_fantasy":
+                            self.open_weekly_fantasy_mode()
                         elif self.fantasy_active_competition == "draft":
                             self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                         else:
@@ -12297,6 +12758,36 @@ class Game:
                         self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "LEAGUE"
+                    continue
+                if self.state == "WEEKLY_FANTASY":
+                    pool = self.weekly_fantasy_candidate_pool()
+                    if event.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
+                        self.weekly_fantasy_focus = "slots" if self.weekly_fantasy_focus == "pool" else "pool"
+                    elif event.key == pygame.K_UP:
+                        if self.weekly_fantasy_focus == "pool" and pool:
+                            self.weekly_fantasy_pool_index = max(0, self.weekly_fantasy_pool_index - 1)
+                        else:
+                            self.weekly_fantasy_slot_index = max(0, self.weekly_fantasy_slot_index - 1)
+                    elif event.key == pygame.K_DOWN:
+                        if self.weekly_fantasy_focus == "pool" and pool:
+                            self.weekly_fantasy_pool_index = min(len(pool) - 1, self.weekly_fantasy_pool_index + 1)
+                        else:
+                            self.weekly_fantasy_slot_index = min(len(self.weekly_fantasy_slot_defs()) - 1, self.weekly_fantasy_slot_index + 1)
+                    elif event.key == pygame.K_RETURN:
+                        if self.weekly_fantasy_focus == "pool":
+                            self.assign_weekly_fantasy_card()
+                        else:
+                            self.clear_weekly_fantasy_slot()
+                    elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                        self.clear_weekly_fantasy_slot()
+                    elif event.key == pygame.K_s:
+                        self.submit_weekly_fantasy_squad()
+                    elif event.key == pygame.K_u:
+                        self.sync_weekly_fantasy_points()
+                    elif event.key == pygame.K_c:
+                        self.claim_weekly_fantasy_rewards()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "FANTASY_COMPETITIONS"
                     continue
                 if self.state == "PENALTY_SHOOTOUT_INTRO":
                     if event.key == pygame.K_t:
@@ -14824,6 +15315,8 @@ class Game:
             self.draw_fantasy_evolutions_page()
         elif self.state == "FANTASY_COMPETITIONS":
             self.draw_fantasy_competitions_page()
+        elif self.state == "WEEKLY_FANTASY":
+            self.draw_weekly_fantasy_page()
         elif self.state == "FANTASY_CLUB":
             self.draw_fantasy_club_page()
         elif self.state == "FANTASY_DRAFT":

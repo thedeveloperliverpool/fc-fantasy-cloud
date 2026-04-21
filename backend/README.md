@@ -38,6 +38,25 @@ If `FC_CLOUD_API_URL` is not set, the game falls back to local `accounts.json`.
 
 You can also open `Cloud Settings` inside the game and save the API URL there. The launcher-style app reads that same saved setting on startup.
 
+## Weekly Fantasy live stats
+
+The `Weekly Fantasy Five` mode uses live real-world player events from `football-data.org`.
+
+Set this on the cloud server before starting `server.py`:
+
+```bash
+FC_FOOTBALL_DATA_TOKEN=your_token_here python3 server.py
+```
+
+Optional overrides:
+
+```bash
+FC_WEEKLY_FANTASY_COMPETITION=PL
+FC_FOOTBALL_DATA_BASE=https://api.football-data.org/v4
+```
+
+Without `FC_FOOTBALL_DATA_TOKEN`, the Weekly Fantasy mode still appears in the game but score sync will stay unavailable.
+
 ## Live launcher app
 
 To build the editable launcher-style app:
