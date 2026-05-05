@@ -6,6 +6,7 @@ import random
 import socket
 import sys
 import hashlib
+from datetime import datetime
 from array import array
 from dataclasses import dataclass, field
 from urllib import error as urllib_error
@@ -1649,7 +1650,7 @@ class Game:
         self.title_font = pygame.font.SysFont(["Avenir Next Condensed", "Avenir Next", "Helvetica Neue", "Arial"], 40, bold=True)
         self.micro = pygame.font.SysFont(["Avenir Next", "Helvetica Neue", "Arial"], 12)
 
-        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | PENALTY_SCENE | PENALTY_RESULT | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
+        self.state = "ACCOUNT_HOME"  # ACCOUNT_HOME | ACCOUNT_CREATE | ACCOUNT_LOGIN | ACCOUNT_DEV_LOGIN | CLOUD_SETTINGS | MODE_SELECT | TEAM_SELECT | PLAYER_SELECT | LEAGUE | LINEUP | LINEUP_RESERVES | MATCH_SCENE | LIVE | LIVE_HUB | LIVE_SORARE | LIVE_SORARE_MARKET | LIVE_LEAGUE | LIVE_WEEKLY_FANTASY | LIVE_TOP_SCORERS | LIVE_DERBY_PICKS | LIVE_TEAM_OF_WEEK | PENALTY_SCENE | PENALTY_RESULT | ACADEMY | FANTASY_BUILDER | FANTASY_TEAM_NAME | PACK_SHOP | MY_PACKS | PACK_ODDS | PACK_OPENING | PACK_SUMMARY | FANTASY_SBC | FANTASY_OBJECTIVES | FANTASY_SBC_BUILD | FANTASY_COLLECTION | FANTASY_COMPETITIONS | FANTASY_PLAYER_PICK | FANTASY_EVOLUTIONS | FANTASY_CHAMPIONS_BRACKET | FANTASY_MARKET | FANTASY_DRAFT | FANTASY_CLUB | DEV_REGISTERED_USERS | DEV_CARD_CATALOG | ONLINE_TOURNAMENTS
         self.game_mode = "CAREER"
         self.active_teams = TEAMS[:]
         self.fantasy_team_name = "Fantasy FC"
@@ -1742,11 +1743,38 @@ class Game:
         self.fantasy_active_competition = "division"
         self.fantasy_match_competition = "division"
         self.weekly_fantasy_data = {"entry": {}, "provider_ready": False, "provider_name": "football-data.org"}
+        self.live_league_data = {
+            "provider_ready": False,
+            "provider_name": "football-data.org",
+            "competition_code": "PL",
+            "competition_name": "Premier League",
+            "season_label": "Current Season",
+            "matchday": 0,
+            "recent_matches": [],
+            "next_matches": [],
+            "standings": [],
+            "scorers": [],
+            "error": "",
+        }
+        self.live_sorare_catalog = []
+        self.live_sorare_market_offers = []
+        self.live_sorare_market_all_offers = []
+        self.live_sorare_index = 0
+        self.live_sorare_market_index = 0
+        self.live_sorare_search_query = ""
+        self.live_sorare_search_active = False
+        self.live_sorare_market_search_query = ""
+        self.live_sorare_market_search_active = False
+        self.live_sorare_roster = []
+        self.live_sorare_starter_claimed = False
         self.weekly_fantasy_pool_index = 0
         self.weekly_fantasy_slot_index = 0
         self.weekly_fantasy_focus = "pool"
         self.weekly_fantasy_slots = [None, None, None, None, None]
         self.weekly_fantasy_message = ""
+        self.live_mode_index = 0
+        self.live_mode_message = ""
+        self.live_league_message = ""
         self.penalty_shootout_setup = {}
         self.penalty_order_strategy = "best_first"
         self.penalty_order_focus = "pool"
@@ -1770,7 +1798,10 @@ class Game:
         self.fantasy_share_input = ""
         self.fantasy_share_message = ""
         self.fantasy_market_offers = []
+        self.fantasy_market_all_offers = []
         self.fantasy_market_index = 0
+        self.fantasy_market_search_query = ""
+        self.fantasy_market_search_active = False
         self.pack_event_index = -1
         self.current_pack_event = {}
         self.fantasy_draft_round = 0
@@ -2006,6 +2037,8 @@ class Game:
             local["developer_code"] = developer_code.strip()
         users[username] = local
         self.persist_local_accounts()
+        if username == self.active_account:
+            self.hydrate_active_fantasy_snapshot(local)
         return local
 
     def register_local_account(self, display_name, username, password, developer_code=""):
@@ -2426,6 +2459,50 @@ class Game:
             local = self.sync_record_to_local(user)
             if local is not None and self.account_storage_mode == "LOCAL":
                 self.account_storage_mode = "CLOUD"
+            self.hydrate_active_fantasy_snapshot(user)
+
+    def hydrate_active_fantasy_snapshot(self, record):
+        if not record or record.get("username") != self.active_account:
+            return
+        snapshot = record.get("fantasy_snapshot")
+        if not isinstance(snapshot, dict):
+            return
+        self.fantasy_roster = [card.copy() for card in snapshot.get("fantasy_roster", []) if isinstance(card, dict)]
+        self.fantasy_coins = int(snapshot.get("fantasy_coins", self.fantasy_coins) or 0)
+        self.my_packs = list(snapshot.get("my_packs", self.my_packs) or [])
+        self.last_pack = list(snapshot.get("last_pack", self.last_pack) or [])
+        self.fantasy_competitions = snapshot.get("fantasy_competitions", self.fantasy_competitions)
+        self.fantasy_objectives = snapshot.get("fantasy_objectives", self.fantasy_objectives)
+        self.fantasy_season_xp = int(snapshot.get("fantasy_season_xp", self.fantasy_season_xp) or 0)
+        self.fantasy_season_claimed = int(snapshot.get("fantasy_season_claimed", self.fantasy_season_claimed) or 0)
+        self.fantasy_active_competition = snapshot.get("fantasy_active_competition", self.fantasy_active_competition)
+        self.fantasy_match_competition = snapshot.get("fantasy_match_competition", self.fantasy_match_competition)
+        self.fantasy_competition_index = int(snapshot.get("fantasy_competition_index", self.fantasy_competition_index) or 0)
+        self.fantasy_club_custom = snapshot.get("fantasy_club_custom", self.fantasy_club_custom)
+        self.fantasy_favorites = list(snapshot.get("fantasy_favorites", self.fantasy_favorites) or [])
+        self.pack_event_index = int(snapshot.get("pack_event_index", self.pack_event_index) or -1)
+        self.current_pack_event = snapshot.get("current_pack_event", self.current_pack_event)
+        self.event_evo_tokens = int(snapshot.get("event_evo_tokens", self.event_evo_tokens) or 0)
+        live_roster = snapshot.get("live_sorare_roster", [])
+        if isinstance(live_roster, list):
+            self.live_sorare_roster = [card.copy() for card in live_roster if isinstance(card, dict)]
+        self.live_sorare_starter_claimed = bool(snapshot.get("live_sorare_starter_claimed", self.live_sorare_starter_claimed))
+        if snapshot.get("fantasy_team_name"):
+            self.fantasy_team_name = snapshot.get("fantasy_team_name")
+        self.build_fantasy_pool()
+        if not self.live_sorare_catalog:
+            self.build_live_sorare_catalog()
+        self.ensure_live_sorare_roster(save=False) if not self.live_sorare_roster else None
+        if not self.fantasy_competitions:
+            self.init_fantasy_competitions()
+        else:
+            self.ensure_fantasy_competitions_defaults()
+        if not self.fantasy_objectives:
+            self.init_fantasy_objectives()
+        self.build_user_squad()
+        if self.user_team:
+            self.apply_roster_to_team(self.fantasy_roster)
+            self.apply_fantasy_club_identity()
 
     def push_dev_action(self, message, success=True):
         self.dev_action_message = str(message or "")[:140]
@@ -2492,6 +2569,8 @@ class Game:
         snapshot.setdefault("fantasy_coins", DEVELOPER_FANTASY_COINS if record.get("is_developer") else DEFAULT_FANTASY_COINS)
         snapshot.setdefault("my_packs", [])
         snapshot.setdefault("fantasy_roster", [])
+        snapshot.setdefault("live_sorare_roster", [])
+        snapshot.setdefault("live_sorare_starter_claimed", False)
         snapshot.setdefault("event_evo_tokens", 0)
         snapshot.setdefault("fantasy_team_name", record.get("display_name") or record.get("username") or "Fantasy FC")
         return snapshot
@@ -2876,6 +2955,37 @@ class Game:
             return False
         return True
 
+    def live_mode_competitions(self):
+        return [
+            ("sorare_setup", "Sorare Setup", "Card universe, weekly lineup, and live rewards"),
+            ("sorare_market", "Sorare Market", "Buy new cards and grow your owned roster"),
+            ("premier_league", "Premier League", "Recent matches, next fixtures, standings, and scorers"),
+            ("weekly_fantasy", "Weekly Fantasy Five", "Lock 5 cards, sync live points, and claim rewards"),
+            ("top_scorers", "Top Scorers", "Track the highest scoring cards each week"),
+            ("derby_picks", "Derby Picks", "Special live rivalry event pages"),
+            ("team_of_week", "Team of the Week", "Weekly highlight squad and rewards"),
+        ]
+
+    def live_mode_week_label(self, entry):
+        week_key = entry.get("week_key", "Current Week")
+        week_end = entry.get("week_end")
+        if not week_end:
+            return week_key, "Countdown unavailable"
+        try:
+            end_date = datetime.strptime(week_end, "%Y-%m-%d").date()
+            remaining_days = (end_date - datetime.now().date()).days
+            if remaining_days < 0:
+                countdown = "Ended"
+            elif remaining_days == 0:
+                countdown = "Ends today"
+            elif remaining_days == 1:
+                countdown = "1 day left"
+            else:
+                countdown = f"{remaining_days} days left"
+        except Exception:
+            countdown = "Countdown unavailable"
+        return week_key, countdown
+
     def weekly_fantasy_slot_defs(self):
         return [("GK", "Goalkeeper"), ("DEF", "Defender"), ("MID", "Midfielder"), ("ATT", "Attacker"), ("FLEX", "Free Pick")]
 
@@ -2892,7 +3002,8 @@ class Game:
         return True
 
     def weekly_fantasy_candidate_pool(self):
-        return sorted(self.fantasy_roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
+        roster = self.live_sorare_roster or self.fantasy_roster
+        return sorted(roster, key=lambda c: (-c.get("rating", 0), c.get("name", "")))
 
     def weekly_fantasy_locked(self):
         return bool((self.weekly_fantasy_data or {}).get("entry", {}).get("locked"))
@@ -2903,7 +3014,142 @@ class Game:
         for card in self.fantasy_roster:
             if card.get("card_key") == card_key:
                 return card
+        for card in self.live_sorare_roster:
+            if card.get("card_key") == card_key:
+                return card
         return None
+
+    def sorare_rarity_order(self):
+        return ["Common", "Limited", "Rare", "Super Rare", "Unique"]
+
+    def sorare_rarity_rank(self, rarity):
+        order = self.sorare_rarity_order()
+        return order.index(rarity) if rarity in order else -1
+
+    def sorare_rarity_from_rating(self, rating):
+        if rating >= 95:
+            return "Unique"
+        if rating >= 89:
+            return "Super Rare"
+        if rating >= 83:
+            return "Rare"
+        if rating >= 76:
+            return "Limited"
+        return "Common"
+
+    def sorare_card_profile(self, rarity):
+        profiles = {
+            "Common": {"base": (64, 68, 74), "accent": (192, 196, 204), "glow": (228, 232, 236)},
+            "Limited": {"base": (100, 84, 20), "accent": (244, 206, 84), "glow": (255, 232, 144)},
+            "Rare": {"base": (96, 24, 28), "accent": (255, 96, 104), "glow": (255, 168, 168)},
+            "Super Rare": {"base": (18, 44, 110), "accent": (92, 164, 255), "glow": (168, 220, 255)},
+            "Unique": {"base": (36, 18, 72), "accent": (168, 112, 255), "glow": (224, 188, 255)},
+        }
+        return profiles.get(rarity, profiles["Common"])
+
+    def live_sorare_card_key(self, card):
+        return (
+            "SORARE",
+            card.get("name"),
+            card.get("team"),
+            card.get("position", "ST"),
+            card.get("sorare_rarity", "Common"),
+        )
+
+    def find_live_sorare_card_by_key(self, card_key):
+        if not card_key:
+            return None
+        for card in self.live_sorare_roster:
+            if card.get("card_key") == card_key:
+                return card
+        for card in self.live_sorare_catalog:
+            if card.get("card_key") == card_key:
+                return card
+        return None
+
+    def ensure_live_sorare_roster(self, save=False):
+        if self.live_sorare_roster:
+            normalized = False
+            for card in self.live_sorare_roster:
+                rarity = card.get("sorare_rarity") or self.sorare_rarity_from_rating(int(card.get("rating", 0) or 0))
+                if card.get("promo") != "Sorare":
+                    card["promo"] = "Sorare"
+                    normalized = True
+                if card.get("rarity") != rarity:
+                    card["rarity"] = rarity
+                    normalized = True
+                if card.get("sorare_rarity") != rarity:
+                    card["sorare_rarity"] = rarity
+                    normalized = True
+                if card.get("sorare_profile") != self.sorare_card_profile(rarity):
+                    card["sorare_profile"] = self.sorare_card_profile(rarity)
+                    normalized = True
+                expected_key = card.get("card_key")
+                if not expected_key or not str(expected_key).startswith("SORARE|"):
+                    card["card_key"] = f"SORARE|{card.get('name')}|{card.get('team')}|{card.get('position', 'ST')}|{rarity}"
+                    normalized = True
+            if normalized:
+                self.save_live_sorare_profile()
+            return self.live_sorare_roster
+        if not self.live_sorare_catalog:
+            self.build_live_sorare_catalog()
+        catalog = [card.copy() for card in self.live_sorare_catalog if card.get("league") == "Premier League"]
+        if not catalog:
+            self.live_sorare_roster = []
+            return self.live_sorare_roster
+        groups = {"GK": [], "DEF": [], "MID": [], "ATT": []}
+        for card in catalog:
+            pos = str(card.get("position", "")).upper()
+            if pos == "GK":
+                groups["GK"].append(card)
+            elif pos in ("RB", "CB", "LB", "RWB", "LWB"):
+                groups["DEF"].append(card)
+            elif pos in ("CDM", "CM", "CAM", "LM", "RM"):
+                groups["MID"].append(card)
+            elif pos in ("LW", "RW", "ST", "CF"):
+                groups["ATT"].append(card)
+        roster = []
+
+        def starter_pick(pool, count):
+            chosen = []
+            used = set()
+            for card in sorted(pool, key=lambda c: (-c.get("rating", 0), c.get("name", ""))):
+                key = card.get("card_key") or self.live_sorare_card_key(card)
+                if key in used:
+                    continue
+                chosen.append(card.copy())
+                used.add(key)
+                if len(chosen) >= count:
+                    break
+            return chosen
+
+        for bucket, count in (("GK", 1), ("DEF", 3), ("MID", 3), ("ATT", 3)):
+            for card in starter_pick(groups[bucket] or catalog, count):
+                card["promo"] = "Sorare"
+                card["rarity"] = "Common"
+                card["sorare_rarity"] = "Common"
+                card["sorare_profile"] = self.sorare_card_profile("Common")
+                card["card_key"] = f"SORARE|STARTER|{card.get('name')}|{card.get('team')}|{card.get('position', 'ST')}|Common"
+                roster.append(card)
+        self.live_sorare_roster = roster[:10]
+        self.live_sorare_starter_claimed = True
+        if save:
+            self.save_live_sorare_profile()
+        return self.live_sorare_roster
+
+    def save_live_sorare_profile(self):
+        record = self.active_account_record()
+        if not record:
+            return False
+        snapshot = self.build_full_snapshot()
+        snapshot["live_sorare_roster"] = [card.copy() for card in self.live_sorare_roster]
+        snapshot["live_sorare_starter_claimed"] = self.live_sorare_starter_claimed
+        local_saved = self.save_local_snapshot("FANTASY", snapshot)
+        try:
+            self.cloud_request("PUT", "/api/save", {"mode": "FANTASY", "snapshot": snapshot}, needs_auth=True)
+            return True
+        except RuntimeError:
+            return local_saved
 
     def hydrate_weekly_fantasy_slots(self, squad):
         slots = [None, None, None, None, None]
@@ -2936,7 +3182,165 @@ class Game:
         self.weekly_fantasy_focus = "pool"
         self.weekly_fantasy_pool_index = 0
         self.weekly_fantasy_slot_index = 0
-        self.state = "WEEKLY_FANTASY"
+        self.state = "LIVE_WEEKLY_FANTASY"
+
+    def build_live_sorare_catalog(self):
+        if not self.fantasy_pool:
+            self.build_fantasy_pool()
+        best_by_player = {}
+        for card in self.fantasy_pool:
+            if not isinstance(card, dict):
+                continue
+            if card.get("league") != "Premier League":
+                continue
+            if card.get("rarity") in ("Icon", "GOAT"):
+                continue
+            key = (card.get("name"), card.get("team"))
+            current = best_by_player.get(key)
+            if current is None or int(card.get("rating", 0) or 0) > int(current.get("rating", 0) or 0):
+                best_by_player[key] = card
+        catalog = []
+        for card in best_by_player.values():
+            live_card = card.copy()
+            sorare_rarity = self.sorare_rarity_from_rating(int(live_card.get("rating", 0) or 0))
+            live_card["promo"] = "Sorare"
+            live_card["rarity"] = sorare_rarity
+            live_card["sorare_rarity"] = sorare_rarity
+            live_card["sorare_profile"] = self.sorare_card_profile(sorare_rarity)
+            live_card["sorare_group"] = "Premier League"
+            live_card["card_key"] = f"SORARE|{live_card.get('name')}|{live_card.get('team')}|{live_card.get('position', 'ST')}|{sorare_rarity}"
+            catalog.append(live_card)
+        catalog.sort(key=lambda c: (self.sorare_rarity_rank(c.get("sorare_rarity", "Common")), -int(c.get("rating", 0)), c.get("name", "")))
+        self.live_sorare_catalog = catalog
+        return catalog
+
+    def filtered_live_sorare_cards(self):
+        cards = self.live_sorare_roster or self.live_sorare_catalog or self.build_live_sorare_catalog()
+        query = self.live_sorare_search_query.strip().lower()
+        if not query:
+            return cards
+        return [
+            card for card in cards
+            if query in str(card.get("name", "")).lower()
+            or query in str(card.get("team", "")).lower()
+            or query in str(card.get("sorare_rarity", "")).lower()
+            or query in str(card.get("position", "")).lower()
+        ]
+
+    def refresh_live_sorare_market(self):
+        catalog = self.live_sorare_catalog or self.build_live_sorare_catalog()
+        owned = {
+            (card.get("name"), card.get("team"), card.get("position"), card.get("sorare_rarity", "Common"))
+            for card in self.live_sorare_roster
+        }
+        offers = []
+        for card in catalog:
+            owned_key = (card.get("name"), card.get("team"), card.get("position"), card.get("sorare_rarity", "Common"))
+            if owned_key in owned:
+                continue
+            offer = card.copy()
+            rarity = offer.get("sorare_rarity", "Common")
+            price_scale = {
+                "Common": 1.0,
+                "Limited": 1.8,
+                "Rare": 3.2,
+                "Super Rare": 5.8,
+                "Unique": 9.5,
+            }.get(rarity, 1.0)
+            offer["market_price"] = max(18, int(offer.get("rating", 50) * price_scale * 1.4))
+            offers.append(offer)
+        offers.sort(key=lambda c: (self.sorare_rarity_rank(c.get("sorare_rarity", "Common")), -int(c.get("rating", 0)), c.get("name", "")))
+        self.live_sorare_market_all_offers = offers
+        self.live_sorare_market_offers = offers[:24]
+        self.live_sorare_market_index = max(0, min(self.live_sorare_market_index, max(0, len(self.live_sorare_market_offers) - 1)))
+        return self.live_sorare_market_offers
+
+    def filtered_live_sorare_market_offers(self):
+        offers = self.live_sorare_market_all_offers or self.live_sorare_market_offers or []
+        query = self.live_sorare_market_search_query.strip().lower()
+        if not query:
+            return list(offers)
+        return [
+            card for card in offers
+            if query in str(card.get("name", "")).lower()
+            or query in str(card.get("team", "")).lower()
+            or query in str(card.get("sorare_rarity", "")).lower()
+            or query in str(card.get("position", "")).lower()
+        ]
+
+    def buy_live_sorare_market_card(self, idx):
+        offers = self.filtered_live_sorare_market_offers()
+        if idx < 0 or idx >= len(offers):
+            return
+        card = offers[idx]
+        price = int(card.get("market_price", 0) or 0)
+        if self.fantasy_coins < price:
+            self.add_commentary("Not enough coins for Sorare market")
+            return
+        if any(existing.get("card_key") == card.get("card_key") for existing in self.live_sorare_roster):
+            self.add_commentary(f"Already own {card.get('name')}")
+            return
+        self.fantasy_coins -= price
+        self.live_sorare_roster.append(card.copy())
+        self.live_sorare_starter_claimed = True
+        self.save_live_sorare_profile()
+        self.refresh_live_sorare_market()
+        self.add_commentary(f"Bought Sorare card: {card['name']}")
+
+    def open_live_sorare_mode(self):
+        self.build_live_sorare_catalog()
+        self.ensure_live_sorare_roster(save=not self.live_sorare_roster)
+        self.refresh_live_sorare_market()
+        self.live_sorare_index = 0
+        self.live_sorare_search_active = False
+        self.state = "LIVE_SORARE"
+
+    def fetch_live_league_status(self, competition_code="PL"):
+        try:
+            data = self.cloud_request("GET", f"/api/live-league?competition={competition_code}")
+            if isinstance(data, dict):
+                self.live_league_data = data
+            else:
+                self.live_league_data = dict(self.live_league_data)
+            self.live_league_message = self.live_league_data.get("error", "") or f"{self.live_league_data.get('competition_name', 'League')} data loaded"
+            return self.live_league_data
+        except RuntimeError as exc:
+            self.live_league_message = str(exc)
+            self.live_league_data = dict(self.live_league_data)
+            self.live_league_data["error"] = str(exc)
+            return None
+
+    def open_live_league_mode(self):
+        self.fetch_live_league_status("PL")
+        self.state = "LIVE_LEAGUE"
+
+    def open_live_mode(self):
+        self.fetch_weekly_fantasy_status()
+        self.fetch_live_league_status("PL")
+        self.build_live_sorare_catalog()
+        self.ensure_live_sorare_roster(save=not self.live_sorare_roster)
+        self.refresh_live_sorare_market()
+        self.live_mode_index = 0
+        self.state = "LIVE_HUB"
+
+    def open_live_competition(self, competition_key):
+        if competition_key == "sorare_setup":
+            self.open_live_sorare_mode()
+        elif competition_key == "sorare_market":
+            self.refresh_live_sorare_market()
+            self.state = "LIVE_SORARE_MARKET"
+        elif competition_key == "premier_league":
+            self.open_live_league_mode()
+        elif competition_key == "weekly_fantasy":
+            self.open_weekly_fantasy_mode()
+        elif competition_key == "top_scorers":
+            self.state = "LIVE_TOP_SCORERS"
+        elif competition_key == "derby_picks":
+            self.state = "LIVE_DERBY_PICKS"
+        elif competition_key == "team_of_week":
+            self.state = "LIVE_TEAM_OF_WEEK"
+        else:
+            self.state = "LIVE_HUB"
 
     def assign_weekly_fantasy_card(self):
         if self.weekly_fantasy_locked():
@@ -3023,16 +3427,428 @@ class Game:
             upgrade_delta = int(reward.get("upgrade_delta", 0) or 0)
             upgrade_card = self.find_fantasy_card_by_key(reward.get("upgrade_card_key"))
             if upgrade_card and upgrade_delta > 0:
+                previous_card_key = upgrade_card.get("card_key")
                 upgrade_card["rating"] += upgrade_delta
-                upgrade_card["rarity"] = self.card_rarity_from_rating(upgrade_card["rating"], upgrade_card.get("promo", "Base"))
-                upgrade_card["card_key"] = f"{upgrade_card['name']}|{upgrade_card.get('promo', 'Base')}|{upgrade_card['rating']}|{upgrade_card.get('position', 'ST')}"
+                if upgrade_card.get("promo") == "Sorare" or upgrade_card.get("sorare_rarity") in self.sorare_rarity_order():
+                    sorare_rarity = self.sorare_rarity_from_rating(upgrade_card["rating"])
+                    upgrade_card["promo"] = "Sorare"
+                    upgrade_card["rarity"] = sorare_rarity
+                    upgrade_card["sorare_rarity"] = sorare_rarity
+                    upgrade_card["sorare_profile"] = self.sorare_card_profile(sorare_rarity)
+                    upgrade_card["card_key"] = f"SORARE|{upgrade_card.get('name')}|{upgrade_card.get('team')}|{upgrade_card.get('position', 'ST')}|{sorare_rarity}"
+                else:
+                    upgrade_card["rarity"] = self.card_rarity_from_rating(upgrade_card["rating"], upgrade_card.get("promo", "Base"))
+                    upgrade_card["card_key"] = f"{upgrade_card['name']}|{upgrade_card.get('promo', 'Base')}|{upgrade_card['rating']}|{upgrade_card.get('position', 'ST')}"
+                upgrade_card["previous_card_key"] = previous_card_key
                 self.sync_fantasy_card_rating(upgrade_card)
+                upgrade_card.pop("previous_card_key", None)
             self.weekly_fantasy_data = data if isinstance(data, dict) else self.weekly_fantasy_data
             self.save_active_profile()
             entry = self.weekly_fantasy_data.get("entry", {})
             self.weekly_fantasy_message = f"Claimed Weekly Fantasy rewards | {entry.get('points', 0)} pts"
         except RuntimeError as exc:
             self.weekly_fantasy_message = str(exc)
+
+    def draw_live_league_match_table(self, rect, title, matches, accent, upcoming=False):
+        self.draw_glass_panel(rect, accent=accent, radius=20, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.font.render(title, True, WHITE), (rect.x + 14, rect.y + 12))
+        headers = [("Date", rect.x + 14), ("Fixture", rect.x + 132), ("Score", rect.right - 112), ("Odds", rect.right - 52)]
+        header_y = rect.y + 38
+        for label, x in headers:
+            self.screen.blit(self.small.render(label, True, (170, 184, 204)), (x, header_y))
+        row_y = rect.y + 60
+        row_h = 28
+        visible = matches[:max(2, min(6, (rect.h - 66) // 32))]
+        if not visible:
+            empty_text = "No live fixtures loaded yet" if upcoming else "No recent results loaded yet"
+            self.screen.blit(self.small.render(empty_text, True, (196, 210, 228)), (rect.x + 16, rect.y + 86))
+            self.screen.blit(self.small.render("Press U to refresh this league page.", True, (170, 184, 204)), (rect.x + 16, rect.y + 112))
+            return
+        for idx, match in enumerate(visible):
+            row = pygame.Rect(rect.x + 10, row_y - 4, rect.w - 20, row_h)
+            fill = (42, 52, 72, 214) if idx % 2 == 0 else (28, 36, 50, 214)
+            self.draw_glass_panel(row, accent=(84, 96, 120), radius=10, fill=fill, shine=False)
+            self.screen.blit(self.small.render(str(match.get("date", ""))[:16], True, WHITE), (row.x + 12, row.y + 7))
+            fixture = f"{match.get('home', '')[:16]} - {match.get('away', '')[:16]}"
+            self.screen.blit(self.small.render(fixture, True, (220, 228, 236)), (row.x + 136, row.y + 7))
+            score_text = str(match.get("score", "//"))
+            score_color = (168, 112, 255) if score_text != "//" and not upcoming else (220, 228, 236)
+            score_box = pygame.Rect(row.right - 120, row.y + 4, 52, 22)
+            if score_text != "//" and not upcoming:
+                self.draw_glass_panel(score_box, accent=(168, 112, 255), radius=10, fill=(86, 38, 146, 226), shine=False)
+                score_surface = self.small.render(score_text, True, WHITE)
+                self.screen.blit(score_surface, (score_box.centerx - score_surface.get_width() // 2, score_box.y + 3))
+            else:
+                self.screen.blit(self.small.render(score_text, True, score_color), (row.right - 108, row.y + 7))
+            self.screen.blit(self.small.render(str(match.get("odds", "//")), True, (196, 210, 228)), (row.right - 48, row.y + 7))
+            row_y += row_h + 4
+
+    def draw_live_league_standings(self, rect, standings):
+        self.draw_glass_panel(rect, accent=(96, 232, 176), radius=20, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.font.render("Standings", True, WHITE), (rect.x + 14, rect.y + 12))
+        tab_y = rect.y + 38
+        tabs = [("TOTAL", True), ("HOME", False), ("AWAY", False)]
+        tab_x = rect.x + 14
+        for label, active in tabs:
+            tab = pygame.Rect(tab_x, tab_y, 88, 30)
+            self.draw_glass_panel(tab, accent=(168, 112, 255) if active else (110, 120, 138), radius=12, fill=(142, 56, 226, 228) if active else (226, 232, 240, 228), shine=False)
+            self.screen.blit(self.small.render(label, True, WHITE if active else (58, 66, 84)), (tab.x + 14, tab.y + 7))
+            tab_x += 96
+        headers = [("Pos", rect.x + 16), ("Team", rect.x + 66), ("M", rect.x + 308), ("Pts", rect.x + 358), ("+/-", rect.x + 414), ("Goals", rect.x + 468)]
+        header_y = rect.y + 74
+        for label, x in headers:
+            self.screen.blit(self.small.render(label, True, (170, 184, 204)), (x, header_y))
+        row_y = rect.y + 72
+        if not standings:
+            self.screen.blit(self.small.render("No standings available yet.", True, (196, 210, 228)), (rect.x + 16, rect.y + 104))
+            return
+        for idx, row_data in enumerate(standings[:3]):
+            row = pygame.Rect(rect.x + 10, row_y - 4, rect.w - 20, 28)
+            fill = (42, 52, 72, 214) if idx % 2 == 0 else (28, 36, 50, 214)
+            self.draw_glass_panel(row, accent=(84, 96, 120), radius=10, fill=fill, shine=False)
+            goals_text = f"{row_data.get('goals_for', 0)}:{row_data.get('goals_against', 0)}"
+            self.screen.blit(self.small.render(f"{row_data.get('position', idx + 1)}.", True, WHITE), (row.x + 12, row.y + 6))
+            self.screen.blit(self.small.render(str(row_data.get("team", ""))[:20], True, WHITE), (row.x + 58, row.y + 6))
+            self.screen.blit(self.small.render(str(row_data.get("played", 0)), True, (220, 228, 236)), (rect.x + 308, row.y + 6))
+            self.screen.blit(self.small.render(str(row_data.get("points", 0)), True, (220, 228, 236)), (rect.x + 360, row.y + 6))
+            self.screen.blit(self.small.render(str(row_data.get("goal_diff", 0)), True, (220, 228, 236)), (rect.x + 426, row.y + 6))
+            self.screen.blit(self.small.render(goals_text, True, (220, 228, 236)), (rect.x + 474, row.y + 6))
+            row_y += 34
+
+    def draw_live_league_scorers(self, rect, scorers):
+        self.draw_glass_panel(rect, accent=(86, 170, 255), radius=20, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.font.render("Scorers", True, WHITE), (rect.x + 14, rect.y + 12))
+        headers = [("#", rect.x + 16), ("Player", rect.x + 48), ("P", rect.x + 262), ("G", rect.x + 312), ("A", rect.x + 356), ("g/m", rect.x + 398), ("a/m", rect.x + 470)]
+        header_y = rect.y + 38
+        for label, x in headers:
+            self.screen.blit(self.small.render(label, True, (170, 184, 204)), (x, header_y))
+        row_y = rect.y + 60
+        if not scorers:
+            self.screen.blit(self.small.render("No scorer data available yet.", True, (196, 210, 228)), (rect.x + 16, rect.y + 92))
+            return
+        for idx, scorer in enumerate(scorers[:3]):
+            row = pygame.Rect(rect.x + 10, row_y - 4, rect.w - 20, 28)
+            fill = (42, 52, 72, 214) if idx % 2 == 0 else (28, 36, 50, 214)
+            self.draw_glass_panel(row, accent=(84, 96, 120), radius=10, fill=fill, shine=False)
+            self.screen.blit(self.small.render(f"{scorer.get('rank', idx + 1)}.", True, WHITE), (row.x + 10, row.y + 6))
+            self.screen.blit(self.small.render(str(scorer.get("name", ""))[:20], True, WHITE), (row.x + 42, row.y + 6))
+            self.screen.blit(self.micro.render(str(scorer.get("team", ""))[:16], True, (196, 210, 228)), (row.x + 172, row.y + 9))
+            self.screen.blit(self.small.render(str(scorer.get("played", 0)), True, (220, 228, 236)), (rect.x + 262, row.y + 6))
+            self.screen.blit(self.small.render(str(scorer.get("goals", 0)), True, (220, 228, 236)), (rect.x + 314, row.y + 6))
+            self.screen.blit(self.small.render(str(scorer.get("assists", 0)), True, (220, 228, 236)), (rect.x + 358, row.y + 6))
+            self.screen.blit(self.small.render(str(scorer.get("g_per_game", 0)), True, (220, 228, 236)), (rect.x + 402, row.y + 6))
+            self.screen.blit(self.small.render(str(scorer.get("a_per_game", 0)), True, (220, 228, 236)), (rect.x + 474, row.y + 6))
+            row_y += 34
+
+    def draw_live_league_page(self):
+        data = self.live_league_data or {}
+        competition_name = data.get("competition_name", "Premier League")
+        season_label = data.get("season_label", "Current Season")
+        matchday = int(data.get("matchday", 0) or 0)
+        recent_matches = data.get("recent_matches", []) or []
+        next_matches = data.get("next_matches", []) or []
+        standings = data.get("standings", []) or []
+        scorers = data.get("scorers", []) or []
+        error_text = data.get("error", "")
+        counters = [((244, 206, 84), matchday)]
+
+        self.draw_modern_backdrop((168, 112, 255), (86, 170, 255))
+        self.draw_fc_top_bar("Live Mode", competition_name, counters=counters, accent=(168, 112, 255))
+        self.draw_hero_header(
+            competition_name,
+            f"Season {season_label} | recent results, upcoming fixtures, standings, and scorers from the live feed.",
+            accent=(168, 112, 255),
+            accent_two=(86, 170, 255),
+            right_text=season_label,
+        )
+        self.screen.blit(self.small.render("U refresh | ESC live hub", True, (196, 210, 228)), (36, 170))
+
+        highlight = recent_matches[0] if recent_matches else (next_matches[0] if next_matches else None)
+        highlight_rect = pygame.Rect(36, 214, 1128, 76)
+        self.draw_glass_panel(highlight_rect, accent=(168, 112, 255), radius=20, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Live Result Snapshot", True, (168, 112, 255)), (highlight_rect.x + 14, highlight_rect.y + 10))
+        if highlight:
+            result_text = f"{highlight.get('home', '')}  {highlight.get('score', '//')}  {highlight.get('away', '')}"
+            self.screen.blit(self.big.render(result_text[:52], True, WHITE), (highlight_rect.x + 14, highlight_rect.y + 28))
+            self.screen.blit(self.small.render(f"Status: {highlight.get('status', 'LIVE')} | Date: {highlight.get('date', '')}", True, (196, 210, 228)), (highlight_rect.right - 360, highlight_rect.y + 14))
+        else:
+            empty_text = error_text or "No results loaded yet. Press U to fetch the live feed."
+            self.screen.blit(self.font.render(empty_text[:82], True, WHITE), (highlight_rect.x + 14, highlight_rect.y + 30))
+
+        recent_rect = pygame.Rect(36, 306, 552, 184)
+        next_rect = pygame.Rect(612, 306, 552, 184)
+        standings_rect = pygame.Rect(36, 510, 690, 170)
+        scorers_rect = pygame.Rect(748, 510, 416, 170)
+
+        self.draw_live_league_match_table(recent_rect, "Recent matches", recent_matches, (168, 112, 255), upcoming=False)
+        self.draw_live_league_match_table(next_rect, "Next matches", next_matches, (86, 170, 255), upcoming=True)
+        self.draw_live_league_standings(standings_rect, standings)
+        self.draw_live_league_scorers(scorers_rect, scorers)
+
+        footer = pygame.Rect(36, 688, 1128, 24)
+        self.draw_glass_panel(footer, accent=(168, 112, 255), radius=12, fill=(20, 28, 40, 216), shine=False)
+        status_text = error_text or self.live_league_message or "Live league data ready"
+        self.screen.blit(self.small.render(status_text[:118], True, WHITE), (footer.x + 12, footer.y + 6))
+        self.draw_fc_bottom_nav([("U", "REFRESH"), ("ENTER", "HUB"), ("ESC", "BACK")], active_index=0)
+
+    def draw_live_mode_hub_page(self):
+        entry = (self.weekly_fantasy_data or {}).get("entry", {})
+        provider_ready = bool((self.weekly_fantasy_data or {}).get("provider_ready"))
+        comps = self.live_mode_competitions()
+        selected_key, selected_title, selected_desc = comps[max(0, min(self.live_mode_index, len(comps) - 1))]
+        week_label, countdown = self.live_mode_week_label(entry)
+        reward = entry.get("reward") or {}
+        reward_text = f"{int(reward.get('coins', 0) or 0)} coins"
+        if reward.get("pack_id"):
+            reward_text += f" + {reward.get('pack_id')} pack"
+        if int(reward.get("upgrade_delta", 0) or 0) > 0:
+            reward_text += f" + +{int(reward.get('upgrade_delta', 0))} upgrade"
+        self.draw_modern_backdrop((96, 232, 176), (86, 170, 255))
+        self.draw_fc_top_bar("Live Mode", "Sorare-style card universe", counters=[((244, 206, 84), entry.get("points", 0))], accent=(96, 232, 176))
+        self.draw_hero_header("Live Mode Hub", "Card scarcity, weekly lineup locks, live scoring, and rewards in one hub.", accent=(96, 232, 176), accent_two=(86, 170, 255), right_text=week_label)
+        self.screen.blit(self.small.render("UP/DOWN choose | ENTER open | U sync | ESC back", True, (196, 210, 228)), (36, 170))
+
+        hub_left = pygame.Rect(40, 214, 350, 518)
+        hub_mid = pygame.Rect(410, 214, 390, 518)
+        hub_right = pygame.Rect(820, 214, 340, 518)
+        for panel, accent in ((hub_left, (96, 232, 176)), (hub_mid, (244, 206, 84)), (hub_right, (86, 170, 255))):
+            self.draw_glass_panel(panel, accent=accent, radius=24)
+
+        self.screen.blit(self.font.render("Weekly Countdown", True, WHITE), (hub_left.x + 16, hub_left.y + 14))
+        countdown_box = pygame.Rect(hub_left.x + 16, hub_left.y + 56, hub_left.w - 32, 120)
+        self.draw_glass_panel(countdown_box, accent=(96, 232, 176), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Current Week", True, (196, 210, 228)), (countdown_box.x + 16, countdown_box.y + 14))
+        self.screen.blit(self.big.render(countdown, True, WHITE), (countdown_box.x + 16, countdown_box.y + 42))
+        self.screen.blit(self.small.render(f"Window: {entry.get('week_start', '-')} to {entry.get('week_end', '-')}", True, (196, 210, 228)), (countdown_box.x + 16, countdown_box.y + 88))
+
+        lock_box = pygame.Rect(hub_left.x + 16, hub_left.y + 194, hub_left.w - 32, 112)
+        self.draw_glass_panel(lock_box, accent=(244, 206, 84), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Squad Lock Status", True, (244, 206, 84)), (lock_box.x + 16, lock_box.y + 14))
+        self.screen.blit(self.font.render("Locked" if entry.get("locked") else "Editable", True, WHITE), (lock_box.x + 16, lock_box.y + 42))
+        self.screen.blit(self.small.render(f"Claimed: {'Yes' if entry.get('reward_claimed') else 'No'}", True, LIGHT_GREEN), (lock_box.x + 16, lock_box.y + 78))
+
+        active_box = pygame.Rect(hub_left.x + 16, hub_left.y + 326, hub_left.w - 32, 180)
+        self.draw_glass_panel(active_box, accent=(86, 170, 255), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Active Competition", True, (86, 170, 255)), (active_box.x + 16, active_box.y + 14))
+        self.screen.blit(self.font.render(selected_title, True, WHITE), (active_box.x + 16, active_box.y + 42))
+        self.screen.blit(self.small.render(selected_desc, True, (196, 210, 228)), (active_box.x + 16, active_box.y + 76))
+        self.screen.blit(self.small.render(f"Key: {selected_key}", True, (196, 210, 228)), (active_box.x + 16, active_box.y + 104))
+        self.screen.blit(self.small.render("ENTER opens this page", True, LIGHT_GREEN), (active_box.x + 16, active_box.y + 136))
+
+        self.screen.blit(self.font.render("Rewards Panel", True, WHITE), (hub_mid.x + 16, hub_mid.y + 14))
+        reward_box = pygame.Rect(hub_mid.x + 16, hub_mid.y + 56, hub_mid.w - 32, 140)
+        self.draw_glass_panel(reward_box, accent=(244, 206, 84), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Current reward", True, (244, 206, 84)), (reward_box.x + 16, reward_box.y + 14))
+        self.screen.blit(self.big.render(reward_text[:20].upper(), True, WHITE), (reward_box.x + 16, reward_box.y + 42))
+        self.screen.blit(self.small.render("Sync weekly stats, then claim rewards once the score is in.", True, (196, 210, 228)), (reward_box.x + 16, reward_box.y + 88))
+
+        sync_box = pygame.Rect(hub_mid.x + 16, hub_mid.y + 214, hub_mid.w - 32, 112)
+        self.draw_glass_panel(sync_box, accent=(96, 232, 176), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Sync Button", True, (96, 232, 176)), (sync_box.x + 16, sync_box.y + 14))
+        self.screen.blit(self.font.render("Press U to sync", True, WHITE), (sync_box.x + 16, sync_box.y + 42))
+        self.screen.blit(self.small.render("Updates the week score from finished matches.", True, (196, 210, 228)), (sync_box.x + 16, sync_box.y + 78))
+
+        provider_box = pygame.Rect(hub_mid.x + 16, hub_mid.y + 344, hub_mid.w - 32, 96)
+        self.draw_glass_panel(provider_box, accent=(86, 170, 255), radius=18, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Provider", True, (86, 170, 255)), (provider_box.x + 16, provider_box.y + 14))
+        self.screen.blit(self.font.render("football-data.org", True, WHITE), (provider_box.x + 16, provider_box.y + 36))
+        self.screen.blit(self.small.render("Ready" if provider_ready else "Token needed on the backend", True, (196, 210, 228)), (provider_box.x + 16, provider_box.y + 70))
+
+        self.screen.blit(self.font.render("Live Events", True, WHITE), (hub_right.x + 16, hub_right.y + 14))
+        y = hub_right.y + 56
+        for idx, (key, title, desc) in enumerate(comps):
+            row = pygame.Rect(hub_right.x + 14, y, hub_right.w - 28, 84)
+            active = idx == self.live_mode_index
+            self.draw_glass_panel(row, accent=YELLOW if active else (86, 98, 126), radius=16, fill=(42, 52, 72, 228) if active else (24, 30, 44, 214), shine=False)
+            self.screen.blit(self.small.render(title, True, WHITE), (row.x + 14, row.y + 12))
+            self.screen.blit(self.micro.render(desc[:34], True, (196, 210, 228)), (row.x + 14, row.y + 36))
+            self.screen.blit(self.micro.render("OPEN" if active else "SELECT", True, LIGHT_GREEN if active else (180, 190, 205)), (row.right - 70, row.y + 52))
+            y += 92
+        self.draw_fc_bottom_nav([("UP/DOWN", "CHOOSE"), ("ENTER", "OPEN"), ("U", "SYNC"), ("ESC", "BACK")], active_index=self.live_mode_index)
+
+    def draw_live_sorare_page(self):
+        roster = self.live_sorare_roster or self.ensure_live_sorare_roster(save=False)
+        if not roster:
+            roster = self.build_live_sorare_catalog()[:10]
+        filtered = self.filtered_live_sorare_cards()
+        if not filtered and roster:
+            filtered = roster
+        self.live_sorare_index = max(0, min(self.live_sorare_index, max(0, len(filtered) - 1)))
+        selected = filtered[self.live_sorare_index] if filtered else None
+        owner_count = len(self.live_sorare_roster)
+        rarity_counts = {}
+        for card in roster:
+            tier = card.get("sorare_rarity", "Common")
+            rarity_counts[tier] = rarity_counts.get(tier, 0) + 1
+        self.draw_modern_backdrop((96, 232, 176), (168, 112, 255))
+        self.draw_fc_top_bar("Live Mode", "Sorare roster", counters=[((244, 206, 84), owner_count)], accent=(96, 232, 176))
+        self.draw_hero_header(
+            "Sorare Roster",
+            "Your live cards sit here as owned cards. The weekly lineup pulls from this roster, and the market adds new cards to it.",
+            accent=(96, 232, 176),
+            accent_two=(168, 112, 255),
+            right_text=f"{len(roster)} owned",
+        )
+        self.screen.blit(self.small.render("UP/DOWN browse | F search | M market | W weekly | U refresh | ESC live hub", True, (196, 210, 228)), (36, 170))
+
+        left_panel = pygame.Rect(36, 214, 390, 468)
+        middle_panel = pygame.Rect(446, 214, 400, 468)
+        right_panel = pygame.Rect(866, 214, 298, 468)
+        for panel, accent in ((left_panel, (96, 232, 176)), (middle_panel, (168, 112, 255)), (right_panel, (244, 206, 84))):
+            self.draw_glass_panel(panel, accent=accent, radius=24)
+
+        self.screen.blit(self.font.render("Owned Cards", True, WHITE), (left_panel.x + 16, left_panel.y + 14))
+        search_chip = pygame.Rect(left_panel.x + 16, left_panel.y + 50, left_panel.w - 32, 34)
+        self.draw_glass_panel(search_chip, accent=(96, 232, 176), radius=12, fill=(16, 24, 34, 214), shine=False)
+        search_label = "SEARCH ON" if self.live_sorare_search_active else "SEARCH"
+        self.screen.blit(self.small.render(search_label, True, WHITE), (search_chip.x + 12, search_chip.y + 9))
+        self.screen.blit(self.small.render(self.live_sorare_search_query[:18] or "name, team, rarity", True, (196, 210, 228)), (search_chip.x + 86, search_chip.y + 9))
+
+        start = max(0, min(self.live_sorare_index - 5, max(0, len(filtered) - 10)))
+        row_y = left_panel.y + 96
+        for idx in range(start, min(len(filtered), start + 10)):
+            card = filtered[idx]
+            row = pygame.Rect(left_panel.x + 12, row_y, left_panel.w - 24, 36)
+            selected_row = idx == self.live_sorare_index
+            self.draw_glass_panel(row, accent=YELLOW if selected_row else (86, 98, 126), radius=10, fill=(44, 56, 78, 228) if selected_row else (24, 30, 44, 214), shine=False)
+            label = f"{card.get('name','')[:16]:<16} {card.get('sorare_rarity','Common')[:11]:<11} {card.get('rating',0):>3}"
+            self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 9))
+            self.screen.blit(self.micro.render(card.get("team", "")[:14], True, (196, 210, 228)), (row.right - 102, row.y + 11))
+            row_y += 40
+        if start > 0:
+            self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (left_panel.right - 96, left_panel.y + 44))
+        if start + 10 < len(filtered):
+            self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (left_panel.right - 96, left_panel.bottom - 26))
+
+        self.screen.blit(self.font.render("Selected Card", True, WHITE), (middle_panel.x + 16, middle_panel.y + 14))
+        if selected:
+            self.draw_card(middle_panel.x + 94, middle_panel.y + 52, 232, 300, selected, face="front")
+            info_box = pygame.Rect(middle_panel.x + 16, middle_panel.bottom - 118, middle_panel.w - 32, 92)
+            self.draw_glass_panel(info_box, accent=(168, 112, 255), radius=16, fill=(20, 28, 40, 216), shine=False)
+            info_lines = [
+                f"Name: {selected.get('name', '')}",
+                f"Club: {selected.get('team', '')}",
+                f"Rarity: {selected.get('sorare_rarity', 'Common')}",
+                f"Position: {selected.get('position', 'ST')}",
+            ]
+            yy = info_box.y + 10
+            for line in info_lines:
+                self.screen.blit(self.small.render(line[:44], True, WHITE), (info_box.x + 12, yy))
+                yy += 20
+        else:
+            self.screen.blit(self.big.render("No cards yet", True, WHITE), (middle_panel.x + 84, middle_panel.y + 158))
+
+        self.screen.blit(self.font.render("Roster Summary", True, WHITE), (right_panel.x + 16, right_panel.y + 14))
+        summary = [
+            f"Owned cards: {owner_count}",
+            f"Common: {rarity_counts.get('Common', 0)}",
+            f"Limited: {rarity_counts.get('Limited', 0)}",
+            f"Rare: {rarity_counts.get('Rare', 0)}",
+            f"Super Rare: {rarity_counts.get('Super Rare', 0)}",
+            f"Unique: {rarity_counts.get('Unique', 0)}",
+        ]
+        y = right_panel.y + 58
+        for line in summary:
+            self.screen.blit(self.small.render(line, True, WHITE), (right_panel.x + 16, y))
+            y += 28
+        rewards_box = pygame.Rect(right_panel.x + 14, right_panel.bottom - 170, right_panel.w - 28, 126)
+        self.draw_glass_panel(rewards_box, accent=(244, 206, 84), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Sorare Flow", True, (244, 206, 84)), (rewards_box.x + 12, rewards_box.y + 10))
+        self.screen.blit(self.small.render("Starter 10 cards are Common Premier League cards.", True, (196, 210, 228)), (rewards_box.x + 12, rewards_box.y + 36))
+        self.screen.blit(self.small.render("Buy more in the market, then Weekly Fantasy Five uses this roster.", True, (196, 210, 228)), (rewards_box.x + 12, rewards_box.y + 60))
+        self.screen.blit(self.small.render("F search | M market | W weekly", True, LIGHT_GREEN), (rewards_box.x + 12, rewards_box.y + 88))
+        self.draw_fc_bottom_nav([("UP/DOWN", "BROWSE"), ("F", "SEARCH"), ("M", "MARKET"), ("W", "WEEKLY"), ("ESC", "BACK")], active_index=0)
+
+    def draw_live_sorare_market_page(self):
+        offers = self.filtered_live_sorare_market_offers()
+        if not offers:
+            offers = self.refresh_live_sorare_market()
+        self.live_sorare_market_index = max(0, min(self.live_sorare_market_index, max(0, len(offers) - 1)))
+        selected = offers[self.live_sorare_market_index] if offers else None
+        self.draw_modern_backdrop((244, 206, 84), (168, 112, 255))
+        self.draw_fc_top_bar("Live Mode", "Sorare market", counters=[((244, 206, 84), self.fantasy_coins)], accent=(244, 206, 84))
+        self.draw_hero_header(
+            "Sorare Market",
+            "Buy Premier League cards with Sorare rarity tiers. New cards enter your roster here.",
+            accent=(244, 206, 84),
+            accent_two=(168, 112, 255),
+            right_text=f"{len(offers)} offers",
+        )
+        self.screen.blit(self.small.render("UP/DOWN browse | F search | ENTER buy | R refresh | ESC Sorare roster", True, (196, 210, 228)), (36, 170))
+        left_panel = pygame.Rect(36, 214, 410, 468)
+        middle_panel = pygame.Rect(466, 214, 410, 468)
+        right_panel = pygame.Rect(896, 214, 268, 468)
+        for panel, accent in ((left_panel, (96, 232, 176)), (middle_panel, (244, 206, 84)), (right_panel, (168, 112, 255))):
+            self.draw_glass_panel(panel, accent=accent, radius=24)
+
+        self.screen.blit(self.font.render("Market Offers", True, WHITE), (left_panel.x + 16, left_panel.y + 14))
+        search_chip = pygame.Rect(left_panel.x + 16, left_panel.y + 50, left_panel.w - 32, 34)
+        self.draw_glass_panel(search_chip, accent=(244, 206, 84), radius=12, fill=(16, 24, 34, 214), shine=False)
+        search_label = "SEARCH ON" if self.live_sorare_market_search_active else "SEARCH"
+        self.screen.blit(self.small.render(search_label, True, WHITE), (search_chip.x + 12, search_chip.y + 9))
+        self.screen.blit(self.small.render(self.live_sorare_market_search_query[:18] or "name, team, rarity", True, (196, 210, 228)), (search_chip.x + 86, search_chip.y + 9))
+
+        start = max(0, min(self.live_sorare_market_index - 5, max(0, len(offers) - 10)))
+        row_y = left_panel.y + 96
+        for idx in range(start, min(len(offers), start + 10)):
+            card = offers[idx]
+            row = pygame.Rect(left_panel.x + 12, row_y, left_panel.w - 24, 36)
+            selected_row = idx == self.live_sorare_market_index
+            self.draw_glass_panel(row, accent=YELLOW if selected_row else (86, 98, 126), radius=10, fill=(44, 56, 78, 228) if selected_row else (24, 30, 44, 214), shine=False)
+            label = f"{card.get('name','')[:15]:<15} {card.get('sorare_rarity','Common')[:11]:<11} {card.get('market_price',0):>4}"
+            self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 9))
+            self.screen.blit(self.micro.render(card.get("team", "")[:14], True, (196, 210, 228)), (row.right - 102, row.y + 11))
+            row_y += 40
+
+        self.screen.blit(self.font.render("Buy Card", True, WHITE), (middle_panel.x + 16, middle_panel.y + 14))
+        if selected:
+            self.draw_card(middle_panel.x + 90, middle_panel.y + 44, 236, 312, selected, face="front")
+            info_box = pygame.Rect(middle_panel.x + 16, middle_panel.bottom - 116, middle_panel.w - 32, 92)
+            self.draw_glass_panel(info_box, accent=(244, 206, 84), radius=16, fill=(20, 28, 40, 216), shine=False)
+            self.screen.blit(self.small.render(f"Price: {selected.get('market_price', 0)} coins", True, WHITE), (info_box.x + 12, info_box.y + 10))
+            self.screen.blit(self.small.render(f"Rarity: {selected.get('sorare_rarity', 'Common')}", True, WHITE), (info_box.x + 12, info_box.y + 32))
+            self.screen.blit(self.small.render(f"Club: {selected.get('team', '')}", True, WHITE), (info_box.x + 12, info_box.y + 54))
+            self.screen.blit(self.small.render("ENTER buys this card.", True, LIGHT_GREEN), (info_box.right - 170, info_box.y + 34))
+        else:
+            self.screen.blit(self.font.render("No offers match this search", True, WHITE), (middle_panel.x + 64, middle_panel.y + 186))
+
+        self.screen.blit(self.font.render("Sorare Rules", True, WHITE), (right_panel.x + 16, right_panel.y + 14))
+        notes = [
+            "Starter bundle: 10 Common PL cards",
+            "Weekly Fantasy Five uses your Sorare roster",
+            "Market cards use Common / Limited / Rare / Super Rare / Unique",
+            "Owned cards persist in your profile",
+        ]
+        y = right_panel.y + 58
+        for line in notes:
+            self.screen.blit(self.small.render(line[:28], True, WHITE), (right_panel.x + 16, y))
+            y += 34
+        box = pygame.Rect(right_panel.x + 14, right_panel.bottom - 132, right_panel.w - 28, 88)
+        self.draw_glass_panel(box, accent=(168, 112, 255), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Rarity colors", True, (168, 112, 255)), (box.x + 12, box.y + 10))
+        self.screen.blit(self.small.render("Grey Common | Yellow Limited | Red Rare | Blue Super Rare | Purple Unique", True, (196, 210, 228)), (box.x + 12, box.y + 34))
+        self.draw_fc_bottom_nav([("UP/DOWN", "BROWSE"), ("F", "SEARCH"), ("ENTER", "BUY"), ("R", "REFRESH"), ("ESC", "ROSTER")], active_index=0)
+
+    def draw_live_competition_page(self, title, desc, coming_soon=True):
+        self.draw_modern_backdrop((96, 232, 176), (86, 170, 255))
+        self.draw_fc_top_bar("Live Mode", title, counters=[((244, 206, 84), (self.weekly_fantasy_data or {}).get("entry", {}).get("points", 0))], accent=(96, 232, 176))
+        self.draw_hero_header(title, desc, accent=(96, 232, 176), accent_two=(86, 170, 255), right_text=(self.weekly_fantasy_data or {}).get("entry", {}).get("week_key", "Current Week"))
+        panel = pygame.Rect(40, 214, 1120, 430)
+        self.draw_glass_panel(panel, accent=(244, 206, 84), radius=26)
+        self.screen.blit(self.font.render(title, True, WHITE), (panel.x + 18, panel.y + 18))
+        body = "Coming soon" if coming_soon else desc
+        self.screen.blit(self.big.render(body, True, WHITE), (panel.x + 18, panel.y + 64))
+        if coming_soon:
+            lines = [
+                "This live page will use the same backend as Weekly Fantasy Five.",
+                "It can later score different real-world stat types and reward tracks.",
+                "For now it is a separate page so the live hub stays clean.",
+            ]
+            y = panel.y + 132
+            for line in lines:
+                self.screen.blit(self.small.render(line, True, (196, 210, 228)), (panel.x + 18, y))
+                y += 34
+        self.draw_fc_bottom_nav([("ESC", "LIVE HUB"), ("ENTER", "BACK")], active_index=0)
 
     def play_online_tournament_match(self):
         if not self.online_tournaments_available():
@@ -3130,6 +3946,8 @@ class Game:
             "fantasy_team_name": self.fantasy_team_name,
             "fantasy_budget": self.fantasy_budget,
             "fantasy_roster": self.fantasy_roster,
+            "live_sorare_roster": self.live_sorare_roster,
+            "live_sorare_starter_claimed": self.live_sorare_starter_claimed,
             "fantasy_replaced_team": self.fantasy_replaced_team,
             "fantasy_coins": self.fantasy_coins,
             "my_packs": self.my_packs,
@@ -3206,6 +4024,10 @@ class Game:
         self.fantasy_team_name = data.get("fantasy_team_name", self.fantasy_team_name)
         self.fantasy_budget = data.get("fantasy_budget", self.fantasy_budget)
         self.fantasy_roster = data.get("fantasy_roster", [])
+        live_roster = data.get("live_sorare_roster", [])
+        if isinstance(live_roster, list):
+            self.live_sorare_roster = [card.copy() for card in live_roster if isinstance(card, dict)]
+        self.live_sorare_starter_claimed = bool(data.get("live_sorare_starter_claimed", self.live_sorare_starter_claimed))
         if self.game_mode == "FANTASY" and self.fantasy_team_name:
             self.user_team = self.fantasy_team_name
         self.fantasy_replaced_team = data.get("fantasy_replaced_team", self.fantasy_replaced_team)
@@ -3253,16 +4075,22 @@ class Game:
 
     def save_active_profile(self):
         record = self.active_account_record()
-        if not record or self.game_mode not in ("CAREER", "FANTASY"):
+        if not record:
             return
         snapshot = self.build_full_snapshot()
-        local_saved = self.save_local_snapshot(self.game_mode, snapshot)
+        save_mode = self.game_mode if self.game_mode in ("CAREER", "FANTASY") else ("FANTASY" if self.state.startswith("LIVE") else self.game_mode)
+        if save_mode not in ("CAREER", "FANTASY"):
+            return
+        if save_mode == "FANTASY" and self.state.startswith("LIVE"):
+            snapshot["live_sorare_roster"] = [card.copy() for card in self.live_sorare_roster]
+            snapshot["live_sorare_starter_claimed"] = self.live_sorare_starter_claimed
+        local_saved = self.save_local_snapshot(save_mode, snapshot)
         cloud_saved = False
         try:
             data = self.cloud_request(
                 "PUT",
                 "/api/save",
-                {"mode": self.game_mode, "snapshot": snapshot},
+                {"mode": save_mode, "snapshot": snapshot},
                 needs_auth=True,
             )
             self.cloud_user_cache = data.get("user", self.cloud_user_cache)
@@ -4271,17 +5099,34 @@ class Game:
         ROSTER_DATA[self.user_team] = self.user_reserves[:]
 
     def sync_fantasy_card_rating(self, card):
-        if not self.user_team or not card:
+        if not card:
             return
-        self.update_team_lineup_rating(self.user_team, card["name"], card.get("number", 0), card["rating"])
-        roster = ROSTER_DATA.get(self.user_team, [])
-        for i, entry in enumerate(roster):
-            name, num, rating = normalize_entry(entry, i, self.user_team)
-            if name == card["name"] and num == card.get("number", num):
-                roster[i] = (name, num, card["rating"])
-                break
-        self.persist_user_squad_layout()
-        self.build_user_squad()
+        if self.user_team:
+            self.update_team_lineup_rating(self.user_team, card["name"], card.get("number", 0), card["rating"])
+            roster = ROSTER_DATA.get(self.user_team, [])
+            for i, entry in enumerate(roster):
+                name, num, rating = normalize_entry(entry, i, self.user_team)
+                if name == card["name"] and num == card.get("number", num):
+                    roster[i] = (name, num, card["rating"])
+                    break
+            self.persist_user_squad_layout()
+            self.build_user_squad()
+        updated_live = False
+        for roster in (self.live_sorare_roster,):
+            for i, entry in enumerate(roster):
+                same_card = entry.get("card_key") == card.get("card_key")
+                same_previous = bool(card.get("previous_card_key")) and entry.get("card_key") == card.get("previous_card_key")
+                same_player = (
+                    entry.get("name") == card.get("name")
+                    and entry.get("team") == card.get("team")
+                    and entry.get("position") == card.get("position")
+                )
+                if same_card or same_previous or same_player:
+                    roster[i] = card.copy()
+                    updated_live = True
+                    break
+        if updated_live:
+            self.save_live_sorare_profile()
 
     def fantasy_evolution_paths(self, card):
         position = card.get("position", "ST")
@@ -5095,7 +5940,6 @@ class Game:
         return [
             ("division", "Division Match", "Win for points and coin promotions"),
             ("ladder", "Weekly Ladder", "Six-match form race with rolling rewards"),
-            ("weekly_fantasy", "Weekly Fantasy Five", "Lock one 5-card squad per week and score from real-life player actions"),
             ("online_tournament", "Online Tournament", "Automatic bracket runs with your live squad"),
             ("cup", "Knockout Cup", "Progress for an Elite Pack reward"),
             ("weekend", "Weekend Challenge", "String wins together for pack and coin rewards"),
@@ -5797,8 +6641,23 @@ class Game:
             offers.append(card)
             if len(offers) >= 10:
                 break
+        self.fantasy_market_all_offers = offers
         self.fantasy_market_offers = offers
         self.fantasy_market_index = 0
+
+    def filtered_fantasy_market_offers(self):
+        offers = self.fantasy_market_all_offers or self.fantasy_market_offers or []
+        query = self.fantasy_market_search_query.strip().lower()
+        if not query:
+            return list(offers)
+        return [
+            card for card in offers
+            if query in str(card.get("name", "")).lower()
+            or query in str(card.get("team", "")).lower()
+            or query in str(card.get("promo", "")).lower()
+            or query in str(card.get("rarity", "")).lower()
+            or query in str(card.get("position", "")).lower()
+        ]
 
     def buy_market_card(self, idx):
         if idx < 0 or idx >= len(self.fantasy_market_offers):
@@ -6101,8 +6960,12 @@ class Game:
 
     def card_theme_colors(self, player):
         promo = player.get("promo", "Base")
+        sorare_rarity = player.get("sorare_rarity")
         rarity = player.get("rarity") or self.card_rarity_from_rating(player.get("rating", 70), promo)
-        if rarity == "GOAT":
+        if promo == "Sorare" or sorare_rarity in self.sorare_rarity_order():
+            profile = self.sorare_card_profile(sorare_rarity or "Common")
+            base, accent = profile["base"], profile["accent"]
+        elif rarity == "GOAT":
             profile = self.goat_card_profile(player)
             base, accent = profile["base"], profile["accent"]
         elif promo == "Signature":
@@ -6186,6 +7049,9 @@ class Game:
 
     def card_border_tier(self, player):
         promo = player.get("promo", "Base")
+        sorare_rarity = player.get("sorare_rarity")
+        if promo == "Sorare" or sorare_rarity in self.sorare_rarity_order():
+            return sorare_rarity or "Common"
         rarity = player.get("rarity") or self.card_rarity_from_rating(player.get("rating", 70), promo)
         if rarity == "GOAT":
             return "GOAT"
@@ -6214,7 +7080,7 @@ class Game:
         outer = self.blend_color(accent, (20, 20, 24), 0.18)
         pygame.draw.polygon(self.screen, outer, gem_points)
         pygame.draw.polygon(self.screen, inner, gem_points, 2)
-        if tier in ("Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+        if tier in ("Limited", "Rare", "Super Rare", "Unique", "Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
             sparkle = [
                 (gem.centerx, gem.y - 4),
                 (gem.centerx + 4, gem.y + 2),
@@ -6237,7 +7103,7 @@ class Game:
         pygame.draw.rect(frame, metal, outer, 3, border_radius=24)
         pygame.draw.rect(frame, (255, 255, 255, 32), inner, 1, border_radius=20)
 
-        if tier in ("Rare", "Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+        if tier in ("Limited", "Rare", "Super Rare", "Unique", "Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
             bevel = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
             pygame.draw.rect(bevel, (255, 255, 255, 18), (6, 6, w - 12, max(18, int(h * 0.10))), 0, border_radius=20)
             pygame.draw.rect(bevel, (*bright, 70), (6, 6, w - 12, h - 12), 2, border_radius=20)
@@ -6252,7 +7118,7 @@ class Game:
                 ]
                 pygame.draw.polygon(frame, (*metal, 110), ribs)
 
-        if tier in ("Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
+        if tier in ("Rare", "Super Rare", "Unique", "Elite", "Signature/Promo Exclusive", "Icon", "GOAT"):
             for side in (-1, 1):
                 anchor_x = 10 if side < 0 else w - 10
                 pts = [
@@ -6266,7 +7132,7 @@ class Game:
                 pygame.draw.polygon(frame, (*metal, 82), pts)
                 pygame.draw.lines(frame, (*bright, 100), False, pts[:4], 2)
 
-        if tier in ("Signature/Promo Exclusive", "Icon", "GOAT"):
+        if tier in ("Super Rare", "Unique", "Signature/Promo Exclusive", "Icon", "GOAT"):
             for side in (-1, 1):
                 wing_base = 12 if side < 0 else w - 12
                 for idx in range(3):
@@ -6284,6 +7150,17 @@ class Game:
             crest = pygame.Rect(int(w * 0.22), 14, int(w * 0.56), max(16, int(h * 0.08)))
             pygame.draw.arc(frame, (*bright, 140), crest, math.pi, math.tau, 3)
             pygame.draw.arc(frame, (*metal, 110), crest.inflate(-18, 10), math.pi, math.tau, 2)
+
+        if tier == "Unique":
+            aura = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            for idx in range(4):
+                band_y = int(h * (0.18 + idx * 0.15))
+                pygame.draw.polygon(
+                    aura,
+                    (*bright, max(36, 88 - idx * 10)),
+                    [(0, band_y), (w * 0.54, band_y - h * 0.05), (w, band_y + h * 0.03), (w * 0.42, band_y + h * 0.12)],
+                )
+            frame.blit(aura, (0, 0))
 
         if tier == "GOAT":
             crown = [
@@ -6385,6 +7262,7 @@ class Game:
     def open_fantasy_market(self):
         if not self.fantasy_market_offers:
             self.refresh_fantasy_market()
+        self.fantasy_market_search_active = False
         self.fantasy_market_index = max(0, min(self.fantasy_market_index, max(0, len(self.fantasy_market_offers) - 1)))
         self.state = "FANTASY_MARKET"
 
@@ -8532,23 +9410,31 @@ class Game:
         self.draw_modern_backdrop((12, 220, 190), (244, 206, 84))
         self.draw_fc_top_bar("Market", "Live player offers", counters=[((244, 206, 84), self.fantasy_coins)], accent=(12, 220, 190))
         self.draw_hero_header("Fantasy Market", "Premium transfer board with cleaner cards, prices, and live offer focus.", accent=(12, 220, 190), accent_two=(244, 206, 84), right_text=f"{self.fantasy_coins}C")
-        self.screen.blit(self.small.render("UP/DOWN browse | ENTER buy | R refresh | ESC back", True, (190, 200, 215)), (36, 170))
-        if not self.fantasy_market_offers:
+        self.screen.blit(self.small.render("UP/DOWN browse | ENTER buy | R refresh | F search | ESC back", True, (190, 200, 215)), (36, 170))
+        offers = self.filtered_fantasy_market_offers()
+        search_chip = pygame.Rect(942, 162, 214, 34)
+        self.draw_glass_panel(search_chip, accent=(12, 220, 190), radius=12, fill=(16, 24, 34, 214), shine=False)
+        search_label = "SEARCH ON" if self.fantasy_market_search_active else "SEARCH"
+        self.screen.blit(self.small.render(search_label, True, WHITE), (search_chip.x + 14, search_chip.y + 9))
+        self.screen.blit(self.small.render(self.fantasy_market_search_query[:16] or "Name, team, promo", True, (196, 210, 228)), (search_chip.x + 84, search_chip.y + 9))
+        if not offers:
             self.screen.blit(self.font.render("No market offers available", True, WHITE), (40, 232))
+            if self.fantasy_market_search_query.strip():
+                self.screen.blit(self.small.render("Search returned no results", True, (196, 210, 228)), (40, 264))
             return
-        self.fantasy_market_index = max(0, min(self.fantasy_market_index, len(self.fantasy_market_offers) - 1))
-        selected = self.fantasy_market_offers[self.fantasy_market_index]
+        self.fantasy_market_index = max(0, min(self.fantasy_market_index, len(offers) - 1))
+        selected = offers[self.fantasy_market_index]
         list_panel = pygame.Rect(40, 214, 420, 518)
         detail_panel = pygame.Rect(500, 214, 660, 518)
         self.draw_glass_panel(list_panel, accent=(86, 170, 255), radius=24)
         self.draw_glass_panel(detail_panel, accent=(244, 206, 84), radius=24)
         offers_chip = pygame.Rect(list_panel.x + 14, list_panel.y + 12, 164, 28)
         self.draw_glass_panel(offers_chip, accent=(12, 220, 190), radius=12, fill=(16, 24, 34, 214), shine=False)
-        self.screen.blit(self.small.render(f"{len(self.fantasy_market_offers)} live offers", True, WHITE), (offers_chip.x + 12, offers_chip.y + 8))
-        start = max(0, min(self.fantasy_market_index - 6, max(0, len(self.fantasy_market_offers) - 12)))
+        self.screen.blit(self.small.render(f"{len(offers)} live offers", True, WHITE), (offers_chip.x + 12, offers_chip.y + 8))
+        start = max(0, min(self.fantasy_market_index - 6, max(0, len(offers) - 12)))
         y = list_panel.y + 50
-        for i in range(start, min(len(self.fantasy_market_offers), start + 12)):
-            card = self.fantasy_market_offers[i]
+        for i in range(start, min(len(offers), start + 12)):
+            card = offers[i]
             row = pygame.Rect(list_panel.x + 12, y, list_panel.w - 24, 38)
             if i == self.fantasy_market_index:
                 self.draw_glass_panel(row, accent=YELLOW, radius=10, fill=(70, 82, 110, 228), shine=False)
@@ -8741,127 +9627,135 @@ class Game:
         entry = (self.weekly_fantasy_data or {}).get("entry", {})
         provider_ready = bool((self.weekly_fantasy_data or {}).get("provider_ready"))
         breakdown_players = ((entry.get("breakdown") or {}).get("players") or [])[:5]
-        self.draw_modern_backdrop((96, 232, 176), (86, 170, 255))
-        self.draw_fc_top_bar("Weekly Fantasy Five", "Real-life scoring mode", counters=[((244, 206, 84), entry.get("points", 0))], accent=(96, 232, 176))
-        self.draw_hero_header("Weekly Fantasy Five", "Pick 1 GK, 1 DEF, 1 MID, 1 ATT, and 1 free slot. Lock once per week, sync real-life Premier League points, then claim rewards.", accent=(96, 232, 176), accent_two=(86, 170, 255), right_text=entry.get("week_key", "Current Week"))
-        self.screen.blit(self.small.render("TAB/LEFT/RIGHT focus | UP/DOWN move | ENTER assign | BACKSPACE clear | S submit | U sync | C claim | ESC back", True, (196, 210, 228)), (36, 170))
-
-        pool_panel = pygame.Rect(40, 212, 360, 512)
-        slot_panel = pygame.Rect(428, 212, 328, 512)
-        info_panel = pygame.Rect(784, 212, 376, 512)
-        for panel in (pool_panel, slot_panel, info_panel):
-            self.draw_glass_panel(panel, accent=(96, 232, 176) if panel != info_panel else (244, 206, 84), radius=24)
-
         pool = self.weekly_fantasy_candidate_pool()
-        self.screen.blit(self.font.render("Card Pool", True, WHITE), (pool_panel.x + 16, pool_panel.y + 14))
-        start = max(0, min(self.weekly_fantasy_pool_index - 4, max(0, len(pool) - 8)))
-        row_y = pool_panel.y + 52
-        for idx in range(start, min(len(pool), start + 8)):
-            card = pool[idx]
-            row = pygame.Rect(pool_panel.x + 12, row_y, pool_panel.w - 24, 52)
-            selected = self.weekly_fantasy_focus == "pool" and idx == self.weekly_fantasy_pool_index
-            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=12, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
-            tag = f"{card.get('position', 'ST')} {card.get('rating', 0)}"
-            self.screen.blit(self.small.render(card.get("name", "")[:22], True, WHITE), (row.x + 10, row.y + 9))
-            self.screen.blit(self.micro.render(f"{card.get('team', '')[:18]} | {tag}", True, (196, 210, 228)), (row.x + 10, row.y + 31))
-            row_y += 58
+        selected_card = None
+        if self.weekly_fantasy_focus == "pool" and pool:
+            selected_card = pool[max(0, min(self.weekly_fantasy_pool_index, len(pool) - 1))]
+        elif self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]:
+            selected_card = self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]
+        elif pool:
+            selected_card = pool[0]
 
-        self.screen.blit(self.font.render("Weekly Slots", True, WHITE), (slot_panel.x + 16, slot_panel.y + 14))
-        slot_y = slot_panel.y + 56
-        for idx, (slot_name, slot_label) in enumerate(self.weekly_fantasy_slot_defs()):
-            row = pygame.Rect(slot_panel.x + 14, slot_y, slot_panel.w - 28, 80)
-            selected = self.weekly_fantasy_focus == "slots" and idx == self.weekly_fantasy_slot_index
-            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=16, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
-            card = self.weekly_fantasy_slots[idx]
-            self.screen.blit(self.small.render(f"{slot_name}  {slot_label}", True, WHITE), (row.x + 14, row.y + 10))
-            if card:
-                self.screen.blit(self.small.render(card.get("name", "")[:24], True, (96, 232, 176)), (row.x + 14, row.y + 36))
-                self.screen.blit(self.micro.render(f"{card.get('team', '')[:20]} | {card.get('position', 'ST')} {card.get('rating', 0)}", True, (196, 210, 228)), (row.x + 14, row.y + 58))
-            else:
-                self.screen.blit(self.small.render("Empty slot", True, (196, 210, 228)), (row.x + 14, row.y + 38))
-            slot_y += 90
-
-        self.screen.blit(self.font.render("Week Summary", True, WHITE), (info_panel.x + 16, info_panel.y + 14))
+        week_label = entry.get("week_key", "Current Week")
         provider_text = "Provider ready" if provider_ready else "Set FC_FOOTBALL_DATA_TOKEN on the cloud server"
-        summary_lines = [
-            f"Week: {entry.get('week_key', 'Current Week')}",
-            f"Window: {entry.get('week_start', '-')} to {entry.get('week_end', '-')}",
-            f"Locked: {'Yes' if entry.get('locked') else 'No'}",
-            f"Points: {entry.get('points', 0)}",
-            f"Claimed: {'Yes' if entry.get('reward_claimed') else 'No'}",
-            provider_text,
-        ]
-        text_y = info_panel.y + 54
-        for line in summary_lines:
-            self.screen.blit(self.small.render(line[:40], True, WHITE), (info_panel.x + 16, text_y))
-            text_y += 32
-
         reward = entry.get("reward") or {}
         reward_text = f"{int(reward.get('coins', 0) or 0)} coins"
         if reward.get("pack_id"):
             reward_text += f" + {reward.get('pack_id')} pack"
         if int(reward.get("upgrade_delta", 0) or 0) > 0:
             reward_text += f" + top card +{int(reward.get('upgrade_delta', 0))}"
-        self.screen.blit(self.small.render(f"Reward: {reward_text[:36]}", True, (244, 206, 84)), (info_panel.x + 16, text_y + 10))
-        self.screen.blit(self.small.render("Top Breakdown", True, WHITE), (info_panel.x + 16, text_y + 54))
-        breakdown_y = text_y + 84
-        for item in breakdown_players:
-            self.screen.blit(self.micro.render(f"{item.get('name', '')[:18]}  {item.get('points', 0)} pts", True, (196, 210, 228)), (info_panel.x + 16, breakdown_y))
-            breakdown_y += 24
 
-        preview_card = None
-        if self.weekly_fantasy_focus == "pool" and pool:
-            preview_card = pool[max(0, min(self.weekly_fantasy_pool_index, len(pool) - 1))]
-        elif self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]:
-            preview_card = self.weekly_fantasy_slots[self.weekly_fantasy_slot_index]
-        if preview_card:
-            self.draw_card(info_panel.x + 108, info_panel.bottom - 246, 164, 220, preview_card, face="front")
+        self.draw_modern_backdrop((96, 232, 176), (86, 170, 255))
+        self.draw_fc_top_bar("Weekly Fantasy Five", "Real-life scoring mode", counters=[((244, 206, 84), entry.get("points", 0))], accent=(96, 232, 176))
+        self.draw_hero_header(
+            "Weekly Fantasy Five",
+            "Pick 1 GK, 1 DEF, 1 MID, 1 ATT, and 1 free slot. Cards come from your owned Sorare roster only.",
+            accent=(96, 232, 176),
+            accent_two=(86, 170, 255),
+            right_text=week_label,
+        )
+        self.screen.blit(self.small.render("UP/DOWN scroll | TAB/LEFT/RIGHT switch focus | ENTER assign/clear | S submit | U sync | C claim | ESC live hub", True, (196, 210, 228)), (36, 170))
 
-        footer = pygame.Rect(info_panel.x + 16, info_panel.bottom - 70, info_panel.w - 32, 46)
-        self.draw_glass_panel(footer, accent=(96, 232, 176), radius=16, fill=(20, 28, 40, 216), shine=False)
-        self.screen.blit(self.small.render(self.weekly_fantasy_message[:58], True, WHITE), (footer.x + 12, footer.y + 13))
-        left = pygame.Rect(40, 214, 520, 520)
-        right = pygame.Rect(590, 214, 570, 520)
-        self.draw_glass_panel(left, accent=(244, 206, 84), radius=24)
-        self.draw_glass_panel(right, accent=(255, 92, 92), radius=24)
+        left_panel = pygame.Rect(36, 214, 360, 468)
+        middle_panel = pygame.Rect(416, 214, 420, 468)
+        right_panel = pygame.Rect(856, 214, 308, 468)
+        for panel, accent in ((left_panel, (96, 232, 176)), (middle_panel, (244, 206, 84)), (right_panel, (86, 170, 255))):
+            self.draw_glass_panel(panel, accent=accent, radius=24)
 
-        self.screen.blit(self.font.render("Event Briefing", True, WHITE), (left.x + 18, left.y + 18))
-        fixture = setup.get("fixture", ("Your Club", "Opponent"))
-        self.screen.blit(self.big.render(f"{fixture[0]} vs {fixture[1]}", True, WHITE), (left.x + 18, left.y + 56))
-        streak_box = pygame.Rect(left.x + 18, left.y + 108, left.w - 36, 92)
-        self.draw_glass_panel(streak_box, accent=(86, 170, 255), radius=18, fill=(18, 26, 38, 220), shine=False)
-        self.screen.blit(self.small.render("Current Streak", True, (196, 210, 228)), (streak_box.x + 16, streak_box.y + 14))
-        self.screen.blit(self.big.render(str(setup.get("streak", 0)), True, WHITE), (streak_box.x + 18, streak_box.y + 34))
-        self.screen.blit(self.small.render(f"Wins this run: {setup.get('wins', 0)} / {setup.get('target', 3)}", True, LIGHT_GREEN), (streak_box.x + 100, streak_box.y + 48))
+        # Left: roster pool
+        self.screen.blit(self.font.render("Your Sorare Cards", True, WHITE), (left_panel.x + 16, left_panel.y + 14))
+        self.screen.blit(self.small.render(f"Pool size: {len(pool)} | source: Sorare roster", True, (196, 210, 228)), (left_panel.x + 16, left_panel.y + 44))
+        start = max(0, min(self.weekly_fantasy_pool_index - 5, max(0, len(pool) - 10)))
+        row_y = left_panel.y + 72
+        for idx in range(start, min(len(pool), start + 10)):
+            card = pool[idx]
+            row = pygame.Rect(left_panel.x + 12, row_y, left_panel.w - 24, 36)
+            selected = self.weekly_fantasy_focus == "pool" and idx == self.weekly_fantasy_pool_index
+            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=10, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
+            tag = f"{card.get('position', 'ST')} {card.get('rating', 0)}"
+            self.screen.blit(self.small.render(f"{card.get('name', '')[:18]}  {tag}", True, WHITE), (row.x + 10, row.y + 9))
+            self.screen.blit(self.micro.render(card.get("team", "")[:14], True, (196, 210, 228)), (row.right - 100, row.y + 12))
+            row_y += 40
+        if start > 0:
+            self.screen.blit(self.small.render("More above", True, (180, 190, 205)), (left_panel.right - 96, left_panel.y + 44))
+        if start + 10 < len(pool):
+            self.screen.blit(self.small.render("More below", True, (180, 190, 205)), (left_panel.right - 96, left_panel.bottom - 26))
 
-        reward_box = pygame.Rect(left.x + 18, left.y + 218, left.w - 36, 120)
-        self.draw_glass_panel(reward_box, accent=(244, 206, 84), radius=18, fill=(18, 26, 38, 220), shine=False)
-        self.screen.blit(self.small.render("Reward Banner", True, (244, 206, 84)), (reward_box.x + 16, reward_box.y + 14))
-        self.screen.blit(self.big.render(f"{setup.get('reward_coins', 140)} COINS", True, WHITE), (reward_box.x + 16, reward_box.y + 42))
-        self.screen.blit(self.small.render("Win the target streak to claim the payout and reset the run.", True, (196, 210, 228)), (reward_box.x + 16, reward_box.y + 84))
+        # Middle: selected card and squad controls
+        self.screen.blit(self.font.render("Selected Card", True, WHITE), (middle_panel.x + 16, middle_panel.y + 14))
+        if selected_card:
+            self.draw_card(middle_panel.x + 102, middle_panel.y + 52, 216, 284, selected_card, face="front")
+            stats_box = pygame.Rect(middle_panel.x + 14, middle_panel.y + 346, middle_panel.w - 28, 102)
+            self.draw_glass_panel(stats_box, accent=(244, 206, 84), radius=16, fill=(20, 28, 40, 216), shine=False)
+            stats = [
+                f"Rating {selected_card.get('rating', 0)}",
+                f"Pos {selected_card.get('position', 'ST')}",
+                f"Rarity {selected_card.get('rarity', 'Base')}",
+                f"Promo {selected_card.get('promo', 'Base')}",
+            ]
+            self.screen.blit(self.small.render("Card Details", True, (244, 206, 84)), (stats_box.x + 12, stats_box.y + 10))
+            sx = stats_box.x + 12
+            sy = stats_box.y + 34
+            for stat in stats:
+                self.screen.blit(self.small.render(stat, True, WHITE), (sx, sy))
+                sy += 20
+            stat_line = (
+                f"Goals {self.get_player_stat(selected_card['name'], 'goals')} | "
+                f"Assists {self.get_player_stat(selected_card['name'], 'assists')} | "
+                f"Tackles {self.get_player_stat(selected_card['name'], 'tackles')}"
+            )
+            self.screen.blit(self.micro.render(stat_line, True, (196, 210, 228)), (stats_box.x + 180, stats_box.y + 38))
+            self.screen.blit(self.small.render("ENTER assigns this card to the selected slot", True, LIGHT_GREEN), (middle_panel.x + 16, middle_panel.bottom - 24))
 
-        strategy_box = pygame.Rect(left.x + 18, left.y + 356, left.w - 36, 136)
-        self.draw_glass_panel(strategy_box, accent=(255, 92, 92), radius=18, fill=(18, 26, 38, 220), shine=False)
-        strategy = setup.get("strategy", "best_first")
-        strategy_name = "Best Taker First" if strategy == "best_first" else "Best Taker Fifth"
-        self.screen.blit(self.small.render("Order Strategy", True, (255, 92, 92)), (strategy_box.x + 16, strategy_box.y + 14))
-        self.screen.blit(self.font.render(strategy_name, True, WHITE), (strategy_box.x + 16, strategy_box.y + 42))
-        self.screen.blit(self.small.render("Use T to switch strategy before choosing the exact five-kick order.", True, (196, 210, 228)), (strategy_box.x + 16, strategy_box.y + 80))
+        self.screen.blit(self.font.render("Weekly Slots", True, WHITE), (middle_panel.x + 16, middle_panel.y + 14))
+        slot_y = middle_panel.y + 24
+        for idx, (slot_name, slot_label) in enumerate(self.weekly_fantasy_slot_defs()):
+            row = pygame.Rect(middle_panel.x + 16, slot_y + 24 * idx, middle_panel.w - 32, 38)
+            selected = self.weekly_fantasy_focus == "slots" and idx == self.weekly_fantasy_slot_index
+            self.draw_glass_panel(row, accent=YELLOW if selected else (86, 98, 126), radius=10, fill=(42, 52, 72, 228) if selected else (24, 30, 44, 214), shine=False)
+            card = self.weekly_fantasy_slots[idx]
+            label = f"{slot_name}: {slot_label}"
+            self.screen.blit(self.small.render(label, True, WHITE), (row.x + 10, row.y + 10))
+            if card:
+                self.screen.blit(self.small.render(f"{card.get('name', '')[:18]} | {card.get('position', 'ST')} {card.get('rating', 0)}", True, (96, 232, 176)), (row.right - 170, row.y + 10))
+            else:
+                self.screen.blit(self.small.render("Empty", True, (196, 210, 228)), (row.right - 70, row.y + 10))
 
-        self.screen.blit(self.font.render("Featured Shooters", True, WHITE), (right.x + 18, right.y + 18))
-        preview = [p for p in setup.get("user_order", []) if p][:5]
-        if not preview:
-            preview = setup.get("user_pool", [])[:5]
-        y = right.y + 64
-        for idx, player in enumerate(preview):
-            row = pygame.Rect(right.x + 18, y, right.w - 36, 72)
-            self.draw_glass_panel(row, accent=(244, 206, 84), radius=16, fill=(24, 32, 46, 220), shine=False)
-            profile = self.penalty_player_profile(player)
-            self.screen.blit(self.font.render(f"{idx + 1}. {player.name[:22]}", True, WHITE), (row.x + 16, row.y + 12))
-            detail = f"Pen {profile['penalty']} | Comp {profile['composure']} | Pow {profile['power']}"
-            self.screen.blit(self.small.render(detail, True, (196, 210, 228)), (row.x + 16, row.y + 44))
-            y += 84
-        self.draw_fc_bottom_nav([("ENTER", "ORDER"), ("T", "STRATEGY"), ("ESC", "BACK")], active_index=0)
+        # Right: summary and rewards
+        self.screen.blit(self.font.render("Live Summary", True, WHITE), (right_panel.x + 16, right_panel.y + 14))
+        lines = [
+            f"Week: {week_label}",
+            f"Window: {entry.get('week_start', '-')} to {entry.get('week_end', '-')}",
+            f"Locked: {'Yes' if entry.get('locked') else 'No'}",
+            f"Claimed: {'Yes' if entry.get('reward_claimed') else 'No'}",
+            provider_text,
+        ]
+        y = right_panel.y + 56
+        for line in lines:
+            self.screen.blit(self.small.render(line[:32], True, WHITE), (right_panel.x + 16, y))
+            y += 30
+
+        reward_box = pygame.Rect(right_panel.x + 14, right_panel.y + 214, right_panel.w - 28, 110)
+        self.draw_glass_panel(reward_box, accent=(244, 206, 84), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Reward Panel", True, (244, 206, 84)), (reward_box.x + 12, reward_box.y + 12))
+        self.screen.blit(self.font.render(reward_text[:18].upper(), True, WHITE), (reward_box.x + 12, reward_box.y + 38))
+        self.screen.blit(self.small.render("Sync when matches finish, then claim rewards.", True, (196, 210, 228)), (reward_box.x + 12, reward_box.y + 74))
+
+        breakdown_box = pygame.Rect(right_panel.x + 14, right_panel.y + 336, right_panel.w - 28, 118)
+        self.draw_glass_panel(breakdown_box, accent=(96, 232, 176), radius=16, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render("Top Breakdown", True, (96, 232, 176)), (breakdown_box.x + 12, breakdown_box.y + 12))
+        breakdown_y = breakdown_box.y + 36
+        if breakdown_players:
+            for item in breakdown_players[:4]:
+                self.screen.blit(self.micro.render(f"{item.get('name', '')[:18]}  {item.get('points', 0)} pts", True, (196, 210, 228)), (breakdown_box.x + 12, breakdown_y))
+                breakdown_y += 20
+        else:
+            self.screen.blit(self.small.render("No synced points yet", True, (196, 210, 228)), (breakdown_box.x + 12, breakdown_y))
+
+        footer = pygame.Rect(36, 694 - 28, 1128, 42)
+        self.draw_glass_panel(footer, accent=(96, 232, 176), radius=14, fill=(20, 28, 40, 216), shine=False)
+        self.screen.blit(self.small.render(self.weekly_fantasy_message[:110], True, WHITE), (footer.x + 12, footer.y + 11))
+        self.draw_fc_bottom_nav([("TAB", "SWITCH"), ("ENTER", "ASSIGN"), ("S", "SUBMIT"), ("U", "SYNC"), ("C", "CLAIM"), ("ESC", "LIVE HUB")], active_index=0)
 
     def draw_penalty_order_page(self):
         setup = self.penalty_shootout_setup or {}
@@ -12365,13 +13259,27 @@ class Game:
                             self.cloud_settings_inputs[field] += event.unicode
                     continue
                 if self.state == "MODE_SELECT":
-                    if event.key == pygame.K_DOWN or event.key == pygame.K_UP:
-                        self.mode_select_index = 1 - self.mode_select_index
+                    total = 3
+                    if event.key == pygame.K_DOWN:
+                        self.mode_select_index = (self.mode_select_index + 1) % total
+                    elif event.key == pygame.K_UP:
+                        self.mode_select_index = (self.mode_select_index - 1) % total
                     elif event.key == pygame.K_RETURN:
                         if self.mode_select_index == 0:
                             self.load_profile_mode("CAREER")
-                        else:
+                        elif self.mode_select_index == 1:
                             self.load_profile_mode("FANTASY")
+                        else:
+                            self.open_live_mode()
+                            record = self.active_account_record() or {}
+                            record["last_mode"] = "LIVE"
+                            if self.cloud_user_cache is None:
+                                self.cloud_user_cache = {}
+                            self.cloud_user_cache["last_mode"] = "LIVE"
+                            local = self.local_account_record()
+                            if local:
+                                local["last_mode"] = "LIVE"
+                                self.persist_local_accounts()
                     elif event.key == pygame.K_c:
                         self.cloud_settings_inputs = {
                             "cloud_enabled": True,
@@ -12702,8 +13610,25 @@ class Game:
                         self.state = "LEAGUE"
                     continue
                 if self.state == "FANTASY_MARKET":
-                    total = max(1, len(self.fantasy_market_offers))
-                    if event.key == pygame.K_UP:
+                    offers = self.filtered_fantasy_market_offers()
+                    total = max(1, len(offers))
+                    if self.fantasy_market_search_active:
+                        if event.key == pygame.K_ESCAPE:
+                            self.fantasy_market_search_active = False
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            self.fantasy_market_search_active = False
+                            self.fantasy_market_index = 0
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.fantasy_market_search_query = self.fantasy_market_search_query[:-1]
+                            self.fantasy_market_index = 0
+                        elif event.unicode and event.unicode.isprintable() and len(self.fantasy_market_search_query) < 32:
+                            if event.unicode.isalnum() or event.unicode in (" ", "-", "_", "."):
+                                self.fantasy_market_search_query += event.unicode.lower()
+                                self.fantasy_market_index = 0
+                        continue
+                    if event.key == pygame.K_f:
+                        self.fantasy_market_search_active = True
+                    elif event.key == pygame.K_UP:
                         self.fantasy_market_index = max(0, self.fantasy_market_index - 1)
                     elif event.key == pygame.K_DOWN:
                         self.fantasy_market_index = min(total - 1, self.fantasy_market_index + 1)
@@ -12748,8 +13673,6 @@ class Game:
                             data = self.fetch_online_tournament_status()
                             if data is not None:
                                 self.state = "ONLINE_TOURNAMENTS"
-                        elif self.fantasy_active_competition == "weekly_fantasy":
-                            self.open_weekly_fantasy_mode()
                         elif self.fantasy_active_competition == "draft":
                             self.open_fantasy_draft(reset=not self.fantasy_draft_active)
                         else:
@@ -12759,7 +13682,94 @@ class Game:
                     elif event.key == pygame.K_ESCAPE:
                         self.state = "LEAGUE"
                     continue
-                if self.state == "WEEKLY_FANTASY":
+                if self.state == "LIVE_HUB":
+                    comps = self.live_mode_competitions()
+                    total = max(1, len(comps))
+                    if event.key in (pygame.K_UP, pygame.K_LEFT):
+                        self.live_mode_index = (self.live_mode_index - 1) % total
+                    elif event.key in (pygame.K_DOWN, pygame.K_RIGHT):
+                        self.live_mode_index = (self.live_mode_index + 1) % total
+                    elif event.key == pygame.K_RETURN:
+                        self.open_live_competition(comps[self.live_mode_index][0])
+                    elif event.key == pygame.K_u:
+                        self.sync_weekly_fantasy_points()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "MODE_SELECT"
+                    continue
+                if self.state == "LIVE_SORARE":
+                    cards = self.filtered_live_sorare_cards()
+                    total = max(1, len(cards))
+                    if self.live_sorare_search_active:
+                        if event.key == pygame.K_ESCAPE:
+                            self.live_sorare_search_active = False
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            self.live_sorare_search_active = False
+                            self.live_sorare_index = 0
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.live_sorare_search_query = self.live_sorare_search_query[:-1]
+                            self.live_sorare_index = 0
+                        elif event.unicode and event.unicode.isprintable() and len(self.live_sorare_search_query) < 32:
+                            if event.unicode.isalnum() or event.unicode in (" ", "-", "_", "."):
+                                self.live_sorare_search_query += event.unicode.lower()
+                                self.live_sorare_index = 0
+                        continue
+                    if event.key == pygame.K_f:
+                        self.live_sorare_search_active = True
+                    elif event.key == pygame.K_UP:
+                        self.live_sorare_index = max(0, self.live_sorare_index - 1)
+                    elif event.key == pygame.K_DOWN:
+                        self.live_sorare_index = min(total - 1, self.live_sorare_index + 1)
+                    elif event.key == pygame.K_RETURN:
+                        self.live_sorare_index = max(0, min(self.live_sorare_index, total - 1))
+                    elif event.key == pygame.K_m:
+                        self.refresh_live_sorare_market()
+                        self.state = "LIVE_SORARE_MARKET"
+                    elif event.key == pygame.K_w:
+                        self.open_weekly_fantasy_mode()
+                    elif event.key == pygame.K_u:
+                        self.build_live_sorare_catalog()
+                        self.ensure_live_sorare_roster(save=False)
+                        self.refresh_live_sorare_market()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "LIVE_SORARE"
+                    continue
+                if self.state == "LIVE_SORARE_MARKET":
+                    offers = self.filtered_live_sorare_market_offers()
+                    total = max(1, len(offers))
+                    if self.live_sorare_market_search_active:
+                        if event.key == pygame.K_ESCAPE:
+                            self.live_sorare_market_search_active = False
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            self.live_sorare_market_search_active = False
+                            self.live_sorare_market_index = 0
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.live_sorare_market_search_query = self.live_sorare_market_search_query[:-1]
+                            self.live_sorare_market_index = 0
+                        elif event.unicode and event.unicode.isprintable() and len(self.live_sorare_market_search_query) < 32:
+                            if event.unicode.isalnum() or event.unicode in (" ", "-", "_", "."):
+                                self.live_sorare_market_search_query += event.unicode.lower()
+                                self.live_sorare_market_index = 0
+                        continue
+                    if event.key == pygame.K_f:
+                        self.live_sorare_market_search_active = True
+                    elif event.key == pygame.K_UP:
+                        self.live_sorare_market_index = max(0, self.live_sorare_market_index - 1)
+                    elif event.key == pygame.K_DOWN:
+                        self.live_sorare_market_index = min(total - 1, self.live_sorare_market_index + 1)
+                    elif event.key == pygame.K_RETURN:
+                        self.buy_live_sorare_market_card(self.live_sorare_market_index)
+                    elif event.key == pygame.K_r:
+                        self.refresh_live_sorare_market()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = "LIVE_HUB"
+                    continue
+                if self.state == "LIVE_LEAGUE":
+                    if event.key == pygame.K_u:
+                        self.fetch_live_league_status("PL")
+                    elif event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+                        self.state = "LIVE_HUB"
+                    continue
+                if self.state in ("LIVE_WEEKLY_FANTASY", "WEEKLY_FANTASY"):
                     pool = self.weekly_fantasy_candidate_pool()
                     if event.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
                         self.weekly_fantasy_focus = "slots" if self.weekly_fantasy_focus == "pool" else "pool"
@@ -12787,7 +13797,11 @@ class Game:
                     elif event.key == pygame.K_c:
                         self.claim_weekly_fantasy_rewards()
                     elif event.key == pygame.K_ESCAPE:
-                        self.state = "FANTASY_COMPETITIONS"
+                        self.state = "LIVE_HUB"
+                    continue
+                if self.state in ("LIVE_TOP_SCORERS", "LIVE_DERBY_PICKS", "LIVE_TEAM_OF_WEEK"):
+                    if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+                        self.state = "LIVE_HUB"
                     continue
                 if self.state == "PENALTY_SHOOTOUT_INTRO":
                     if event.key == pygame.K_t:
@@ -13597,7 +14611,7 @@ class Game:
             pygame.draw.rect(self.screen, (18, 24, 34), badge, 0, border_radius=12)
             pygame.draw.rect(self.screen, (244, 206, 84), badge, 2, border_radius=12)
             self.screen.blit(self.small.render("DEVELOPER ACCESS", True, WHITE), (badge.x + 18, badge.y + 9))
-        options = [("Career Mode", "career_snapshot"), ("Fantasy Team", "fantasy_snapshot")]
+        options = [("Career Mode", "career_snapshot"), ("Fantasy Team", "fantasy_snapshot"), ("Live Mode", "live_mode")]
         y = 210
         for idx, (label, slot) in enumerate(options):
             row = pygame.Rect(60, y, 500, 86)
@@ -13605,12 +14619,14 @@ class Game:
             saved = bool(record.get(slot))
             self.draw_glass_panel(row, accent=YELLOW if active else (80, 92, 122), radius=18, fill=(24, 30, 44, 224), shine=active)
             self.screen.blit(self.font.render(label, True, WHITE), (row.x + 18, row.y + 16))
-            sub = "Continue saved progress" if saved else "Start a new save"
+            sub = "Continue saved progress" if saved else "Open live scoring hub" if slot == "live_mode" else "Start a new save"
             self.screen.blit(self.small.render(sub, True, (190, 200, 215)), (row.x + 18, row.y + 44))
             stat = record.get(slot) or {}
             preview = "No save yet"
             if stat:
                 preview = f"Week {stat.get('week_index', 0) + 1} | Team {stat.get('user_team') or stat.get('fantasy_team_name', 'Pending')}"
+            elif slot == "live_mode":
+                preview = "Weekly live scoring and rewards"
             self.screen.blit(self.small.render(preview[:42], True, (214, 222, 236)), (row.x + 240, row.y + 46))
             y += 108
         side = pygame.Rect(620, 210, 480, 250)
@@ -13620,6 +14636,7 @@ class Game:
             f"Username: @{record.get('username', self.active_account or '')}",
             f"Career save: {'Ready' if record.get('career_snapshot') else 'Empty'}",
             f"Fantasy save: {'Ready' if record.get('fantasy_snapshot') else 'Empty'}",
+            f"Live mode: {'Ready' if record.get('live_mode') else 'Available'}",
             f"Developer: {'Yes' if record.get('is_developer') else 'No'}",
         ]
         sy = side.y + 64
@@ -13633,7 +14650,7 @@ class Game:
             hint += " | U developer console"
         hint += " | C cloud settings | ESC log out"
         self.screen.blit(self.small.render(hint, True, (190, 200, 215)), (42, HEIGHT - 44))
-        self.draw_fc_bottom_nav([("UP", "CAREER"), ("DOWN", "FANTASY"), ("C", "CLOUD"), ("ESC", "LOG OUT")], active_index=self.mode_select_index, y=HEIGHT - 72)
+        self.draw_fc_bottom_nav([("UP/DOWN", "MODES"), ("ENTER", "OPEN"), ("C", "CLOUD"), ("ESC", "LOG OUT")], active_index=self.mode_select_index, y=HEIGHT - 72)
 
     def draw_fantasy_team_name_page(self):
         self.draw_modern_backdrop((244, 206, 84), (52, 244, 116))
@@ -15315,8 +16332,22 @@ class Game:
             self.draw_fantasy_evolutions_page()
         elif self.state == "FANTASY_COMPETITIONS":
             self.draw_fantasy_competitions_page()
-        elif self.state == "WEEKLY_FANTASY":
+        elif self.state == "LIVE_HUB":
+            self.draw_live_mode_hub_page()
+        elif self.state == "LIVE_SORARE":
+            self.draw_live_sorare_page()
+        elif self.state == "LIVE_SORARE_MARKET":
+            self.draw_live_sorare_market_page()
+        elif self.state == "LIVE_LEAGUE":
+            self.draw_live_league_page()
+        elif self.state in ("LIVE_WEEKLY_FANTASY", "WEEKLY_FANTASY"):
             self.draw_weekly_fantasy_page()
+        elif self.state == "LIVE_TOP_SCORERS":
+            self.draw_live_competition_page("Top Scorers", "Live card scoring leaderboard")
+        elif self.state == "LIVE_DERBY_PICKS":
+            self.draw_live_competition_page("Derby Picks", "Rivalry event picks and weekly rewards")
+        elif self.state == "LIVE_TEAM_OF_WEEK":
+            self.draw_live_competition_page("Team of the Week", "Weekly highlight squad and future rewards")
         elif self.state == "FANTASY_CLUB":
             self.draw_fantasy_club_page()
         elif self.state == "FANTASY_DRAFT":

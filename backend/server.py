@@ -124,6 +124,7 @@ class CloudStore:
     def __init__(self, db_path):
         self.db_path = db_path
         self.lock = threading.Lock()
+        self.live_league_cache = {}
         ensure_data_dir()
         self._init_db()
 
@@ -500,6 +501,151 @@ class CloudStore:
             raise ValueError(payload.get("message") or payload.get("error") or f"football-data HTTP {exc.code}")
         except (urllib_error.URLError, TimeoutError):
             raise ValueError("football-data service unavailable.")
+
+    def _live_league_season_label(self, competition):
+        season = competition.get("currentSeason") or {}
+        start_date = str(season.get("startDate") or "")
+        end_date = str(season.get("endDate") or "")
+        if len(start_date) >= 4 and len(end_date) >= 4:
+            return f"{start_date[:4]}/{end_date[:4][-2:]}"
+        if start_date:
+            return start_date[:4]
+        return "Current Season"
+
+    def _live_league_match_row(self, match):
+        home = ((match.get("homeTeam") or {}).get("name")) or "Home"
+        away = ((match.get("awayTeam") or {}).get("name")) or "Away"
+        utc_date = parse_iso(match.get("utcDate"))
+        date_text = utc_iso(utc_date).replace("T", ", ")[:16].replace("-", "/") if utc_date else ""
+        full_time = (match.get("score") or {}).get("fullTime") or {}
+        status = str(match.get("status") or "").upper()
+        if status == "FINISHED" and full_time.get("home") is not None and full_time.get("away") is not None:
+            score_text = f"{int(full_time.get('home') or 0)}:{int(full_time.get('away') or 0)}"
+        else:
+            score_text = "//"
+        return {
+            "date": date_text,
+            "home": home,
+            "away": away,
+            "label": f"{home} - {away}",
+            "score": score_text,
+            "odds": "//",
+            "utcDate": match.get("utcDate"),
+            "status": status,
+        }
+
+    def _live_league_scorer_row(self, row, index):
+        player = row.get("player") or {}
+        team = row.get("team") or {}
+        goals = int(row.get("goals") or 0)
+        assists = int(row.get("assists") or 0)
+        played = int(row.get("playedMatches") or row.get("played") or max(1, goals + assists) or 1)
+        return {
+            "rank": index + 1,
+            "name": player.get("name") or "Unknown",
+            "team": team.get("name") or "",
+            "played": played,
+            "goals": goals,
+            "assists": assists,
+            "g_per_game": round(goals / max(1, played), 2),
+            "a_per_game": round(assists / max(1, played), 2),
+        }
+
+    def get_live_league_status(self, competition_code="PL"):
+        code = (competition_code or "PL").strip().upper() or "PL"
+        cache = self.live_league_cache.get(code)
+        now = utc_now()
+        if cache and cache.get("expires_at") and cache["expires_at"] > now:
+            return cache["payload"]
+        payload = {
+            "provider_ready": bool(FOOTBALL_DATA_TOKEN),
+            "provider_name": "football-data.org",
+            "competition_code": code,
+            "competition_name": "Premier League",
+            "season_label": "Current Season",
+            "matchday": 0,
+            "recent_matches": [],
+            "next_matches": [],
+            "standings": [],
+            "scorers": [],
+            "error": "",
+        }
+        if not FOOTBALL_DATA_TOKEN:
+            payload["error"] = "Set FC_FOOTBALL_DATA_TOKEN on the cloud server."
+            self.live_league_cache[code] = {"expires_at": now + timedelta(minutes=10), "payload": payload}
+            return payload
+        try:
+            competition = self._football_data_json(f"/competitions/{code}")
+            payload["competition_name"] = competition.get("name") or payload["competition_name"]
+            payload["season_label"] = self._live_league_season_label(competition)
+            current_season = competition.get("currentSeason") or {}
+            payload["matchday"] = int(current_season.get("currentMatchday") or 0)
+
+            standings_payload = self._football_data_json(f"/competitions/{code}/standings")
+            standings_tables = standings_payload.get("standings") or []
+            table = []
+            for section in standings_tables:
+                if str(section.get("type") or "").upper() == "TOTAL":
+                    table = section.get("table") or []
+                    break
+            if not table and standings_tables:
+                table = standings_tables[0].get("table") or []
+            payload["standings"] = [
+                {
+                    "position": int(item.get("position") or idx + 1),
+                    "team": ((item.get("team") or {}).get("name")) or "",
+                    "played": int(item.get("playedGames") or 0),
+                    "won": int(item.get("won") or 0),
+                    "draw": int(item.get("draw") or 0),
+                    "lost": int(item.get("lost") or 0),
+                    "goal_diff": int(item.get("goalDifference") or 0),
+                    "points": int(item.get("points") or 0),
+                    "goals_for": int(item.get("goalsFor") or 0),
+                    "goals_against": int(item.get("goalsAgainst") or 0),
+                }
+                for idx, item in enumerate(table[:12])
+            ]
+
+            season_start = current_season.get("startDate")
+            season_end = current_season.get("endDate")
+            query_bits = []
+            if season_start:
+                query_bits.append(f"dateFrom={str(season_start)[:10]}")
+            if season_end:
+                query_bits.append(f"dateTo={str(season_end)[:10]}")
+            query = "&".join(query_bits)
+            matches_path = f"/competitions/{code}/matches"
+            if query:
+                matches_path += f"?{query}"
+            matches_payload = self._football_data_json(matches_path)
+            matches = matches_payload.get("matches") or []
+            recent_matches = []
+            next_matches = []
+            for match in matches:
+                row = self._live_league_match_row(match)
+                status = row.get("status")
+                sort_key = parse_iso(match.get("utcDate")) or utc_now()
+                row["sort_key"] = sort_key.isoformat()
+                if status == "FINISHED":
+                    recent_matches.append(row)
+                elif status in ("SCHEDULED", "TIMED", "IN_PLAY", "PAUSED"):
+                    next_matches.append(row)
+            recent_matches.sort(key=lambda item: item.get("sort_key", ""), reverse=True)
+            next_matches.sort(key=lambda item: item.get("sort_key", ""))
+            payload["recent_matches"] = recent_matches[:10]
+            payload["next_matches"] = next_matches[:10]
+
+            scorers_payload = self._football_data_json(f"/competitions/{code}/scorers")
+            scorers = scorers_payload.get("scorers") or []
+            payload["scorers"] = [self._live_league_scorer_row(item, idx) for idx, item in enumerate(scorers[:12])]
+            payload["provider_ready"] = True
+            payload["error"] = ""
+        except ValueError as exc:
+            payload["error"] = str(exc)
+        except Exception:
+            payload["error"] = "Unable to load live league data."
+        self.live_league_cache[code] = {"expires_at": now + timedelta(minutes=5), "payload": payload}
+        return payload
 
     def _ensure_weekly_fantasy_entry(self, user_id, week_key=None):
         target_week = week_key or iso_week_key()
@@ -2036,6 +2182,11 @@ class CloudRequestHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/weekly-fantasy":
                 token = self._bearer_token()
                 payload = STORE.get_weekly_fantasy_status(token)
+                self._send_json(HTTPStatus.OK, payload)
+                return
+            if parsed.path == "/api/live-league":
+                competition = (self._query().get("competition") or ["PL"])[0]
+                payload = STORE.get_live_league_status(competition)
                 self._send_json(HTTPStatus.OK, payload)
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
